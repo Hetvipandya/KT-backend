@@ -17,7 +17,7 @@ exports.createDepartment =
         departmentBudget,
         teams,
         description,
-      } = req.body;
+      } = req.body; 
 
       // Validation
       if (!departmentName) {

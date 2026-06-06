@@ -9,7 +9,7 @@ const departmentSchema =
         required: true,
         unique: true,
         trim: true,
-      },
+      }, 
 
       departmentHead: {
         type:

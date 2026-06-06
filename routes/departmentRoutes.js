@@ -10,7 +10,7 @@ const {
   updateDepartment,
 } = require(
   "../controllers/departmentController"
-);
+); 
 
 // CREATE
 router.post(
