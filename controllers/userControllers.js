@@ -112,9 +112,7 @@ const generateOTP =
 
       await admin.save();
 
-      console.log(
-        "✅ Default Admin Created"
-      );
+   
     } catch (error) {
       console.log(
         "❌ Admin Create Error:",
