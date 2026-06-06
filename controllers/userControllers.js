@@ -133,7 +133,7 @@ exports.registerUser =
         email,
         phoneNumber,
         dob,
-        address,
+        address, 
         department,
         bloodGroup,
       } = req.body;
@@ -183,35 +183,39 @@ exports.registerUser =
       }
 
       // ================= GENERATE UNIQUE ID =================
-      const lastUser =
-        await User.findOne()
-          .sort({
-            createdAt:
-              -1,
-          });
+ // ================= GENERATE UNIQUE ID =================
+const lastUser =
+  await User.findOne({
+    uniqueID: {
+      $regex: /^NEW\d+$/,
+    },
+  })
+    .sort({
+      createdAt: -1,
+    });
 
-      let nextNumber =
-        1001;
+let nextNumber = 1001;
 
-      if (
-        lastUser &&
-        lastUser.uniqueID
-      ) {
-        const lastNumber =
-          parseInt(
-            lastUser.uniqueID.replace(
-              "NEW",
-              ""
-            )
-          );
+if (
+  lastUser &&
+  lastUser.uniqueID
+) {
+  const lastNumber =
+    parseInt(
+      lastUser.uniqueID.replace(
+        "NEW",
+        ""
+      )
+    );
 
-        nextNumber =
-          lastNumber +
-          1;
-      }
+  nextNumber =
+    isNaN(lastNumber)
+      ? 1001
+      : lastNumber + 1;
+}
 
-      const uniqueID =
-        `NEW${nextNumber}`;
+const uniqueID =
+  `NEW${nextNumber}`;
 
       // ================= GENERATE PASSWORD =================
       const generatedPassword =
