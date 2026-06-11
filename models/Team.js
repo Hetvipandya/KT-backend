@@ -3,24 +3,63 @@ const mongoose =
 
 const teamSchema =
   new mongoose.Schema(
-    {
-      teamName: {
-        type: String,
-        required: true,
-        trim: true,
-      },
-
-      departmentId: {
+   {
+      projectId: {
         type:
           mongoose.Schema.Types.ObjectId,
-        ref: "Department",
+        ref: "Project",
+        required: true,
+      },
+
+      projectManager: {
+        type:
+          mongoose.Schema.Types.ObjectId,
+        ref: "User",
+        required: true,
+      },
+
+      teamLead: {
+        type:
+          mongoose.Schema.Types.ObjectId,
+        ref: "User",
         default: null,
       },
 
-      description: {
-        type: String,
-        default: "",
-      },
+      developers: [
+        {
+          type:
+            mongoose.Schema.Types
+              .ObjectId,
+          ref: "User",
+        },
+      ],
+
+      interns: [
+        {
+          type:
+            mongoose.Schema.Types
+              .ObjectId,
+          ref: "User",
+        },
+      ],
+
+      designers: [
+        {
+          type:
+            mongoose.Schema.Types
+              .ObjectId,
+          ref: "User",
+        },
+      ],
+
+      testers: [
+        {
+          type:
+            mongoose.Schema.Types
+              .ObjectId,
+          ref: "User",
+        },
+      ],
     },
     {
       timestamps: true,

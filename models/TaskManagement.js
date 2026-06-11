@@ -3,6 +3,7 @@ const mongoose = require("mongoose");
 const taskManagementSchema =
   new mongoose.Schema(
     {
+      // Project
       projectId: {
         type:
           mongoose.Schema.Types.ObjectId,
@@ -10,38 +11,43 @@ const taskManagementSchema =
         required: true,
       },
 
+      // Milestone
       milestoneId: {
         type:
           mongoose.Schema.Types.ObjectId,
-        ref: "Milestone",
+        ref: "ProjectMilestone",
         default: null,
       },
 
-      taskId: {
-        type:
-          mongoose.Schema.Types.ObjectId,
-        ref: "Task",
-        required: true,
-      },
-
+      // Task Details
       taskTitle: {
         type: String,
         required: true,
         trim: true,
       },
 
-      description: {
+      taskDescription: {
         type: String,
         default: "",
       },
 
-      assignedTo: {
+      // Assigned Employee
+      assignedEmployee: {
         type:
           mongoose.Schema.Types.ObjectId,
         ref: "User",
         required: true,
       },
 
+      // Assigned Intern
+      assignedIntern: {
+        type:
+          mongoose.Schema.Types.ObjectId,
+        ref: "User",
+        default: null,
+      },
+
+      // Assigned By
       assignedBy: {
         type:
           mongoose.Schema.Types.ObjectId,
@@ -49,37 +55,46 @@ const taskManagementSchema =
         required: true,
       },
 
-      startDate: {
-        type: Date,
-        default: Date.now,
-      },
-
-      deadline: {
+      // Due Date
+      dueDate: {
         type: Date,
         required: true,
       },
 
+      // Estimated Hours
+      estimatedHours: {
+        type: Number,
+        default: 0,
+      },
+
+      // Priority
       priority: {
         type: String,
         enum: [
-          "low",
-          "medium",
-          "high",
+          "Low",
+          "Medium",
+          "High",
+          "Critical",
         ],
-        default: "medium",
+        default: "Medium",
       },
 
+      // Status
       status: {
         type: String,
         enum: [
-          "pending",
-          "in_progress",
-          "review",
-          "completed",
+          "Pending",
+          "Assigned",
+          "In Progress",
+          "Testing",
+          "Review",
+          "Completed",
+          "Rejected",
         ],
-        default: "pending",
+        default: "Pending",
       },
 
+      // Progress
       progress: {
         type: Number,
         min: 0,
@@ -87,10 +102,97 @@ const taskManagementSchema =
         default: 0,
       },
 
-      remarks: {
-        type: String,
-        default: "",
+      // Attachments
+      attachments: [
+        {
+          fileName: String,
+          fileUrl: String,
+          uploadedAt: {
+            type: Date,
+            default: Date.now,
+          },
+        },
+      ],
+
+      // Comments
+      comments: [
+        {
+          comment: String,
+
+          commentedBy: {
+            type:
+              mongoose.Schema.Types
+                .ObjectId,
+            ref: "User",
+          },
+
+          createdAt: {
+            type: Date,
+            default: Date.now,
+          },
+        },
+      ],
+
+      // Task History
+      taskHistory: [
+        {
+          action: String,
+
+          updatedBy: {
+            type:
+              mongoose.Schema.Types
+                .ObjectId,
+            ref: "User",
+          },
+
+          date: {
+            type: Date,
+            default: Date.now,
+          },
+        },
+      ],
+
+      // Reassignment
+      reassignedTo: {
+        type:
+          mongoose.Schema.Types.ObjectId,
+        ref: "User",
+        default: null,
       },
+
+      // Dependencies
+      taskDependencies: [
+        {
+          type:
+            mongoose.Schema.Types
+              .ObjectId,
+          ref: "TaskManagement",
+        },
+      ],
+
+      // Sub Tasks
+      subTasks: [
+        {
+          title: String,
+
+          isCompleted: {
+            type: Boolean,
+            default: false,
+          },
+        },
+      ],
+
+      // Checklist
+      checklist: [
+        {
+          item: String,
+
+          completed: {
+            type: Boolean,
+            default: false,
+          },
+        },
+      ],
 
       completedAt: {
         type: Date,

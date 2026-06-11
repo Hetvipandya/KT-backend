@@ -5,154 +5,111 @@ const router =
   express.Router();
 
 const {
-  // Project
   createProject,
-  getAllProjects,
-  getSingleProject,
-  assignTeamLead,
-  assignEmployees,
-  assignInterns,
-  updateProjectStatus,
+  getProjects,
+  getProjectDetails,
+  updateProject,
   deleteProject,
+  updateProjectStatus,
 
-  // Milestone
   createMilestone,
-  getProjectMilestones,
-  completeMilestone,
+  getMilestones,
 
-  // Task
-  createTask,
-  getProjectTasks,
-  updateTaskProgress,
-  updateTaskStatus,
+  uploadDocument,
+  getDocuments,
 
-  // Daily Update
-  addDailyUpdate,
-  getTaskUpdates,
+  getStatusLogs,
 } = require(
-  "../controllers/projectController"
+  "../controllers/projectManagementController"
 );
 
 
-// ======================================================
+// =====================
 // PROJECT ROUTES
-// ======================================================
+// =====================
 
-// Create Project
+// CREATE PROJECT
 router.post(
-  "/project/create",
+  "/management/create",
   createProject
 );
 
-// Get All Projects
+// GET PROJECT LIST
 router.get(
-  "/project/all",
-  getAllProjects
+  "/list",
+  getProjects
 );
 
-// Get Single Project
+// GET PROJECT DETAILS
 router.get(
-  "/project/:id",
-  getSingleProject
+  "/details/:id",
+  getProjectDetails
 );
 
-// Assign Team Lead
+// UPDATE PROJECT
 router.put(
-  "/project/teamlead/:id",
-  assignTeamLead
+  "/update/:id",
+  updateProject
 );
 
-// Assign Employees
-router.put(
-  "/project/employees/:id",
-  assignEmployees
-);
-
-// Assign Interns
-router.put(
-  "/project/interns/:id",
-  assignInterns
-);
-
-// Update Project Status
-router.put(
-  "/project/status/:id",
-  updateProjectStatus
-);
-
-// Delete Project
+// DELETE PROJECT
 router.delete(
-  "/project/delete/:id",
+  "/delete/:id",
   deleteProject
 );
 
+// UPDATE STATUS
+router.put(
+  "/status/:id",
+  updateProjectStatus
+);
 
-// ======================================================
+
+
+// =====================
 // MILESTONE ROUTES
-// ======================================================
+// =====================
 
-// Create Milestone
+// CREATE MILESTONE
 router.post(
   "/milestone/create",
   createMilestone
-);
+);  
 
-// Get Project Milestones
+// GET MILESTONES
 router.get(
-  "/milestone/:projectId",
-  getProjectMilestones
-);
-
-// Complete Milestone
-router.put(
-  "/milestone/complete/:id",
-  completeMilestone
+  "/milestone/list/:projectId",
+  getMilestones
 );
 
 
-// ======================================================
-// TASK ROUTES
-// ======================================================
 
-// Create Task
+// =====================
+// DOCUMENT ROUTES
+// =====================
+
+// UPLOAD DOCUMENT
 router.post(
-  "/task/create",
-  createTask
+  "/document/upload",
+  uploadDocument
 );
 
-// Get Project Tasks
+// GET DOCUMENTS
 router.get(
-  "/task/:projectId",
-  getProjectTasks
-);
-
-// Update Task Progress
-router.put(
-  "/task/progress/:id",
-  updateTaskProgress
-);
-
-// Update Task Status
-router.put(
-  "/task/status/:id",
-  updateTaskStatus
+  "/document/list/:projectId",
+  getDocuments
 );
 
 
-// ======================================================
-// DAILY UPDATE ROUTES
-// ======================================================
 
-// Add Daily Update
-router.post(
-  "/daily-update/add",
-  addDailyUpdate
-);
+// =====================
+// STATUS LOG ROUTES
+// =====================
 
-// Get Task Updates
+// GET STATUS LOGS
 router.get(
-  "/daily-update/:taskId",
-  getTaskUpdates
+  "/status/logs/:projectId",
+  getStatusLogs
 );
 
 module.exports =

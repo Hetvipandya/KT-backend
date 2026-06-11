@@ -89,7 +89,7 @@ const employeeDocuments =
   ]);
 
 // ================= ADD EMPLOYEE =================
-router.post(
+router.post( 
   "/add",
   employeeDocuments,
   addEmployee

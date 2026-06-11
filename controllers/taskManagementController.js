@@ -20,7 +20,8 @@ exports.createTask =
     } catch (error) {
       res.status(500).json({
         success: false,
-        message: error.message,
+        message:
+          error.message,
       });
     }
   };
@@ -34,17 +35,23 @@ exports.getAllTasks =
         await TaskManagement
           .find()
           .populate(
-            "projectId"
+            "projectId",
+            "projectName"
           )
           .populate(
-            "taskId"
+            "assignedEmployee",
+            "name email"
           )
           .populate(
-            "assignedTo",
+            "assignedIntern",
             "name email"
           )
           .populate(
             "assignedBy",
+            "name email"
+          )
+          .populate(
+            "comments.commentedBy",
             "name email"
           );
 
@@ -57,7 +64,8 @@ exports.getAllTasks =
     } catch (error) {
       res.status(500).json({
         success: false,
-        message: error.message,
+        message:
+          error.message,
       });
     }
   };
@@ -71,14 +79,22 @@ exports.getTaskById =
         await TaskManagement
           .findById(
             req.params.id
+          )
+          .populate(
+            "projectId"
+          )
+          .populate(
+            "assignedEmployee"
+          )
+          .populate(
+            "assignedIntern"
           );
 
       if (!task) {
         return res
           .status(404)
           .json({
-            success:
-              false,
+            success: false,
             message:
               "Task not found",
           });
@@ -127,7 +143,7 @@ exports.updateTask =
   };
 
 
-// ================= UPDATE STATUS =================
+// ================= UPDATE TASK STATUS =================
 exports.updateTaskStatus =
   async (req, res) => {
     try {
@@ -144,8 +160,7 @@ exports.updateTaskStatus =
         return res
           .status(404)
           .json({
-            success:
-              false,
+            success: false,
             message:
               "Task not found",
           });
@@ -154,15 +169,39 @@ exports.updateTaskStatus =
       task.status =
         status;
 
-      if (
-        status ===
-        "completed"
-      ) {
-        task.completedAt =
-          new Date();
-        task.progress =
-          100;
+      // Auto workflow progress
+      switch (status) {
+        case "Assigned":
+          task.progress = 10;
+          break;
+
+        case "In Progress":
+          task.progress = 50;
+          break;
+
+        case "Testing":
+          task.progress = 75;
+          break;
+
+        case "Review":
+          task.progress = 90;
+          break;
+
+        case "Completed":
+          task.progress = 100;
+          task.completedAt =
+            new Date();
+          break;
+
+        default:
+          break;
       }
+
+      // Add history
+      task.taskHistory.push({
+        action:
+          `Status changed to ${status}`,
+      });
 
       await task.save();
 
@@ -170,6 +209,43 @@ exports.updateTaskStatus =
         success: true,
         message:
           "Task status updated",
+        data: task,
+      });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        message:
+          error.message,
+      });
+    }
+  };
+
+
+// ================= ADD COMMENT =================
+exports.addComment =
+  async (req, res) => {
+    try {
+      const {
+        comment,
+        commentedBy,
+      } = req.body;
+
+      const task =
+        await TaskManagement.findById(
+          req.params.id
+        );
+
+      task.comments.push({
+        comment,
+        commentedBy,
+      });
+
+      await task.save();
+
+      res.status(200).json({
+        success: true,
+        message:
+          "Comment added",
         data: task,
       });
     } catch (error) {
@@ -195,8 +271,7 @@ exports.deleteTask =
         return res
           .status(404)
           .json({
-            success:
-              false,
+            success: false,
             message:
               "Task not found",
           });

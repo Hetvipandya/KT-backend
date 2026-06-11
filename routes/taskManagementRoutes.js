@@ -10,10 +10,12 @@ const {
   getTaskById,
   updateTask,
   updateTaskStatus,
+  addComment,
   deleteTask,
 } = require(
   "../controllers/taskManagementController"
 );
+
 
 // Create Task
 router.post(
@@ -39,10 +41,16 @@ router.put(
   updateTask
 );
 
-// Update Status
+// Update Task Status
 router.patch(
   "/status/:id",
   updateTaskStatus
+);
+
+// Add Comment
+router.post(
+  "/comment/:id",
+  addComment
 );
 
 // Delete Task

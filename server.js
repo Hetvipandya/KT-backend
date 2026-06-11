@@ -127,9 +127,9 @@ require(
   "./routes/leaveRoutes"
 )
 
-const projectManagementRoutes =
+const projectRoutes =
 require(
-  "./routes/projectManagementRoutes"
+  "./routes/projectRoutes"
 )
 
 const taskManagementRoutes =
@@ -161,6 +161,16 @@ const notificationRoutes =
 require(
   "./routes/notificationRoutes"
 )
+
+const projectManagementRoutes =
+ require(
+  "./routes/projectManagementRoutes"
+ )
+
+ const dailyReportRoutes =
+ require(
+  "./routes/dailyReportRoutes"
+ )
 // ================= API PREFIX =================
 
 app.use(
@@ -220,7 +230,7 @@ app.use(
 
 app.use(
   "/api/projectManage",
-  projectManagementRoutes
+  projectRoutes
 )
 
 app.use(
@@ -251,6 +261,16 @@ app.use(
 app.use(
   "/api/notification",
   notificationRoutes
+)
+
+app.use(
+  "/api/project",
+  projectManagementRoutes
+)
+
+app.use(
+  "/api/dailyUpdate",
+  dailyReportRoutes
 )
 // ================= HEALTH CHECK =================
 

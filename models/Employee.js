@@ -48,7 +48,7 @@ const employeeSchema =
       },
 
       dob: {
-        type: Date,
+        type: Date, 
       },
 
       bloodGroup: {
