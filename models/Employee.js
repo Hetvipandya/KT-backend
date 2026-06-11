@@ -99,11 +99,10 @@ permanentAddress: {
       ],
 
       // SKILLS
-      skills: [
-        {
-          type: String,
-        },
-      ],
+        skills: {
+        type: [String],
+        default: [],
+      },
 
       // SALARY STRUCTURE
       salaryStructure: {
