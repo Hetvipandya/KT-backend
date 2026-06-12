@@ -12,6 +12,7 @@ const {
   getLeaveBalance,
   createHoliday,
   getAllHolidays,
+  getAllLeaves,
 } = require(
   "../controllers/leaveController"
 );
@@ -93,7 +94,8 @@ router.get(
 
 router.get(
   "/all-leaves",
-  leaveController.getAllLeaves
+  protect,
+  getAllLeaves
 );
 
 module.exports =
