@@ -94,7 +94,6 @@ router.get(
 
 router.get(
   "/all",
-  protect,
   getAllLeaves
 );
 
