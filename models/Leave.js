@@ -10,7 +10,7 @@ const leaveSchema =
         ref: "User",
         required: true,
       },
-
+ 
       leaveType: {
         type: String,
         enum: [

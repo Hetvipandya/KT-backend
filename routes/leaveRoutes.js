@@ -98,14 +98,5 @@ router.get(
   getAllLeaves
 );
 
-// Temporary debug route (no auth) — deploy to verify routing
-router.get("/debug", (req, res) => {
-  res.status(200).json({
-    success: true,
-    message: "leaveRoutes mounted",
-    path: "/api/leave/debug",
-  });
-});
-
 module.exports =
   router;
