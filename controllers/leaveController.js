@@ -96,44 +96,37 @@ exports.applyLeave =
     }
   };
 
-exports.getAllLeaves =
-  async (req, res) => {
-    try {
-      const leaves =
-        await Leave.find({})
-          .populate({
-            path:
-              "employeeId",
-            select:
-              "firstName lastName email role employeeID",
-          })
-          .sort({
-            createdAt: -1,
-          });
-
-      return res
-        .status(200)
-        .json({
-          success: true,
-          total:
-            leaves.length,
-          data: leaves,
-        });
-    } catch (error) {
-      console.log(
-        "GET ALL LEAVES ERROR:",
-        error
-      );
-
-      return res
-        .status(500)
-        .json({
-          success: false,
-          message:
-            error.message,
-        });
-    }
-  };
+exports.getAllLeaves = async (req, res) => {
+  console.log("=== getAllLeaves function STARTED ===");
+  console.log("User from token:", req.user ? req.user._id : "No user");
+  
+  try {
+    console.log("Attempting to find leaves...");
+    const leaves = await Leave.find({})
+      .populate({
+        path: "employeeId",
+        select: "firstName lastName email role employeeID",
+      })
+      .sort({ createdAt: -1 });
+    
+    console.log(`Found ${leaves.length} leaves`);
+    
+    return res.status(200).json({
+      success: true,
+      total: leaves.length,
+      data: leaves,
+    });
+  } catch (error) {
+    console.log("GET ALL LEAVES ERROR:", error);
+    console.log("Error stack:", error.stack);
+    
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+      stack: process.env.NODE_ENV === "development" ? error.stack : undefined,
+    });
+  }
+};
 
 // ================= TEAM LEAD APPROVAL =================
 exports.teamLeadApproval =
