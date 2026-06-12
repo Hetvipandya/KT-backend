@@ -96,32 +96,42 @@ exports.applyLeave =
     }
   };
 
-  // ================= GET ALL EMPLOYEES LEAVES =================
 exports.getAllLeaves =
   async (req, res) => {
     try {
       const leaves =
-        await Leave.find()
-          .populate(
-            "employeeId",
-            "firstName lastName email role employeeID"
-          )
+        await Leave.find({})
+          .populate({
+            path:
+              "employeeId",
+            select:
+              "firstName lastName email role employeeID",
+          })
           .sort({
             createdAt: -1,
           });
 
-      res.status(200).json({
-        success: true,
-        total:
-          leaves.length,
-        data: leaves,
-      });
+      return res
+        .status(200)
+        .json({
+          success: true,
+          total:
+            leaves.length,
+          data: leaves,
+        });
     } catch (error) {
-      res.status(500).json({
-        success: false,
-        message:
-          error.message,
-      });
+      console.log(
+        "GET ALL LEAVES ERROR:",
+        error
+      );
+
+      return res
+        .status(500)
+        .json({
+          success: false,
+          message:
+            error.message,
+        });
     }
   };
 

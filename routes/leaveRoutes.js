@@ -93,14 +93,9 @@ router.get(
 );
 
 router.get(
-  "/test",
-  (req, res) => {
-    res.json({
-      success: true,
-      message:
-        "Leave test route working"
-    });
-  }
+  "/all",
+  protect,
+  getAllLeaves
 );
 
 module.exports =
