@@ -93,7 +93,7 @@ router.get(
 );
 
 router.get(
-  "/all-leaves",
+  "/all",
   protect,
   getAllLeaves
 );
