@@ -51,7 +51,7 @@ router.put(
 // ================= HR APPROVAL =================
 router.put(
   "/hr-approval",
-  protect,
+  protect, 
   authorizeRoles(
     "hr",
     "admin"
@@ -89,6 +89,11 @@ router.get(
   "/holiday/all",
   protect,
   getAllHolidays
+);
+
+router.get(
+  "/all-leaves",
+  leaveController.getAllLeaves
 );
 
 module.exports =

@@ -20,7 +20,7 @@ exports.applyLeave =
         leaveType,
         startDate,
         endDate,
-        reason,
+        reason, 
       } = req.body;
 
       if (!userId) {
@@ -86,6 +86,35 @@ exports.applyLeave =
         message:
           "Leave request sent successfully",
         data: leave,
+      });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        message:
+          error.message,
+      });
+    }
+  };
+
+  // ================= GET ALL EMPLOYEES LEAVES =================
+exports.getAllLeaves =
+  async (req, res) => {
+    try {
+      const leaves =
+        await Leave.find()
+          .populate(
+            "employeeId",
+            "firstName lastName email role employeeID"
+          )
+          .sort({
+            createdAt: -1,
+          });
+
+      res.status(200).json({
+        success: true,
+        total:
+          leaves.length,
+        data: leaves,
       });
     } catch (error) {
       res.status(500).json({
