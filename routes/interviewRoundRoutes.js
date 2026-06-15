@@ -2,6 +2,7 @@ const router = require("express").Router();
 
 const {
   addRound,
+  createInterview,
   getAllRounds,
   getRoundsByInterview,
   updateRound,
@@ -9,6 +10,7 @@ const {
 } = require("../controllers/interviewRoundController");
 
 router.post("/add", addRound);
+router.post("/add/interview", createInterview);
 router.get("/", getAllRounds);
 router.get("/:interviewId", getRoundsByInterview);
 router.put("/:id", updateRound);

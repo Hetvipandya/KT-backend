@@ -5,6 +5,23 @@ const Interview = require("../models/Interview");
 // =========================
 // 🔹 ADD ROUND
 // =========================
+exports.createInterview = async (req, res) => {
+  try {
+    const interview = await Interview.create(req.body);
+
+    res.status(201).json({
+      success: true,
+      message: "Interview created successfully",
+      data: interview,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
 exports.addRound = async (req, res) => {
   try {
     const { interviewId, roundType, interviewerName } = req.body;
@@ -16,7 +33,7 @@ exports.addRound = async (req, res) => {
         success: false,
         message: "Interview not found",
       });
-    }
+    } 
 
     const round = await InterviewRound.create({
       interviewId,

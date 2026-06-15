@@ -8,7 +8,7 @@ const interviewRoundSchema = new mongoose.Schema(
       required: true,
     },
 
-    roundType: {
+    roundType: { 
       type: String,
       required: true,
     },

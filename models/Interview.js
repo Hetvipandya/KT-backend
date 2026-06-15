@@ -18,7 +18,7 @@ const interviewSchema = new mongoose.Schema(
 
     feedback: String,
 
-    rating: Number,
+    rating: Number, 
 
     status: {
       type: String,
