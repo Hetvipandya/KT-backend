@@ -10,7 +10,7 @@ const {
 } = require("../controllers/interviewRoundController");
 
 router.post("/add", addRound);
-router.post("/add/interview", createInterview);
+router.post("/addInterview", createInterview);
 router.get("/", getAllRounds);
 router.get("/:interviewId", getRoundsByInterview);
 router.put("/:id", updateRound);
