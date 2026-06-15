@@ -124,6 +124,75 @@ const generateOTP =
 // run admin creation
 createDefaultAdmin();
 
+const createDefaultHR =
+  async () => {
+    try {
+      const hrExists =
+        await User.findOne({
+          role: "hr",
+        });
+
+      if (hrExists) {
+        return;
+      }
+
+      const hr =
+        new User({
+          name: "hr",
+
+          email:
+            "hr@gmail.com",
+
+          phoneNumber:
+            "8888888888",
+
+          dob:
+            "01-01-2000",
+
+          address:
+            "Ahmedabad",
+
+          department:
+            "HR",
+
+          bloodGroup:
+            "O+",
+
+          uniqueID:
+            "HR001",
+
+          password:
+            "hr123",
+
+          plainPassword:
+            "hr123",
+
+          role:
+            "hr",
+
+          isApproved:
+            true,
+
+          isFirstLogin:
+            false,
+
+          isActive:
+            true,
+        });
+
+      await hr.save();
+
+      console.log(
+        "✅ Default HR Created"
+      );
+    } catch (error) {
+      console.log(
+        "❌ HR Create Error:",
+        error.message
+      );
+    }
+  };
+  createDefaultHR();
 // ================= REGISTER USER =================
 exports.registerUser =
   async (req, res) => {
@@ -489,22 +558,27 @@ exports.loginUser =
       }
 
       // ================= FIND USER =================
-      const user =
-        await User.findOne({
-          $or: [
-            {
-              email:
-                login
-                  .trim()
-                  .toLowerCase(),
-            },
+   const user =
+  await User.findOne({
+    $or: [
+      {
+        email:
+          login
+            .trim()
+            .toLowerCase(),
+      },
 
-            {
-              name:
-                login.trim(),
-            },
-          ],
-        });
+      {
+        name:
+          login.trim(),
+      },
+
+      {
+        uniqueID:
+          login.trim(),
+      },
+    ],
+  });
 
       // ================= USER NOT FOUND =================
       if (!user) {
@@ -520,21 +594,21 @@ exports.loginUser =
       }
 
       // ================= APPROVAL CHECK =================
-      if (
-        user.role !==
-          "admin" &&
-        !user.isApproved
-      ) {
-        return res
-          .status(403)
-          .json({
-            success:
-              false,
+     if (
+  user.role !== "admin" &&
+  user.role !== "hr" &&
+  !user.isApproved
+) {
+  return res
+    .status(403)
+    .json({
+      success:
+        false,
 
-            message:
-              "Admin approval pending",
-          });
-      }
+      message:
+        "Admin approval pending",
+    });
+}
 
       // ================= ONE DEVICE LOGIN =================
       if (

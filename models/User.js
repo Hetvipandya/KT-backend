@@ -47,7 +47,7 @@ const userSchema =
         type: String,
         required: true,
       },
-
+ 
       uniqueID: {
         type: String,
         unique: true,
@@ -69,6 +69,7 @@ const userSchema =
         type: String,
         enum: [
           "admin",
+          "hr",
           "employee",
         ],
         default:

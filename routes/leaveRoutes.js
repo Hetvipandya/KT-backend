@@ -34,7 +34,9 @@ router.post(
   "/apply",
   protect,
   authorizeRoles(
-    "employee"
+    "employee",
+    "hr",
+    "admin"
   ),
   applyLeave
 );
@@ -44,7 +46,9 @@ router.put(
   "/teamlead-approval",
   protect,
   authorizeRoles(
-    "teamlead"
+    "teamlead",
+    "hr",
+    "admin"
   ),
   teamLeadApproval
 );
@@ -52,7 +56,7 @@ router.put(
 // ================= HR APPROVAL =================
 router.put(
   "/hr-approval",
-  protect, 
+  protect,
   authorizeRoles(
     "hr",
     "admin"
@@ -64,6 +68,11 @@ router.put(
 router.get(
   "/my-leaves/:userId",
   protect,
+  authorizeRoles(
+    "employee",
+    "hr",
+    "admin"
+  ),
   getMyLeaves
 );
 
@@ -71,6 +80,11 @@ router.get(
 router.get(
   "/leave-balance/:userId",
   protect,
+  authorizeRoles(
+    "employee",
+    "hr",
+    "admin"
+  ),
   getLeaveBalance
 );
 
@@ -89,12 +103,22 @@ router.post(
 router.get(
   "/holiday/all",
   protect,
+  authorizeRoles(
+    "employee",
+    "hr",
+    "admin"
+  ),
   getAllHolidays
 );
 
+// ================= GET ALL LEAVES =================
 router.get(
   "/all",
   protect,
+  authorizeRoles(
+    "hr",
+    "admin"
+  ),
   getAllLeaves
 );
 
