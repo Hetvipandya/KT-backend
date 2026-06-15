@@ -97,33 +97,39 @@ exports.applyLeave =
   };
 
 exports.getAllLeaves = async (req, res) => {
-  console.log("=== getAllLeaves function STARTED ===");
-  console.log("User from token:", req.user ? req.user._id : "No user");
-  
   try {
-    console.log("Attempting to find leaves...");
+    console.log("=== GET ALL LEAVES API CALLED ===");
+
+    // Fetch all leaves with employee details
     const leaves = await Leave.find({})
       .populate({
         path: "employeeId",
-        select: "firstName lastName email role employeeID",
+        select:
+          "firstName lastName email role employeeID",
       })
-      .sort({ createdAt: -1 });
-    
-    console.log(`Found ${leaves.length} leaves`);
-    
+      .sort({ createdAt: -1 })
+      .lean();
+
     return res.status(200).json({
       success: true,
+      message:
+        leaves.length > 0
+          ? "Leaves fetched successfully"
+          : "No leaves found",
       total: leaves.length,
       data: leaves,
     });
   } catch (error) {
-    console.log("GET ALL LEAVES ERROR:", error);
-    console.log("Error stack:", error.stack);
-    
+    console.error(
+      "GET ALL LEAVES ERROR:",
+      error
+    );
+
     return res.status(500).json({
       success: false,
-      message: error.message,
-      stack: process.env.NODE_ENV === "development" ? error.stack : undefined,
+      message:
+        "Failed to fetch leave data",
+      error: error.message,
     });
   }
 };
