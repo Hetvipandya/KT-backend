@@ -7,6 +7,8 @@ const Interview = require("../models/Interview");
 // =========================
 exports.createInterview = async (req, res) => {
   try {
+    console.log("API HIT");
+
     const interview = await Interview.create(req.body);
 
     res.status(201).json({
@@ -15,6 +17,8 @@ exports.createInterview = async (req, res) => {
       data: interview,
     });
   } catch (error) {
+    console.log(error);
+
     res.status(500).json({
       success: false,
       message: error.message,
