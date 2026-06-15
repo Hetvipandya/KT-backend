@@ -7,7 +7,7 @@ const teamSchema =
       projectId: {
         type:
           mongoose.Schema.Types.ObjectId,
-        ref: "Project",
+        ref: "Project", 
         required: true,
       },
 
