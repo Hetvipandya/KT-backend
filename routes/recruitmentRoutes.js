@@ -7,6 +7,10 @@ router.put("/job/publish/:id", ctrl.publishJob);
 
 // ================= CANDIDATE =================
 router.post("/candidate/add", ctrl.addCandidate);
+router.get(
+  "/candidate",
+  ctrl.getAllCandidates
+);
 router.put("/candidate/status/:id", ctrl.updateCandidateStatus);
 router.put("/candidate/rate/:id", ctrl.rateCandidate);
 

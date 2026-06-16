@@ -5,65 +5,63 @@ const TeamMember =
   require(
     "../models/TeamMember"
   );
-
+ 
 // =================
 // CREATE TEAM
 // =================
-exports.createTeam =
-  async (req, res) => {
-    try {
-      const {
-        projectId,
-        projectManager,
-        teamLead,
-        developers,
-        interns,
-        designers,
-        testers,
-      } = req.body;
+exports.createTeam = async (req, res) => {
+  try {
+    const {
+      projectId,
+      projectManager,
+      teamLead,
+      developers,
+      interns,
+      designers,
+      testers,
+    } = req.body;
 
-      if (
-        !projectId ||
-        !projectManager
-      ) {
-        return res
-          .status(400)
-          .json({
-            success: false,
-            message:
-              "Project ID and Project Manager are required",
-          });
-      }
-
-      const team =
-        await Team.create({
-          projectId,
-          projectManager,
-          teamLead,
-          developers,
-          interns,
-          designers,
-          testers,
-        });
-
-      return res
-        .status(201)
-        .json({
-          success: true,
-          message:
-            "Team created successfully",
-          data: team,
-        });
-    } catch (error) {
-      return res
-        .status(500)
-        .json({
-          success: false,
-          message:
-            error.message,
-        });
+    if (!projectId || !projectManager) {
+      return res.status(400).json({
+        success: false,
+        message: "Project ID and Project Manager are required",
+      });
     }
-  };
+
+    // 1. Create Team
+    const team = await Team.create({
+      projectId,
+      projectManager,
+      teamLead,
+      developers,
+      interns,
+      designers,
+      testers,
+    });
+
+    // 2. INSERT TEAM LEAD INTO TEAMMEMBER (IMPORTANT FIX)
+    if (teamLead) {
+      await TeamMember.create({
+        userId: teamLead,
+        projectId,
+        role: "Team Lead",
+        status: "Assigned",
+      });
+    }
+
+    return res.status(201).json({
+      success: true,
+      message: "Team created successfully",
+      data: team,
+    });
+
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
 // =================
 // ASSIGN TEAM
 // =================

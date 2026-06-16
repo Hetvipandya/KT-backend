@@ -11,7 +11,7 @@ const teamMemberSchema =
         required: true,
       },
 
-      projectId: {
+      projectId: { 
         type:
           mongoose.Schema.Types.ObjectId,
         ref: "Project",

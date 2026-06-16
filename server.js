@@ -171,6 +171,11 @@ const projectManagementRoutes =
  require(
   "./routes/dailyReportRoutes"
  )
+
+ const teamLeadRoutes =
+ require(
+  "./routes/teamLeadRoutes"
+ )
 // ================= API PREFIX =================
 
 app.use(
@@ -271,6 +276,11 @@ app.use(
 app.use(
   "/api/dailyUpdate",
   dailyReportRoutes
+)
+
+app.use(
+  "/api/teamLead",
+  teamLeadRoutes
 )
 // ================= HEALTH CHECK =================
 

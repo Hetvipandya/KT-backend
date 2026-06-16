@@ -71,7 +71,7 @@ const generateOTP =
           name: "admin",
 
           email:
-            "admin@gmail.com",
+            "admin@gmail.com", 
 
           phoneNumber:
             "9999999999",

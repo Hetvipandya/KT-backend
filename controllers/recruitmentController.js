@@ -1,5 +1,5 @@
 const Job = require("../models/Job");
-const Candidate = require("../models/Candidate");
+const Candidate = require("../models/Candidate"); 
 const Interview = require("../models/Interview");
 const Offer = require("../models/Offer");
 
@@ -13,6 +13,23 @@ exports.createJob = async (req, res) => {
     res.status(201).json({ success: true, job });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+exports.getAllCandidates = async (req, res) => {
+  try {
+    const candidates = await Candidate.find();
+
+    res.status(200).json({
+      success: true,
+      count: candidates.length,
+      candidates,
+    });
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      message: err.message,
+    });
   }
 };
 
