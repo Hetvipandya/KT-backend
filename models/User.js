@@ -71,6 +71,7 @@ const userSchema =
           "admin",
           "hr",
           "employee",
+          "team lead",
         ],
         default:
           "employee",
@@ -155,7 +156,7 @@ userSchema.pre(
 
         if (
           lastUser &&
-          lastUser.uniqueID
+          lastUser.uniqueID 
         ) {
           const lastNumber =
             parseInt(
