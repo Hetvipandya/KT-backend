@@ -665,7 +665,7 @@ exports.loginUser =
       user.deviceId =
         deviceId || null;
 
-      user.lastLogin =
+      user.lastLogin = 
         new Date();
 
       await user.save();

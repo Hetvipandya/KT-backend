@@ -10,7 +10,7 @@ const projectSchema =
       },
 
       projectDescription: {
-        type: String,
+        type: String, 
         default: "",
       },
 
