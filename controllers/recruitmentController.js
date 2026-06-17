@@ -56,7 +56,7 @@ exports.publishJob = async (req, res) => {
 
 exports.addCandidate = async (req, res) => {
   try {
-    console.log(req.body);
+    console.log("BODY =", req.body);
 
     const candidate = await Candidate.create(req.body);
 
