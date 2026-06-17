@@ -7,6 +7,8 @@ const {
   getRoundsByInterview,
   updateRound,
   deleteRound,
+  approveInterview,
+  rejectInterview
 } = require("../controllers/interviewRoundController");
 
 router.post("/add", addRound);
@@ -15,5 +17,14 @@ router.get("/", getAllRounds);
 router.get("/:interviewId", getRoundsByInterview);
 router.put("/:id", updateRound);
 router.delete("/:id", deleteRound);
+router.put(
+  "/approve/:id",
+  approveInterview
+);
+
+router.put(
+  "/reject/:id",
+  rejectInterview
+);
 
 module.exports = router;

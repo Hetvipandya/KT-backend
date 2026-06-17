@@ -1,158 +1,243 @@
-const InterviewRound = require("../models/InterviewRound");
-const Interview = require("../models/Interview");
+  const InterviewRound = require("../models/InterviewRound");
+  const Interview = require("../models/Interview");
 
 
-// =========================
-// 🔹 ADD ROUND
-// =========================
-exports.createInterview = async (req, res) => {
-  try { 
-    console.log("API HIT");
-    const interview = await Interview.create(req.body);
-    res.status(201).json({
-      success: true,
-      message: "Interview created successfully",
-      data: interview,
-    });
-  } catch (error) {
-    console.log(error);
-    res.status(500).json({ 
-      success: false,
-      message: error.message,
-    });
-  }
-};
-
-exports.addRound = async (req, res) => {
-  try {
-    const { interviewId, roundType, interviewerName } = req.body;
-
-    // check interview exists
-    const interview = await Interview.findById(interviewId);
-    if (!interview) {
-      return res.status(404).json({
-        success: false,
-        message: "Interview not found",
+  // =========================
+  // 🔹 ADD ROUND
+  // =========================
+  exports.createInterview = async (req, res) => { 
+    try { 
+      console.log("API HIT");
+      const interview = await Interview.create(req.body);
+      res.status(201).json({
+        success: true,
+        message: "Interview created successfully",
+        data: interview,
       });
-    } 
-
-    const round = await InterviewRound.create({
-      interviewId,
-      roundType,
-      interviewerName,
-    });
-
-    res.status(201).json({
-      success: true,
-      message: "Interview round created successfully",
-      data: round,
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: error.message,
-    });
-  }
-};
-
-
-// =========================
-// 🔹 GET ALL ROUNDS
-// =========================
-exports.getAllRounds = async (req, res) => {
-  try {
-    const rounds = await InterviewRound.find()
-      .populate("interviewId");
-
-    res.json({
-      success: true,
-      data: rounds,
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: error.message,
-    });
-  }
-};
-
-
-// =========================
-// 🔹 GET ROUNDS BY INTERVIEW ID
-// =========================
-exports.getRoundsByInterview = async (req, res) => {
-  try {
-    const rounds = await InterviewRound.find({
-      interviewId: req.params.interviewId,
-    });
-
-    res.json({
-      success: true,
-      data: rounds,
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: error.message,
-    });
-  }
-};
-
-
-// =========================
-// 🔹 UPDATE ROUND (feedback / rating / status)
-// =========================
-exports.updateRound = async (req, res) => {
-  try {
-    const round = await InterviewRound.findByIdAndUpdate(
-      req.params.id,
-      req.body,
-      { new: true }
-    );
-
-    if (!round) {
-      return res.status(404).json({
+    } catch (error) {
+      console.log(error);
+      res.status(500).json({ 
         success: false,
-        message: "Round not found",
+        message: error.message,
       });
     }
+  };
 
-    res.json({
-      success: true,
-      message: "Round updated successfully",
-      data: round,
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: error.message,
-    });
-  }
-};
+  exports.addRound = async (req, res) => {
+    try {
+      const { interviewId, roundType, interviewerName } = req.body;
 
+      // check interview exists
+      const interview = await Interview.findById(interviewId);
+      if (!interview) {
+        return res.status(404).json({
+          success: false,
+          message: "Interview not found",
+        });
+      } 
 
-// =========================
-// 🔹 DELETE ROUND
-// =========================
-exports.deleteRound = async (req, res) => {
-  try {
-    const round = await InterviewRound.findByIdAndDelete(req.params.id);
+      const round = await InterviewRound.create({
+        interviewId,
+        roundType,
+        interviewerName,
+      });
 
-    if (!round) {
-      return res.status(404).json({
+      res.status(201).json({
+        success: true,
+        message: "Interview round created successfully",
+        data: round,
+      });
+    } catch (error) {
+      res.status(500).json({
         success: false,
-        message: "Round not found",
+        message: error.message,
       });
     }
+  };
 
-    res.json({
-      success: true,
-      message: "Round deleted successfully",
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: error.message,
-    });
-  }
-};
+  exports.approveInterview =
+  async (req, res) => {
+    try {
+      const interview =
+        await Interview.findByIdAndUpdate(
+          req.params.id,
+          {
+            status:
+              "approved",
+            approvedBy:
+              req.body
+                .approvedBy,
+            approvedAt:
+              new Date(),
+          },
+          { new: true }
+        );
+
+      if (!interview) {
+        return res
+          .status(404)
+          .json({
+            success:
+              false,
+            message:
+              "Interview not found",
+          });
+      }
+
+      res.json({
+        success: true,
+        message:
+          "Candidate approved successfully",
+        data: interview,
+      });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        message:
+          error.message,
+      });
+    }
+  };
+
+  exports.rejectInterview =
+  async (req, res) => {
+    try {
+      const interview =
+        await Interview.findByIdAndUpdate(
+          req.params.id,
+          {
+            status:
+              "rejected",
+            rejectionReason:
+              req.body.reason,
+          },
+          { new: true }
+        );
+
+      if (!interview) {
+        return res
+          .status(404)
+          .json({
+            success:
+              false,
+            message:
+              "Interview not found",
+          });
+      }
+
+      res.json({
+        success: true,
+        message:
+          "Candidate rejected successfully",
+        data: interview,
+      });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        message:
+          error.message,
+      });
+    }
+  };
+
+
+  // =========================
+  // 🔹 GET ALL ROUNDS
+  // =========================
+  exports.getAllRounds = async (req, res) => {
+    try {
+      const rounds = await InterviewRound.find()
+        .populate("interviewId");
+
+      res.json({
+        success: true,
+        data: rounds,
+      });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        message: error.message,
+      });
+    }
+  };
+
+
+  // =========================
+  // 🔹 GET ROUNDS BY INTERVIEW ID
+  // =========================
+  exports.getRoundsByInterview = async (req, res) => {
+    try {
+      const rounds = await InterviewRound.find({
+        interviewId: req.params.interviewId,
+      });
+
+      res.json({
+        success: true,
+        data: rounds,
+      });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        message: error.message,
+      });
+    }
+  };
+
+
+  // =========================
+  // 🔹 UPDATE ROUND (feedback / rating / status)
+  // =========================
+  exports.updateRound = async (req, res) => {
+    try {
+      const round = await InterviewRound.findByIdAndUpdate(
+        req.params.id,
+        req.body,
+        { new: true }
+      );
+
+      if (!round) {
+        return res.status(404).json({
+          success: false,
+          message: "Round not found",
+        });
+      }
+
+      res.json({
+        success: true,
+        message: "Round updated successfully",
+        data: round,
+      });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        message: error.message,
+      });
+    }
+  };
+
+
+  // =========================
+  // 🔹 DELETE ROUND
+  // =========================
+  exports.deleteRound = async (req, res) => {
+    try {
+      const round = await InterviewRound.findByIdAndDelete(req.params.id);
+
+      if (!round) {
+        return res.status(404).json({
+          success: false,
+          message: "Round not found",
+        });
+      }
+
+      res.json({
+        success: true,
+        message: "Round deleted successfully",
+      });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        message: error.message,
+      });
+    }
+  };

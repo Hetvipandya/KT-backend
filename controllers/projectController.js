@@ -10,7 +10,7 @@ const DailyUpdate = require("../models/dailyUpdateModel");
 
 // Create Project
 exports.createProject =
-  async (req, res) => {
+  async (req, res) => { 
     try {
       const project = 
         await Project.create(

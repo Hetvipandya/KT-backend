@@ -1,11 +1,13 @@
-const mongoose = require("mongoose");
+const mongoose =
+  require("mongoose");
 
 const milestoneSchema =
   new mongoose.Schema(
     {
       projectId: {
         type:
-          mongoose.Schema.Types.ObjectId,
+          mongoose.Schema
+            .Types.ObjectId,
         ref: "Project",
         required: true,
       },
@@ -13,22 +15,49 @@ const milestoneSchema =
       title: {
         type: String,
         required: true,
+        trim: true,
       },
 
-      description: String,
+      description: {
+        type: String,
+        default: "",
+      },
 
-      dueDate: Date,
+      dueDate: {
+        type: Date,
+        required: true,
+      },
+
+      progress: {
+        type: Number,
+        default: 0,
+        min: 0,
+        max: 100,
+      },
 
       status: {
         type: String,
         enum: [
           "pending",
+          "in-progress",
+          "under-review",
           "completed",
         ],
         default: "pending",
       },
+
+      reviewComment: {
+        type: String,
+        default: "",
+      },
+
+      completedAt: {
+        type: Date,
+      },
     },
-    { timestamps: true }
+    {
+      timestamps: true,
+    }
   );
 
 module.exports =
