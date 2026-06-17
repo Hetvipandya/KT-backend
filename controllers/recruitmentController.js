@@ -4,7 +4,7 @@ const Interview = require("../models/Interview");
 const Offer = require("../models/Offer");
 
 //
-// ================= JOB =================
+// ================= JOB ================= 
 //
 
 exports.createJob = async (req, res) => {
@@ -82,16 +82,16 @@ exports.addCandidate = async (req, res) => {
     console.log("BODY =", req.body);
     console.log("FILE =", req.file);
 
-    const candidate = await Candidate.create({
-      jobId: req.body.jobId,
-      name: req.body.name,
-      email: req.body.email,
-      phone: req.body.phone,
-      resume: req.file
-        ? req.file.path
-        : "",
-      status: req.body.status,
-    });
+   const candidate =
+  await Candidate.create({
+    jobId: req.body.jobId,
+    name: req.body.name,
+    email: req.body.email,
+    phone: req.body.phone,
+    resume: req.file
+      ? req.file.path
+      : "",
+  });
 
     res.status(201).json({
       success: true,

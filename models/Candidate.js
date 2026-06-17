@@ -10,22 +10,18 @@ const candidateSchema = new mongoose.Schema(
 
     name: String,
     email: String,
-    phone: String,
+    phone: String, 
     resume: String,
 
-    status: {
-      type: String,
-      enum: [
-        "applied",
-        "screening",
-        "interview",
-        "selected",
-        "rejected",
-        "offer_sent",
-        "joined",
-      ],
-      default: "applied",
-    },
+   status: {
+  type: String,
+  enum: [
+    "pending",
+    "approved",
+    "rejected",
+  ],
+  default: "pending",
+},
 
     rating: {
       type: Number,
