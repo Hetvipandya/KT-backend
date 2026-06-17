@@ -194,74 +194,73 @@ const createDefaultHR =
   };
   createDefaultHR();
 // ================= REGISTER USER =================
-exports.registerUser =
-  async (req, res) => {
-    try {
-      const {
-        name,
-        email,
-        phoneNumber,
-        dob,
-        address, 
-        department,
-        bloodGroup,
-      } = req.body;
+exports.registerUser = async (req, res) => {
+try {
+const {
+name,
+email,
+phoneNumber,
+dob,
+address,
+department,
+bloodGroup,
+role,
+} = req.body;
 
-      // ================= VALIDATION =================
-      if (
-        !name ||
-        !email ||
-        !phoneNumber ||
-        !dob ||
-        !address ||
-        !department ||
-        !bloodGroup
-      ) {
-        return res
-          .status(400)
-          .json({
-            success:
-              false,
-            message:
-              "All fields are required",
-          });
-      }
+```
+// ================= VALIDATION =================
+if (
+  !name ||
+  !email ||
+  !phoneNumber ||
+  !dob ||
+  !address ||
+  !department ||
+  !bloodGroup ||
+  !role
+) {
+  return res.status(400).json({
+    success: false,
+    message: "All fields are required",
+  });
+}
 
-      // ================= CHECK EXISTING USER =================
-      const existingUser =
-        await User.findOne({
-          $or: [
-            { email },
-            {
-              phoneNumber,
-            },
-          ],
-        });
+// ================= ROLE VALIDATION =================
+const allowedRoles = [
+  "employee",
+  "team lead",
+];
 
-      if (
-        existingUser
-      ) {
-        return res
-          .status(400)
-          .json({
-            success:
-              false,
-            message:
-              "User already exists",
-          });
-      }
+if (!allowedRoles.includes(role)) {
+  return res.status(400).json({
+    success: false,
+    message: "Invalid role selected",
+  });
+}
 
-      // ================= GENERATE UNIQUE ID =================
- // ================= GENERATE UNIQUE ID =================
-const lastUser =
-  await User.findOne({
-    uniqueID: {
-      $regex: /^NEW\d+$/,
-    },
-  })
-    .sort({
-      createdAt: -1,
-    });
+// ================= CHECK EXISTING USER =================
+const existingUser = await User.findOne({
+  $or: [
+    { email },
+    { phoneNumber },
+  ],
+});
+
+if (existingUser) {
+  return res.status(400).json({
+    success: false,
+    message: "User already exists",
+  });
+}
+
+// ================= GENERATE UNIQUE ID =================
+const lastUser = await User.findOne({
+  uniqueID: {
+    $regex: /^NEW\d+$/,
+  },
+}).sort({
+  createdAt: -1,
+});
 
 let nextNumber = 1001;
 
@@ -269,186 +268,166 @@ if (
   lastUser &&
   lastUser.uniqueID
 ) {
-  const lastNumber =
-    parseInt(
-      lastUser.uniqueID.replace(
-        "NEW",
-        ""
-      )
-    );
+  const lastNumber = parseInt(
+    lastUser.uniqueID.replace(
+      "NEW",
+      ""
+    )
+  );
 
-  nextNumber =
-    isNaN(lastNumber)
-      ? 1001
-      : lastNumber + 1;
+  nextNumber = isNaN(lastNumber)
+    ? 1001
+    : lastNumber + 1;
 }
 
-const uniqueID =
-  `NEW${nextNumber}`;
+const uniqueID = `NEW${nextNumber}`;
 
-      // ================= GENERATE PASSWORD =================
-      const generatedPassword =
-        Math.random()
-          .toString(36)
-          .slice(-8);
+// ================= GENERATE PASSWORD =================
+const generatedPassword =
+  Math.random()
+    .toString(36)
+    .slice(-8);
 
-      // ================= SAVE USER =================
-      const user =
-        await User.create(
-          {
-            name,
-            email,
-            phoneNumber,
-            dob,
-            address,
-            department,
-            bloodGroup,
-            uniqueID,
+// ================= SAVE USER =================
+const user = await User.create({
+  name,
+  email,
+  phoneNumber,
+  dob,
+  address,
+  department,
+  bloodGroup,
+  uniqueID,
 
-            password:
-              generatedPassword,
+  password:
+    generatedPassword,
 
-            plainPassword:
-              generatedPassword,
+  plainPassword:
+    generatedPassword,
 
-            role:
-              "employee",
+  role,
 
-            isApproved:
-              false,
+  isApproved: false,
+  isFirstLogin: true,
+});
 
-            isFirstLogin:
-              true,
-          }
-        );
+// ================= SEND EMAIL =================
+try {
+  await transporter.sendMail({
+    from:
+      process.env.EMAIL_USER,
 
-      // ================= SEND EMAIL =================
-      try {
-        await transporter.sendMail(
-          {
-            from:
-              process.env
-                .EMAIL_USER,
+    to:
+      process.env.ADMIN_EMAIL,
 
-            to:
-              process.env
-                .ADMIN_EMAIL,
+    subject:
+      "New Employee Registration",
 
-            subject:
-              "New Employee Registration",
+    html: `
+      <h2>
+        New Employee Registration
+      </h2>
 
-            html: `
-              <h2>
-                New Employee Registration
-              </h2>
+      <p>
+        <b>Name:</b>
+        ${name}
+      </p>
 
-              <p>
-                <b>Name:</b>
-                ${name}
-              </p>
+      <p>
+        <b>Email:</b>
+        ${email}
+      </p>
 
-              <p>
-                <b>Email:</b>
-                ${email}
-              </p>
+      <p>
+        <b>Phone:</b>
+        ${phoneNumber}
+      </p>
 
-              <p>
-                <b>Phone:</b>
-                ${phoneNumber}
-              </p>
+      <p>
+        <b>Department:</b>
+        ${department}
+      </p>
 
-              <p>
-                <b>Department:</b>
-                ${department}
-              </p>
+      <p>
+        <b>Role:</b>
+        ${role}
+      </p>
 
-              <hr />
+      <hr />
 
-              <h3>
-                Login Credentials
-              </h3>
+      <h3>
+        Login Credentials
+      </h3>
 
-              <p>
-                <b>Unique ID:</b>
-                ${uniqueID}
-              </p>
+      <p>
+        <b>Unique ID:</b>
+        ${uniqueID}
+      </p>
 
-              <p>
-                <b>Password:</b>
-                ${generatedPassword}
-              </p>
+      <p>
+        <b>Password:</b>
+        ${generatedPassword}
+      </p>
 
-              <p>
-                Please approve
-                employee from
-                admin panel.
-              </p>
-            `,
-          }
-        );
+      <p>
+        Please approve the employee from the admin panel.
+      </p>
+    `,
+  });
 
-        console.log(
-          "✅ Email sent successfully"
-        );
-      } catch (
-        emailError
-      ) {
-        console.log(
-          "❌ Email Error:",
-          emailError.message
-        );
-      }
+  console.log(
+    "✅ Email sent successfully"
+  );
+} catch (emailError) {
+  console.log(
+    "❌ Email Error:",
+    emailError.message
+  );
+}
 
-      // ================= RESPONSE =================
-      res
-        .status(201)
-        .json({
-          success:
-            true,
+// ================= RESPONSE =================
+return res.status(201).json({
+  success: true,
 
-          message:
-            "Registration successful. Waiting for admin approval.",
+  message:
+    "Registration successful. Waiting for admin approval.",
 
-          credentials:
-            {
-              uniqueID,
-              password:
-                generatedPassword,
-            },
+  credentials: {
+    uniqueID,
+    password:
+      generatedPassword,
+  },
 
-          user: {
-            _id:
-              user._id,
-            name:
-              user.name,
-            email:
-              user.email,
-            uniqueID:
-              user.uniqueID,
-            role:
-              user.role,
-            isApproved:
-              user.isApproved,
-          },
-        });
-    } catch (
-      error
-    ) {
-      console.log(
-        "Register Error:",
-        error
-      );
+  user: {
+    _id: user._id,
+    name: user.name,
+    email: user.email,
+    uniqueID:
+      user.uniqueID,
+    role: user.role,
+    isApproved:
+      user.isApproved,
+  },
+});
+```
 
-      res
-        .status(500)
-        .json({
-          success:
-            false,
-          message:
-            error.message,
-        });
-    }
-  };
+} catch (error) {
+console.log(
+"Register Error:",
+error
+);
+
+```
+return res.status(500).json({
+  success: false,
+  message:
+    error.message,
+});
+```
+
+}
+};
+
 
 // ================= GET ALL USERS =================
 exports.getAllUsers =
