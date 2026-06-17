@@ -5,6 +5,7 @@ const upload = require("../middleware/uploadMiddleware");
 // ================= JOB =================
 router.post("/job/create", ctrl.createJob); 
 router.put("/job/publish/:id", ctrl.publishJob);
+router.get("/job/all", ctrl.getAllJobs);
 
 // ================= CANDIDATE =================
 router.post(

@@ -16,6 +16,29 @@ exports.createJob = async (req, res) => {
   }
 };
 
+exports.getAllJobs = async (req, res) => {
+  try {
+    const jobs = await Job.find()
+      .sort({ createdAt: -1 });
+
+    return res.status(200).json({
+      success: true,
+      total: jobs.length,
+      data: jobs,
+    });
+  } catch (error) {
+    console.log(
+      "Get All Jobs Error:",
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
 exports.getAllCandidates = async (req, res) => {
   try {
     const candidates = await Candidate.find();
