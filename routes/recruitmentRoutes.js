@@ -1,6 +1,6 @@
 const router = require("express").Router();
 const ctrl = require("../controllers/recruitmentController");
-const upload = require("../middleware/upload");
+const upload = require("../middleware/uploadMiddleware");
 
 // ================= JOB =================
 router.post("/job/create", ctrl.createJob); 
