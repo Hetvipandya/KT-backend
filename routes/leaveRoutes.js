@@ -117,7 +117,8 @@ router.get(
   protect,
   authorizeRoles(
     "hr",
-    "admin"
+    "admin",
+    "team lead"
   ),
   getAllLeaves
 );
