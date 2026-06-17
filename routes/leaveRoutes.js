@@ -36,7 +36,8 @@ router.post(
   authorizeRoles(
     "employee",
     "hr",
-    "admin"
+    "admin",
+    "team lead"
   ),
   applyLeave
 );
