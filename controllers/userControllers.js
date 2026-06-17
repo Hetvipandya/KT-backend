@@ -313,8 +313,7 @@ const uniqueID =
             plainPassword:
               generatedPassword,
 
-            role:
-              "employee",
+              role,
 
             isApproved:
               false,
