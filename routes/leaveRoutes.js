@@ -46,7 +46,7 @@ router.put(
   "/teamlead-approval",
   protect,
   authorizeRoles(
-    "teamlead",
+    "team lead",
     "hr",
     "admin"
   ),
@@ -59,7 +59,7 @@ router.put(
   protect,
   authorizeRoles(
     "hr",
-    "admin"
+    "admin",
   ),
   hrApproval
 );

@@ -129,7 +129,7 @@ exports.getAllLeaves = async (req, res) => {
 };
 
 // ================= TEAM LEAD APPROVAL =================
-exports.teamLeadApproval =
+exports.teamLeadApproval = 
   async (req, res) => {
     try {
       const {
