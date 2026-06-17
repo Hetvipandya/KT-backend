@@ -56,10 +56,21 @@ exports.publishJob = async (req, res) => {
 
 exports.addCandidate = async (req, res) => {
   try {
+    console.log(req.body);
+
     const candidate = await Candidate.create(req.body);
-    res.status(201).json({ success: true, candidate });
+
+    res.status(201).json({
+      success: true,
+      candidate,
+    });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    console.log(err);
+
+    res.status(500).json({
+      success: false,
+      message: err.message,
+    });
   }
 };
 

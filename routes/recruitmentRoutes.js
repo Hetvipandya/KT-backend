@@ -2,7 +2,7 @@ const router = require("express").Router();
 const ctrl = require("../controllers/recruitmentController");
 
 // ================= JOB =================
-router.post("/job/create", ctrl.createJob);
+router.post("/job/create", ctrl.createJob); 
 router.put("/job/publish/:id", ctrl.publishJob);
 
 // ================= CANDIDATE =================
