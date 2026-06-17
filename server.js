@@ -186,12 +186,18 @@ const projectManagementRoutes =
  require(
   "./routes/projectMonitoringRoutes"
  )
+
+ const fileManagementRoutes =
+ require(
+  "./routes/fileManagementRoutes"
+ )
+ 
 // ================= API PREFIX =================
 
 app.use(
   "/api/users",
   userRoutes
-);
+) 
 
 app.use(
   "/api/role",
@@ -301,6 +307,11 @@ app.use(
 app.use(
   "/api/projectAnalytics",
   projectAnalyticsRoutes
+)
+
+app.use(
+  "/api/fileManagement",
+  fileManagementRoutes
 )
 // ================= HEALTH CHECK =================
 

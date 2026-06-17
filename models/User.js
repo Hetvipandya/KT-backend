@@ -73,8 +73,6 @@ const userSchema =
           "employee",
           "team lead",
         ],
-        default:
-          "employee",
       },
 
       // ================= APPROVAL =================

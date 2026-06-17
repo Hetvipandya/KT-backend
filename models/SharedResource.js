@@ -12,7 +12,7 @@ const sharedResourceSchema =
         required: true,
       },
 
-      sharedWith: [
+      sharedWith: [ 
         {
           type:
             mongoose.Schema
