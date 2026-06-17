@@ -1,12 +1,17 @@
 const router = require("express").Router();
 const ctrl = require("../controllers/recruitmentController");
+const upload = require("../middleware/upload");
 
 // ================= JOB =================
 router.post("/job/create", ctrl.createJob); 
 router.put("/job/publish/:id", ctrl.publishJob);
 
 // ================= CANDIDATE =================
-router.post("/candidate/add", ctrl.addCandidate);
+router.post(
+  "/candidate/add",
+  upload.single("resume"),
+  ctrl.addCandidate
+);
 router.get(
   "/candidate",
   ctrl.getAllCandidates

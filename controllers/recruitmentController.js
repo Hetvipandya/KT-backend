@@ -57,8 +57,18 @@ exports.publishJob = async (req, res) => {
 exports.addCandidate = async (req, res) => {
   try {
     console.log("BODY =", req.body);
+    console.log("FILE =", req.file);
 
-    const candidate = await Candidate.create(req.body);
+    const candidate = await Candidate.create({
+      jobId: req.body.jobId,
+      name: req.body.name,
+      email: req.body.email,
+      phone: req.body.phone,
+      resume: req.file
+        ? req.file.path
+        : "",
+      status: req.body.status,
+    });
 
     res.status(201).json({
       success: true,
