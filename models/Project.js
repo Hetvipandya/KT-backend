@@ -1,125 +1,125 @@
-const mongoose =
-  require("mongoose");
+// const mongoose =
+//   require("mongoose");
 
-const projectSchema =
-  new mongoose.Schema(
-    {
-      projectName: {
-        type: String,
-        required: true,
-        trim: true,
-      },
+// const projectSchema =
+//   new mongoose.Schema(
+//     {
+//       projectName: {
+//         type: String,
+//         required: true,
+//         trim: true,
+//       },
 
       
-      clientName: {
-        type: String,
-        required: true,
-        trim: true,
-      },
+//       clientName: {
+//         type: String,
+//         required: true,
+//         trim: true,
+//       },
 
-      projectType: {
-        type: String,
-        enum: [
-          "Website",
-          "Mobile App",
-          "CRM", 
-          "ERP",
-          "Software",
-          "Marketing",
-          "Other",
-        ],
-        default: "Other",
-      },
+//       projectType: {
+//         type: String,
+//         enum: [
+//           "Website",
+//           "Mobile App",
+//           "CRM", 
+//           "ERP",
+//           "Software",
+//           "Marketing",
+//           "Other",
+//         ],
+//         default: "Other",
+//       },
 
-      projectDescription: {
-        type: String,
-        default: "",
-      },
+//       projectDescription: {
+//         type: String,
+//         default: "",
+//       },
 
-      projectBudget: {
-        type: Number,
-        default: 0,
-      },
+//       projectBudget: {
+//         type: Number,
+//         default: 0,
+//       },
 
-      startDate: {
-        type: Date,
-        required: true,
-      },
+//       startDate: {
+//         type: Date,
+//         required: true,
+//       },
 
-      endDate: {
-        type: Date,
-        required: true,
-      },
+//       endDate: {
+//         type: Date,
+//         required: true,
+//       },
 
-      priority: {
-        type: String,
-        enum: [
-          "Low",
-          "Medium",
-          "High",
-          "Critical",
-        ],
-        default: "Medium",
-      },
+//       priority: {
+//         type: String,
+//         enum: [
+//           "Low",
+//           "Medium",
+//           "High",
+//           "Critical",
+//         ],
+//         default: "Medium",
+//       },
 
-      projectManager: {
-        type:
-          mongoose.Schema.Types.ObjectId,
-        ref: "User",
-      },
+//       projectManager: {
+//         type:
+//           mongoose.Schema.Types.ObjectId,
+//         ref: "User",
+//       },
 
-      teamLead: {
-        type:
-          mongoose.Schema.Types.ObjectId,
-        ref: "User",
-      },
+//       teamLead: {
+//         type:
+//           mongoose.Schema.Types.ObjectId,
+//         ref: "User",
+//       },
 
-      teamMembers: [
-        {
-          type:
-            mongoose.Schema.Types.ObjectId,
-          ref: "User",
-        },
-      ],
+//       teamMembers: [
+//         {
+//           type:
+//             mongoose.Schema.Types.ObjectId,
+//           ref: "User",
+//         },
+//       ],
 
-      status: {
-        type: String,
-        enum: [
-          "Draft",
-          "Pending Approval",
-          "Planning",
-          "Active",
-          "On Hold",
-          "Under Review",
-          "Completed",
-          "Delivered",
-          "Cancelled",
-        ],
-        default: "Draft",
-      },
+//       status: {
+//         type: String,
+//         enum: [
+//           "Draft",
+//           "Pending Approval",
+//           "Planning",
+//           "Active",
+//           "On Hold",
+//           "Under Review",
+//           "Completed",
+//           "Delivered",
+//           "Cancelled",
+//         ],
+//         default: "Draft",
+//       },
 
-      progress: {
-        type: Number,
-        default: 0,
-        min: 0,
-        max: 100,
-      },
+//       progress: {
+//         type: Number,
+//         default: 0,
+//         min: 0,
+//         max: 100,
+//       },
 
-      isDeleted: {
-        type: Boolean,
-        default: false,
-      },
-    },
-    {
-      timestamps: true,
-    }
-  );
+//       isDeleted: {
+//         type: Boolean,
+//         default: false,
+//       },
+//     },
+//     {
+//       timestamps: true,
+//     }
+//   );
 
-// Fix OverwriteModelError
-delete mongoose.models.Project;
+// // Fix OverwriteModelError
+// delete mongoose.models.Project;
 
-module.exports =
-  mongoose.model(
-    "Project",
-    projectSchema
-  );
+// module.exports =
+//   mongoose.model(
+//     "Project",
+//     projectSchema
+//   );
