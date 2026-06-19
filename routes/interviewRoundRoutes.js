@@ -14,17 +14,14 @@ const {
 router.post("/add", addRound);
 router.post("/addInterview", createInterview);
 router.get("/", getAllRounds);
+
+// Specific routes FIRST
+router.put("/approve/:id", approveInterview);
+router.put("/reject/:id", rejectInterview);
+
+// Generic routes LAST
 router.get("/:interviewId", getRoundsByInterview);
 router.put("/:id", updateRound);
 router.delete("/:id", deleteRound);
-router.put(
-  "/approve/:id",
-  approveInterview
-);
-
-router.put(
-  "/reject/:id",
-  rejectInterview
-);
 
 module.exports = router;
