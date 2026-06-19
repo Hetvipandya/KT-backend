@@ -1,10 +1,72 @@
   const InterviewRound = require("../models/InterviewRound");
   const Interview = require("../models/Interview");
+  const Candidate = require("../models/Candidate");
 
 
   // =========================
   // 🔹 ADD ROUND
   // =========================
+
+  exports.approveCandidate = async (req, res) => {
+  try {
+    const candidate = await Candidate.findByIdAndUpdate(
+      req.params.id,
+      {
+        status: "approved",
+      },
+      { new: true }
+    );
+
+    if (!candidate) {
+      return res.status(404).json({
+        success: false,
+        message: "Candidate not found",
+      });
+    }
+
+    res.json({
+      success: true,
+      message: "Candidate approved successfully",
+      data: candidate,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+exports.rejectCandidate = async (req, res) => {
+  try {
+    const candidate = await Candidate.findByIdAndUpdate(
+      req.params.id,
+      {
+        status: "rejected",
+      },
+      { new: true }
+    );
+
+    if (!candidate) {
+      return res.status(404).json({
+        success: false,
+        message: "Candidate not found",
+      });
+    }
+
+    res.json({
+      success: true,
+      message: "Candidate rejected successfully",
+      data: candidate,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
   exports.createInterview = async (req, res) => { 
     try { 
       console.log("API HIT");

@@ -8,20 +8,35 @@ const {
   updateRound,
   deleteRound,
   approveInterview,
-  rejectInterview
+  rejectInterview,
+  approveCandidate,
+  rejectCandidate,
 } = require("../controllers/interviewRoundController");
 
-router.post("/add", addRound);
+// Create interview
 router.post("/addInterview", createInterview);
+
+// Add round
+router.post("/add", addRound);
+
+// Get all rounds
 router.get("/", getAllRounds);
 
-// Specific routes FIRST
+// Candidate approve / reject
+router.put("/candidate/approve/:id", approveCandidate);
+router.put("/candidate/reject/:id", rejectCandidate);
+
+// Interview approve / reject
 router.put("/approve/:id", approveInterview);
 router.put("/reject/:id", rejectInterview);
 
-// Generic routes LAST
+// Get rounds by interview id
 router.get("/:interviewId", getRoundsByInterview);
+
+// Update round
 router.put("/:id", updateRound);
+
+// Delete round
 router.delete("/:id", deleteRound);
 
 module.exports = router;
