@@ -24,7 +24,7 @@ const candidateSchema = new mongoose.Schema(
 },
 
     rating: {
-      type: Number,
+      type: String,
     },
   },
   { timestamps: true }
