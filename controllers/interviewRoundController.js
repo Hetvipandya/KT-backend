@@ -55,49 +55,37 @@
     }
   };
 
-  exports.approveInterview =
-  async (req, res) => {
-    try {
-      const interview =
-        await Interview.findByIdAndUpdate(
-          req.params.id,
-          {
-            status:
-              "approved",
-            approvedBy:
-              req.body
-                .approvedBy,
-            approvedAt:
-              new Date(),
-          },
-          { new: true }
-        );
+exports.approveInterview = async (req, res) => {
+  try {
+    const interview =
+      await Interview.findByIdAndUpdate(
+        req.params.id,
+        {
+          status: "approved",
+          approvedAt: new Date(),
+        },
+        { new: true }
+      );
 
-      if (!interview) {
-        return res
-          .status(404)
-          .json({
-            success:
-              false,
-            message:
-              "Interview not found",
-          });
-      }
-
-      res.json({
-        success: true,
-        message:
-          "Candidate approved successfully",
-        data: interview,
-      });
-    } catch (error) {
-      res.status(500).json({
+    if (!interview) {
+      return res.status(404).json({
         success: false,
-        message:
-          error.message,
+        message: "Interview not found",
       });
     }
-  };
+
+    res.json({
+      success: true,
+      message: "Candidate approved successfully",
+      data: interview,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
 
   exports.rejectInterview =
   async (req, res) => {
