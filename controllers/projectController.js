@@ -9,26 +9,26 @@ const DailyUpdate = require("../models/dailyUpdateModel");
 // ======================================================
 
 // Create Project
-exports.createProject =
-  async (req, res) => { 
-    try {
-      const project = 
-        await Project.create(
-          req.body
-        );
+exports.createProject = async (req, res) => {
+  try {
+    console.log("BODY:", req.body);
+    console.log("Priority:", JSON.stringify(req.body.priority));
+    console.log("Status:", JSON.stringify(req.body.status));
 
-      res.status(201).json({
-        success: true,
-        data: project,
-      });
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        message:
-          error.message,
-      });
-    }
-  };
+    const project = await Project.create(req.body);
+
+    res.status(201).json({
+      success: true,
+      data: project
+    });
+  } catch (error) {
+    console.log(error);
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
 
 // Get All Projects
 exports.getAllProjects =

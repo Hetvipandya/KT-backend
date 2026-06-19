@@ -29,7 +29,7 @@ const projectSchema =
         enum: [
           "Website",
           "Mobile App",
-          "CRM",
+          "CRM", 
           "ERP",
           "Software",
           "Marketing",
