@@ -10,14 +10,7 @@ const projectSchema =
         trim: true,
       },
 
-      // Auto Generate
-      // Example:
-      // PR1, PR2, PR3
-      projectCode: {
-        type: String,
-        unique: true,
-      },
-
+      
       clientName: {
         type: String,
         required: true,
