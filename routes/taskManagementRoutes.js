@@ -26,7 +26,7 @@ router.post(
 // Get All Tasks
 router.get(
   "/all",
-  getAllTasks
+  getAllTasks 
 );
 
 // Get Single Task

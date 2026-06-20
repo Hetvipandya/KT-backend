@@ -4,7 +4,7 @@ const mongoose =
 const milestoneProgressSchema =
   new mongoose.Schema(
     {
-      milestoneId: {
+      milestoneId: { 
         type:
           mongoose.Schema
             .Types.ObjectId,

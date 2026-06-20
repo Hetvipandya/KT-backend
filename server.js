@@ -196,6 +196,11 @@ const projectManagementRoutes =
  require(
   "./routes/milestoneRoutes"
  )
+
+ const clientProjectRoutes =
+ require(
+  "./routes/clientProjectRoutes"
+ )
  
 // ================= API PREFIX =================
 
@@ -322,6 +327,11 @@ app.use(
 app.use(
   "/api/milestone",
   milestoneRoutes
+)
+
+app.use(
+  "/api/client",
+  clientProjectRoutes
 )
 // ================= HEALTH CHECK =================
 

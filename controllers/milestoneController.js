@@ -5,7 +5,7 @@ const Milestone =
 
 const MilestoneProgress =
   require(
-    "../models/MilestoneProgress"
+    "../models/MilestoneProgress" 
   );
 
 
@@ -126,8 +126,8 @@ exports.trackProgress =
           progress,
           status:
             progress === 100
-              ? "Under Review"
-              : "In Progress",
+              ? "under-review"
+              : "in-progress"
         }
       );
 

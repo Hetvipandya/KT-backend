@@ -1,9 +1,8 @@
 const express = require("express");
-
-const router =
-  express.Router();
+const router = express.Router();
 
 const {
+  // Expense APIs
   createExpense,
   getExpenses,
   getExpenseById,
@@ -11,11 +10,25 @@ const {
   deleteExpense,
   approveExpense,
   rejectExpense,
+
+  // Income APIs
+  createIncome,
+  getAllIncome,
+
+  // Transaction APIs
+  getTransactions,
+
+  // Report APIs
+  getProfitLoss,
+  getBalanceSheet,
 } = require(
   "../controllers/expenseController"
 );
 
-// CRUD APIs
+
+// Expense Routes
+
+
 router.post(
   "/create",
   createExpense
@@ -41,7 +54,6 @@ router.delete(
   deleteExpense
 );
 
-// Approval APIs
 router.put(
   "/approve/:id",
   approveExpense
@@ -52,5 +64,41 @@ router.put(
   rejectExpense
 );
 
-module.exports =
-  router;
+
+// Income Routes
+
+
+router.post(
+  "/income/create",
+  createIncome
+);
+
+router.get(
+  "/income/all",
+  getAllIncome
+);
+
+
+// Transaction Routes
+
+
+router.get(
+  "/transactions/all",
+  getTransactions
+);
+
+
+// Reports Routes
+
+
+router.get(
+  "/reports/profit-loss",
+  getProfitLoss
+);
+
+router.get(
+  "/reports/balance-sheet",
+  getBalanceSheet
+);
+
+module.exports = router;

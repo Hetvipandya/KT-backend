@@ -1,7 +1,7 @@
 const mongoose =
   require("mongoose");
 
-const milestoneSchema =
+const milestoneSchema = 
   new mongoose.Schema(
     {
       projectId: {

@@ -2,11 +2,6 @@
   const Interview = require("../models/Interview");
   const Candidate = require("../models/Candidate");
 
-
-  // =========================
-  // 🔹 ADD ROUND
-  // =========================
-
   exports.approveCandidate = async (req, res) => {
   try {
     const candidate = await Candidate.findByIdAndUpdate(
