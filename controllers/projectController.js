@@ -125,39 +125,44 @@ exports.assignTeamLead = async (req, res) => {
 };
 
 // Assign Employees
-exports.assignEmployees =
-  async (req, res) => {
-    try {
-      const {
-        employeeIds,
-      } = req.body;
+exports.assignEmployees = async (req, res) => {
+  try {
+    const { employeeIds } = req.body;
 
-      const project =
-        await Project.findByIdAndUpdate(
-          req.params.id,
-          {
-            $addToSet: {
-              employees: {
-                $each:
-                  employeeIds,
-              },
-            },
-          },
-          { new: true }
-        )
-.populate("employees", "name email");
-      res.status(200).json({
-        success: true,
-        data: project,
-      });
-    } catch (error) {
-      res.status(500).json({
+    if (
+      !employeeIds ||
+      !Array.isArray(employeeIds) ||
+      employeeIds.length === 0
+    ) {
+      return res.status(400).json({
         success: false,
-        message:
-          error.message,
+        message: "employeeIds must be a non-empty array",
       });
     }
-  };
+
+    const project = await Project.findByIdAndUpdate(
+      req.params.id,
+      {
+        $addToSet: {
+          employees: {
+            $each: employeeIds,
+          },
+        },
+      },
+      { new: true }
+    ).populate("employees", "name email");
+
+    res.status(200).json({
+      success: true,
+      data: project,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
 
 // Assign Interns
 exports.assignInterns =
