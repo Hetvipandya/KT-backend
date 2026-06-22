@@ -11,7 +11,13 @@ const milestoneSchema =
         ref: "Project",
         required: true,
       },
-
+  assignedTasks: [
+    {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Task",
+    },
+  ],
+  
       title: {
         type: String,
         required: true,

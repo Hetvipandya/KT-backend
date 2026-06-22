@@ -37,32 +37,23 @@ exports.createMilestone =
 // =======================
 // GET ALL MILESTONES
 // =======================
-exports.getMilestones =
-  async (req, res) => {
-    try {
-      const milestones =
-        await Milestone.find()
-          .populate(
-            "projectId"
-          )
-          .populate(
-            "assignedTasks"
-          );
+exports.getMilestones = async (req, res) => {
+  try {
+    const milestones = await Milestone.find()
+      .populate("projectId");
 
-      res.json({
-        success: true,
-        count:
-          milestones.length,
-        data: milestones,
-      });
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        message:
-          error.message,
-      });
-    }
-  };
+    res.json({
+      success: true,
+      count: milestones.length,
+      data: milestones,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
 
 
 // =======================
