@@ -16,6 +16,7 @@ const {
   getEmployeeProfile,
   updateEmployee,
   removeEmployee,
+  getAllEmployeeHistory,
 } = require(
   "../controllers/employeeController"
 );
@@ -88,7 +89,7 @@ const employeeDocuments =
     },
   ]);
 
-// ================= ADD EMPLOYEE =================
+// ================= ADD EMPLOYEE ================= 
 router.post( 
   "/add",
   employeeDocuments,
@@ -100,6 +101,8 @@ router.get(
   "/list",
   getEmployeeList
 );
+
+router.get("/", getAllEmployeeHistory);
 
 // ================= EMPLOYEE PROFILE =================
 router.get(

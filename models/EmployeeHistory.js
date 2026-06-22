@@ -8,7 +8,7 @@ const employeeHistorySchema =
         type: 
           mongoose.Schema.Types.ObjectId,
         ref: "Employee",
-      },
+      }, 
 
       action: {
         type: String,

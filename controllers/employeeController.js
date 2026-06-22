@@ -11,6 +11,7 @@ const EmployeeHistory =
     "../models/EmployeeHistory"
   );
 
+
 // ================= GENERATE EMPLOYEE ID =================
 const generateEmployeeID =
   async () => {
@@ -21,7 +22,7 @@ const generateEmployeeID =
       count + 1
     ).padStart(4, "0")}`;
   };
-
+ 
 // ================= ADD EMPLOYEE =================
 exports.addEmployee =
   async (req, res) => {
@@ -160,6 +161,26 @@ exports.addEmployee =
       });
     }
   };
+
+  exports.getAllEmployeeHistory = async (req, res) => {
+  try {
+    const history = await EmployeeHistory.find()
+      .populate("employeeID")
+      .populate("actionBy", "name email")
+      .sort({ createdAt: -1 });
+
+    res.status(200).json({
+      success: true,
+      count: history.length,
+      data: history,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
 
 // ================= EMPLOYEE LIST =================
 exports.getEmployeeList =
