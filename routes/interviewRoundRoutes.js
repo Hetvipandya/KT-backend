@@ -3,6 +3,8 @@ const router = require("express").Router();
 const {
   addRound,
   createInterview,
+  getAllInterviews,
+  getInterviewById,
   getAllRounds,
   getRoundsByInterview,
   updateRound,
@@ -15,6 +17,8 @@ const {
 
 // Create interview
 router.post("/addInterview", createInterview);
+router.get("/all", getAllInterviews);
+router.get("/:id", getInterviewById);
 
 // Add round
 router.post("/add", addRound);

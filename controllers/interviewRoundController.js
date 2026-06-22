@@ -7,7 +7,7 @@
     const candidate = await Candidate.findByIdAndUpdate(
       req.params.id,
       {
-        status: "approved",
+        status: "approved", 
       },
       { new: true }
     );
@@ -79,6 +79,50 @@ exports.rejectCandidate = async (req, res) => {
       });
     }
   };
+
+  exports.getAllInterviews = async (req, res) => {
+  try {
+    const interviews = await Interview.find()
+      .populate("candidateId")   // candidate details
+      .populate("approvedBy");   // jo approvedBy hoy to user details
+
+    res.status(200).json({
+      success: true,
+      count: interviews.length,
+      data: interviews,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+exports.getInterviewById = async (req, res) => {
+  try {
+    const interview = await Interview.findById(req.params.id)
+      .populate("candidateId")
+      .populate("approvedBy");
+
+    if (!interview) {
+      return res.status(404).json({
+        success: false,
+        message: "Interview not found",
+      });
+    }
+
+    res.json({
+      success: true,
+      data: interview,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
 
   exports.addRound = async (req, res) => {
     try {
