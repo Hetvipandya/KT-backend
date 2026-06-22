@@ -7,7 +7,7 @@ const {
   getRoundsByInterview,
   updateRound,
   deleteRound,
-  approveInterview,
+  approveInterview, 
   rejectInterview,
   approveCandidate,
   rejectCandidate,
