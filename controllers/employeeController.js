@@ -4,7 +4,7 @@ const Employee =
 const EmployeeDocument =
   require(
     "../models/EmployeeDocument"
-  );
+  ); 
 
 const EmployeeHistory =
   require(
@@ -347,16 +347,21 @@ exports.updateEmployee =
       }
 
       // HISTORY
-      await EmployeeHistory.create(
-        {
-          employeeID:
-            employeeId,
-          action:
-            "Employee Updated",
-          message:
-            "Employee details updated",
-        }
-      );
+     let actionType = "probation"; // default
+
+if (req.body.status === "confirmation") {
+  actionType = "confirmation";
+} else if (req.body.status === "resignation") {
+  actionType = "resignation";
+} else if (req.body.status === "exit") {
+  actionType = "exit";
+}
+
+await EmployeeHistory.create({
+  employeeID: employeeId,
+  action: actionType,
+  message: `Employee moved to ${actionType}`,
+});
 
       res.status(200).json({
         success: true,
@@ -375,7 +380,7 @@ exports.updateEmployee =
           error.message,
       });
     }
-  };
+  }; 
 
 // ================= REMOVE EMPLOYEE =================
 exports.removeEmployee =

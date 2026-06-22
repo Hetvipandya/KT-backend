@@ -80,7 +80,7 @@ exports.assignDeadline =
           },
           {
             new: true,
-          }
+          } 
         );
 
       res.json({

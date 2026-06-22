@@ -5,18 +5,24 @@ const employeeHistorySchema =
   new mongoose.Schema(
     {
       employeeID: {
-        type:
+        type: 
           mongoose.Schema.Types.ObjectId,
         ref: "Employee",
       },
 
       action: {
         type: String,
+        enum: [
+          "probation",
+          "confirmation",
+          "resignation",
+          "exit",
+        ],
         required: true,
       },
 
       message: {
-        type: String,
+        type: String, 
       },
 
       actionBy: {

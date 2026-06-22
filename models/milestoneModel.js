@@ -15,7 +15,7 @@ const milestoneSchema =
       title: {
         type: String,
         required: true,
-        trim: true,
+        trim: true, 
       },
 
       description: {
