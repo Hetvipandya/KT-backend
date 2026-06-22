@@ -11,15 +11,16 @@ const DailyUpdate = require("../models/dailyUpdateModel");
 // Create Project
 exports.createProject = async (req, res) => {
   try {
-    console.log("BODY:", req.body);
-    console.log("Priority:", JSON.stringify(req.body.priority));
-    console.log("Status:", JSON.stringify(req.body.status));
-
     const project = await Project.create(req.body);
+
+    const populatedProject = await Project.findById(project._id)
+      .populate("teamLead", "name email")
+      .populate("employees", "name email")
+      .populate("interns", "name email");
 
     res.status(201).json({
       success: true,
-      data: project
+      data: populatedProject
     });
   } catch (error) {
     console.log(error);
@@ -98,35 +99,30 @@ exports.getSingleProject =
   };
 
 // Assign Team Lead
-exports.assignTeamLead =
-  async (req, res) => {
-    try {
-      const {
-        teamLeadId,
-      } = req.body;
+exports.assignTeamLead = async (req, res) => {
+  try {
+    const { teamLeadId } = req.body;
 
-      const project =
-        await Project.findByIdAndUpdate(
-          req.params.id,
-          {
-            teamLead:
-              teamLeadId,
-          },
-          { new: true }
-        );
+    const project = await Project.findByIdAndUpdate(
+      req.params.id,
+      { teamLead: teamLeadId },
+      { new: true }
+    )
+      .populate("teamLead", "name email")
+      .populate("employees", "name email")
+      .populate("interns", "name email");
 
-      res.status(200).json({
-        success: true,
-        data: project,
-      });
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        message:
-          error.message,
-      });
-    }
-  };
+    res.status(200).json({
+      success: true,
+      data: project,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
 
 // Assign Employees
 exports.assignEmployees =
@@ -148,8 +144,8 @@ exports.assignEmployees =
             },
           },
           { new: true }
-        );
-
+        )
+.populate("employees", "name email");
       res.status(200).json({
         success: true,
         data: project,
@@ -183,7 +179,7 @@ exports.assignInterns =
             },
           },
           { new: true }
-        );
+        ).populate("interns", "name email");
 
       res.status(200).json({
         success: true,

@@ -29,7 +29,7 @@ const {
   // Daily Update
   addDailyUpdate,
   getTaskUpdates,
-} = require(
+} = require( 
   "../controllers/projectController"
 );
 
