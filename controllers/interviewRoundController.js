@@ -80,11 +80,9 @@ exports.rejectCandidate = async (req, res) => {
     }
   };
 
-  exports.getAllInterviews = async (req, res) => {
+exports.getAllInterviews = async (req, res) => {
   try {
-    const interviews = await Interview.find()
-      .populate("candidateId")   // candidate details
-      .populate("approvedBy");   // jo approvedBy hoy to user details
+    const interviews = await Interview.find();
 
     res.status(200).json({
       success: true,
