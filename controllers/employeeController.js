@@ -383,11 +383,11 @@ exports.updateEmployee =
       // HISTORY
      let actionType = "probation"; // default
 
-if (req.body.status === "confirmation") {
+if (req.body.action === "confirmation") {
   actionType = "confirmation";
-} else if (req.body.status === "resignation") {
+} else if (req.body.action === "resignation") {
   actionType = "resignation";
-} else if (req.body.status === "exit") {
+} else if (req.body.action === "exit") {
   actionType = "exit";
 }
 
