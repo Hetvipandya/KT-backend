@@ -78,6 +78,7 @@ exports.addEmployee =
         await Employee.create({
           ...req.body,
           employeeID,
+           status: "created",
         });
 
       // FILES

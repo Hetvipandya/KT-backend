@@ -13,6 +13,7 @@ const employeeHistorySchema =
       action: {
         type: String,
         enum: [
+          "created",
           "probation",
           "confirmation",
           "resignation",
