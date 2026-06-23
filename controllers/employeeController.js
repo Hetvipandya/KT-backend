@@ -294,18 +294,19 @@ exports.updateEmployee = async (req, res) => {
   try {
     const employeeId = req.params.id;
 
-    // DEBUG
     console.log("BODY:", req.body);
-    console.log("ACTION:", req.body.action);
 
-    // UPDATE EMPLOYEE
-    const employee = await Employee.findByIdAndUpdate(
-      employeeId,
-      req.body,
-      {
-        new: true,
-      }
-    );
+    const actionType =
+      req.body.action?.trim() || "probation";
+
+    console.log("ACTION TYPE:", actionType);
+
+    const employee =
+      await Employee.findByIdAndUpdate(
+        employeeId,
+        req.body,
+        { new: true }
+      );
 
     if (!employee) {
       return res.status(404).json({
@@ -316,14 +317,12 @@ exports.updateEmployee = async (req, res) => {
 
     const files = req.files || {};
 
-    // FIND DOCUMENT
     let employeeDocument =
       await EmployeeDocument.findOne({
         employeeID: employeeId,
       });
 
     if (employeeDocument) {
-      // UPDATE DOCUMENTS
       employeeDocument.aadharCard =
         files?.aadharCard?.[0]?.filename ||
         employeeDocument.aadharCard;
@@ -354,25 +353,24 @@ exports.updateEmployee = async (req, res) => {
       await employeeDocument.save();
     }
 
-    // HISTORY
-    const actionType =
-      req.body.action?.trim() || "probation";
+    const history =
+      await EmployeeHistory.create({
+        employeeID: employeeId,
+        action: actionType,
+        message: `Employee moved to ${actionType}`,
+      });
 
-    await EmployeeHistory.create({
-      employeeID: employeeId,
-      action: actionType,
-      message: `Employee moved to ${actionType}`,
-    });
+    console.log("HISTORY:", history);
 
     res.status(200).json({
       success: true,
       message: "Employee updated successfully",
       employee,
       documents: employeeDocument,
+      history,
     });
   } catch (error) {
     console.log(error);
-
     res.status(500).json({
       success: false,
       message: error.message,
