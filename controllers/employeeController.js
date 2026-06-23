@@ -294,31 +294,18 @@ exports.updateEmployee = async (req, res) => {
   try {
     const employeeId = req.params.id;
 
-    // HISTORY ACTION TYPE
-    let actionType = "probation";
-
-    if (req.body.action === "confirmation") {
-      actionType = "confirmation";
-    } else if (req.body.action === "resignation") {
-      actionType = "resignation";
-    } else if (req.body.action === "exit") {
-      actionType = "exit";
-    }
-
-    // EMPLOYEE STATUS UPDATE
-    if (req.body.action) {
-      req.body.employeeStatus = actionType;
-    }
+    // DEBUG
+    console.log("BODY:", req.body);
+    console.log("ACTION:", req.body.action);
 
     // UPDATE EMPLOYEE
-    const employee =
-      await Employee.findByIdAndUpdate(
-        employeeId,
-        req.body,
-        {
-          new: true,
-        }
-      );
+    const employee = await Employee.findByIdAndUpdate(
+      employeeId,
+      req.body,
+      {
+        new: true,
+      }
+    );
 
     if (!employee) {
       return res.status(404).json({
@@ -336,6 +323,7 @@ exports.updateEmployee = async (req, res) => {
       });
 
     if (employeeDocument) {
+      // UPDATE DOCUMENTS
       employeeDocument.aadharCard =
         files?.aadharCard?.[0]?.filename ||
         employeeDocument.aadharCard;
@@ -366,7 +354,10 @@ exports.updateEmployee = async (req, res) => {
       await employeeDocument.save();
     }
 
-    // SAVE HISTORY
+    // HISTORY
+    const actionType =
+      req.body.action?.trim() || "probation";
+
     await EmployeeHistory.create({
       employeeID: employeeId,
       action: actionType,
