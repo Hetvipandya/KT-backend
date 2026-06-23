@@ -290,131 +290,104 @@ exports.getEmployeeProfile =
   };
 
 // ================= UPDATE EMPLOYEE =================
-exports.updateEmployee =
-  async (req, res) => {
-    try {
-      const employeeId =
-        req.params.id;
+exports.updateEmployee = async (req, res) => {
+  try {
+    const employeeId = req.params.id;
 
-      // UPDATE EMPLOYEE
-      const employee =
-        await Employee.findByIdAndUpdate(
-          employeeId,
-          req.body,
-          {
-            new: true,
-          }
-        );
+    // HISTORY ACTION TYPE
+    let actionType = "probation";
 
-      if (
-        !employee
-      ) {
-        return res
-          .status(404)
-          .json({
-            success: false,
-            message:
-              "Employee not found",
-          });
-      }
+    if (req.body.action === "confirmation") {
+      actionType = "confirmation";
+    } else if (req.body.action === "resignation") {
+      actionType = "resignation";
+    } else if (req.body.action === "exit") {
+      actionType = "exit";
+    }
 
-      const files =
-        req.files || {};
+    // EMPLOYEE STATUS UPDATE
+    if (req.body.action) {
+      req.body.employeeStatus = actionType;
+    }
 
-      // FIND DOCUMENT
-      let employeeDocument =
-        await EmployeeDocument.findOne(
-          {
-            employeeID:
-              employeeId,
-          }
-        );
-
-      if (
-        employeeDocument
-      ) {
-        // UPDATE DOCUMENTS
-        employeeDocument.aadharCard =
-          files
-            ?.aadharCard?.[0]
-            ?.filename ||
-          employeeDocument.aadharCard;
-
-        employeeDocument.panCard =
-          files
-            ?.panCard?.[0]
-            ?.filename ||
-          employeeDocument.panCard;
-
-        employeeDocument.resume =
-          files
-            ?.resume?.[0]
-            ?.filename ||
-          employeeDocument.resume;
-
-        employeeDocument.offerLetter =
-          files
-            ?.offerLetter?.[0]
-            ?.filename ||
-          employeeDocument.offerLetter;
-
-        employeeDocument.joiningLetter =
-          files
-            ?.joiningLetter?.[0]
-            ?.filename ||
-          employeeDocument.joiningLetter;
-
-        if (
-          files?.certificates
-            ?.length
-        ) {
-          employeeDocument.certificates =
-            files.certificates.map(
-              (
-                file
-              ) =>
-                file.filename
-            );
+    // UPDATE EMPLOYEE
+    const employee =
+      await Employee.findByIdAndUpdate(
+        employeeId,
+        req.body,
+        {
+          new: true,
         }
+      );
 
-        await employeeDocument.save();
-      }
-
-      // HISTORY
-     let actionType = "probation"; // default
-
-if (req.body.action === "confirmation") {
-  actionType = "confirmation";
-} else if (req.body.action === "resignation") {
-  actionType = "resignation";
-} else if (req.body.action === "exit") {
-  actionType = "exit";
-}
-
-await EmployeeHistory.create({
-  employeeID: employeeId,
-  action: actionType,
-  message: `Employee moved to ${actionType}`,
-});
-
-      res.status(200).json({
-        success: true,
-        message:
-          "Employee updated successfully",
-        employee,
-        documents:
-          employeeDocument,
-      });
-    } catch (error) {
-      console.log(error);
-
-      res.status(500).json({
+    if (!employee) {
+      return res.status(404).json({
         success: false,
-        message:
-          error.message,
+        message: "Employee not found",
       });
     }
-  }; 
+
+    const files = req.files || {};
+
+    // FIND DOCUMENT
+    let employeeDocument =
+      await EmployeeDocument.findOne({
+        employeeID: employeeId,
+      });
+
+    if (employeeDocument) {
+      employeeDocument.aadharCard =
+        files?.aadharCard?.[0]?.filename ||
+        employeeDocument.aadharCard;
+
+      employeeDocument.panCard =
+        files?.panCard?.[0]?.filename ||
+        employeeDocument.panCard;
+
+      employeeDocument.resume =
+        files?.resume?.[0]?.filename ||
+        employeeDocument.resume;
+
+      employeeDocument.offerLetter =
+        files?.offerLetter?.[0]?.filename ||
+        employeeDocument.offerLetter;
+
+      employeeDocument.joiningLetter =
+        files?.joiningLetter?.[0]?.filename ||
+        employeeDocument.joiningLetter;
+
+      if (files?.certificates?.length) {
+        employeeDocument.certificates =
+          files.certificates.map(
+            (file) => file.filename
+          );
+      }
+
+      await employeeDocument.save();
+    }
+
+    // SAVE HISTORY
+    await EmployeeHistory.create({
+      employeeID: employeeId,
+      action: actionType,
+      message: `Employee moved to ${actionType}`,
+    });
+
+    res.status(200).json({
+      success: true,
+      message: "Employee updated successfully",
+      employee,
+      documents: employeeDocument,
+    });
+  } catch (error) {
+    console.log(error);
+
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
 
 // ================= REMOVE EMPLOYEE =================
 exports.removeEmployee =
