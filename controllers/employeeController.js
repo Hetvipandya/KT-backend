@@ -184,37 +184,49 @@ exports.addEmployee =
 };
 
 // ================= EMPLOYEE LIST =================
-exports.getEmployeeList =
-  async (req, res) => {
-    try {
-      const employees =
-        await Employee.find()
-          .populate(
-            "department",
-            "departmentName"
-          )
-          .populate(
-            "teamLead",
-            "firstName lastName email"
-          )
-          .sort({
-            createdAt: -1,
-          });
+exports.getEmployeeList = async (req, res) => {
+  try {
+    const employees = await Employee.find()
+      .populate(
+        "department",
+        "departmentName"
+      )
+      .populate(
+        "teamLead",
+        "firstName lastName email"
+      )
+      .sort({ createdAt: -1 });
 
-      res.status(200).json({
-        success: true,
-        total:
-          employees.length,
-        employees,
-      });
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        message:
-          error.message,
-      });
-    }
-  };
+    const employeeList = employees.map(
+      (emp) => ({
+        ...emp.toObject(),
+
+        departmentName:
+          emp.department
+            ?.departmentName || "",
+
+        designationName:
+          emp.experience &&
+          emp.experience.length > 0
+            ? emp.experience[
+                emp.experience.length - 1
+              ].designation
+            : "",
+      })
+    );
+
+    res.status(200).json({
+      success: true,
+      total: employeeList.length,
+      employees: employeeList,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
 
 // ================= EMPLOYEE PROFILE =================
 exports.getEmployeeProfile =
