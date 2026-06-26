@@ -5,61 +5,150 @@ const TaskManagement =
 // ================= CREATE TASK =================
 exports.createTask = async (req, res) => {
   try {
-    console.log("Incoming Body:", req.body);
+    console.log("========== CREATE TASK ==========");
+    console.log("Content-Type:", req.headers["content-type"]);
+    console.log("Body:", req.body);
+    console.log("Files:", req.files);
 
     if (!req.body || Object.keys(req.body).length === 0) {
       return res.status(400).json({
         success: false,
-        message: "Request body is empty"
+        message: "Request body is empty",
       });
     }
 
     const {
+      projectId,
+      milestoneId,
       taskTitle,
-      dueDate
+      taskDescription,
+      assignedEmployee,
+      assignedIntern,
+      assignedBy,
+      dueDate,
+      estimatedHours,
+      priority,
+      status,
+      progress,
     } = req.body;
 
-    // Optional manual validation
+    // Required field validation
+    if (!projectId) {
+      return res.status(400).json({
+        success: false,
+        message: "Project is required",
+      });
+    }
+
     if (!taskTitle) {
       return res.status(400).json({
         success: false,
-        message: "Task title is required"
+        message: "Task title is required",
+      });
+    }
+
+    if (!assignedEmployee) {
+      return res.status(400).json({
+        success: false,
+        message: "Assigned Employee is required",
+      });
+    }
+
+    if (!assignedBy) {
+      return res.status(400).json({
+        success: false,
+        message: "Assigned By is required",
       });
     }
 
     if (!dueDate) {
       return res.status(400).json({
         success: false,
-        message: "Due date is required"
+        message: "Due date is required",
       });
     }
 
-    const task = await TaskManagement.create(req.body);
+    // Parse JSON fields sent from Flutter
+    let taskDependencies = [];
+    let subTasks = [];
+    let checklist = [];
+    let comments = [];
+
+    try {
+      if (req.body.taskDependencies) {
+        taskDependencies = JSON.parse(req.body.taskDependencies);
+      }
+
+      if (req.body.subTasks) {
+        subTasks = JSON.parse(req.body.subTasks);
+      }
+
+      if (req.body.checklist) {
+        checklist = JSON.parse(req.body.checklist);
+      }
+
+      if (req.body.comments) {
+        comments = JSON.parse(req.body.comments);
+      }
+    } catch (e) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid JSON format",
+      });
+    }
+
+    // Handle uploaded files
+    const attachments = [];
+
+    if (req.files && req.files.length > 0) {
+      req.files.forEach((file) => {
+        attachments.push({
+          fileName: file.originalname,
+          fileUrl: file.path || file.filename || "",
+        });
+      });
+    }
+
+    const task = await TaskManagement.create({
+      projectId,
+      milestoneId: milestoneId || null,
+      taskTitle,
+      taskDescription,
+      assignedEmployee,
+      assignedIntern: assignedIntern || null,
+      assignedBy,
+      dueDate,
+      estimatedHours,
+      priority,
+      status,
+      progress,
+      taskDependencies,
+      subTasks,
+      checklist,
+      comments,
+      attachments,
+    });
 
     return res.status(201).json({
       success: true,
       message: "Task created successfully",
-      data: task
+      data: task,
     });
-
   } catch (error) {
     console.error("Create Task Error:", error);
 
-    // Mongoose validation errors
     if (error.name === "ValidationError") {
-      const errors = Object.values(error.errors).map(
-        (err) => err.message
-      );
-
       return res.status(400).json({
         success: false,
-        message: errors.join(", ")
+        message: Object.values(error.errors)
+          .map((e) => e.message)
+          .join(", "),
       });
     }
 
     return res.status(500).json({
       success: false,
-      message: error.message
+      message: error.message,
     });
   }
 };
