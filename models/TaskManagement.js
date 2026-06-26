@@ -16,7 +16,6 @@ const taskManagementSchema =
         type:
           mongoose.Schema.Types.ObjectId,
         ref: "ProjectMilestone",
-        default: null,
       },
 
       // Task Details
@@ -28,7 +27,6 @@ const taskManagementSchema =
 
       taskDescription: {
         type: String,
-        default: "",
       },
 
       // Assigned Employee
@@ -44,7 +42,6 @@ const taskManagementSchema =
         type:
           mongoose.Schema.Types.ObjectId,
         ref: "User",
-        default: null,
       },
 
       // Assigned By
@@ -64,7 +61,6 @@ const taskManagementSchema =
       // Estimated Hours
       estimatedHours: {
         type: Number,
-        default: 0,
       },
 
       // Priority
@@ -76,7 +72,6 @@ const taskManagementSchema =
           "High",
           "Critical",
         ],
-        default: "Medium",
       },
 
       // Status
@@ -177,7 +172,6 @@ const taskManagementSchema =
 
           isCompleted: {
             type: Boolean,
-            default: false,
           },
         },
       ],
@@ -189,14 +183,12 @@ const taskManagementSchema =
 
           completed: {
             type: Boolean,
-            default: false,
           },
         },
       ],
 
       completedAt: {
         type: Date,
-        default: null,
       },
     },
     {
