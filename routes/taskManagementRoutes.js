@@ -15,11 +15,13 @@ const {
 } = require(
   "../controllers/taskManagementController"
 );
+const upload = require("../middleware/uploadMiddleware");
 
  
 // Create Task
 router.post(
   "/create",
+    upload.array("attachments"), 
   createTask
 );
 
