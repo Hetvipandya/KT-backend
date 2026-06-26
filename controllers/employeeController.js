@@ -78,7 +78,7 @@ exports.addEmployee =
         await Employee.create({
           ...req.body,
           employeeID,
-           status: "created",
+           currentAction: "all",
         });
 
       // FILES
@@ -134,15 +134,11 @@ exports.addEmployee =
         );
 
       // CREATE HISTORY
-      await EmployeeHistory.create(
-        {
-          employeeID:
-            employee._id,
-          action:
-            "Employee Created",
-          message: `${firstName} ${lastName} added`,
-        }
-      );
+      await EmployeeHistory.create({
+  employeeID: employee._id,
+  action: "created",
+  message: `${firstName} ${lastName} added`,
+});
 
       res.status(201).json({
         success: true,
@@ -197,23 +193,25 @@ exports.getEmployeeList = async (req, res) => {
       )
       .sort({ createdAt: -1 });
 
-    const employeeList = employees.map(
-      (emp) => ({
-        ...emp.toObject(),
+   const employeeList = employees.map(
+  (emp) => ({
+    ...emp.toObject(),
 
-        departmentName:
-          emp.department
-            ?.departmentName || "",
+    currentAction:
+      emp.currentAction || "all",
 
-        designationName:
-          emp.experience &&
-          emp.experience.length > 0
-            ? emp.experience[
-                emp.experience.length - 1
-              ].designation
-            : "",
-      })
-    );
+    departmentName:
+      emp.department?.departmentName || "",
+
+    designationName:
+      emp.experience &&
+      emp.experience.length > 0
+        ? emp.experience[
+            emp.experience.length - 1
+          ].designation
+        : "",
+  })
+);
 
     res.status(200).json({
       success: true,
@@ -293,22 +291,25 @@ exports.getEmployeeProfile =
 exports.updateEmployee = async (req, res) => {
   try {
     const employeeId = req.params.id;
-
-    console.log("BODY:", req.body);
-
     const actionType =
-      req.body.action?.trim() || "probation";
+      req.body.action?.trim();
 
-    console.log("ACTION TYPE:", actionType);
+    const updateData = {
+      ...req.body,
+    };
 
-    // Employee update
+    // action update only if passed
+    if (actionType) {
+      updateData.currentAction =
+        actionType;
+    }
+
+    delete updateData.action;
+
     const employee =
       await Employee.findByIdAndUpdate(
         employeeId,
-        {
-          ...req.body,
-          action: actionType,
-        },
+        updateData,
         { new: true }
       );
 
@@ -321,7 +322,6 @@ exports.updateEmployee = async (req, res) => {
 
     const files = req.files || {};
 
-    // Employee Document Find
     let employeeDocument =
       await EmployeeDocument.findOne({
         employeeID: employeeId,
@@ -358,33 +358,29 @@ exports.updateEmployee = async (req, res) => {
       await employeeDocument.save();
     }
 
-    // History Create/Update (Same employee => same record update)
-    const history =
-      await EmployeeHistory.findOneAndUpdate(
-        { employeeID: employeeId },
-        {
+    let history = null;
+
+    if (actionType) {
+      history =
+        await EmployeeHistory.create({
           employeeID: employeeId,
           action: actionType,
-          message: `Employee moved to ${actionType}`,
-        },
-        {
-          new: true,
-          upsert: true,
-        }
-      );
-
-    console.log("HISTORY:", history);
+          message:
+            `Employee moved to ${actionType}`,
+        });
+    }
 
     res.status(200).json({
       success: true,
-      message: "Employee updated successfully",
+      message:
+        "Employee updated successfully",
       employee,
       documents: employeeDocument,
       history,
     });
-
   } catch (error) {
     console.log(error);
+
     res.status(500).json({
       success: false,
       message: error.message,
@@ -425,15 +421,11 @@ exports.removeEmployee =
       );
 
       // HISTORY
-      await EmployeeHistory.create(
-        {
-          employeeID:
-            employeeId,
-          action:
-            "Employee Removed",
-          message: `${employee.firstName} ${employee.lastName} removed from company`,
-        }
-      );
+     await EmployeeHistory.create({
+  employeeID: employeeId,
+  action: "exit",
+  message: `${employee.firstName} ${employee.lastName} removed from company`,
+});
 
       // DELETE EMPLOYEE
       await Employee.findByIdAndDelete(

@@ -161,6 +161,17 @@ permanentAddress: {
         ],
         default: "Active",
       },
+      currentAction: {
+  type: String,
+  enum: [
+    "created",
+    "probation",
+    "confirmation",
+    "resignation",
+    "exit",
+  ],
+  default: "all",
+},
     },
     {
       timestamps: true,
