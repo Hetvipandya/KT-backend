@@ -301,10 +301,14 @@ exports.updateEmployee = async (req, res) => {
 
     console.log("ACTION TYPE:", actionType);
 
+    // Employee update
     const employee =
       await Employee.findByIdAndUpdate(
         employeeId,
-        req.body,
+        {
+          ...req.body,
+          action: actionType,
+        },
         { new: true }
       );
 
@@ -317,6 +321,7 @@ exports.updateEmployee = async (req, res) => {
 
     const files = req.files || {};
 
+    // Employee Document Find
     let employeeDocument =
       await EmployeeDocument.findOne({
         employeeID: employeeId,
@@ -353,12 +358,20 @@ exports.updateEmployee = async (req, res) => {
       await employeeDocument.save();
     }
 
+    // History Create/Update (Same employee => same record update)
     const history =
-      await EmployeeHistory.create({
-        employeeID: employeeId,
-        action: actionType,
-        message: `Employee moved to ${actionType}`,
-      });
+      await EmployeeHistory.findOneAndUpdate(
+        { employeeID: employeeId },
+        {
+          employeeID: employeeId,
+          action: actionType,
+          message: `Employee moved to ${actionType}`,
+        },
+        {
+          new: true,
+          upsert: true,
+        }
+      );
 
     console.log("HISTORY:", history);
 
@@ -369,6 +382,7 @@ exports.updateEmployee = async (req, res) => {
       documents: employeeDocument,
       history,
     });
+
   } catch (error) {
     console.log(error);
     res.status(500).json({
