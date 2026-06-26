@@ -8,137 +8,42 @@ const Team =
   require("../models/Team");
 
 // ================= CREATE DEPARTMENT =================
-exports.createDepartment =
-  async (req, res) => {
-    try {
-      const {
-        departmentName,
-        departmentHead,
-        departmentBudget,
-        teams,
-        description,
-      } = req.body; 
+exports.createDepartment = async (req, res) => {
+  try {
+    const departments = req.body;
 
-      // Validation
-      if (!departmentName) {
-        return res
-          .status(400)
-          .json({
-            success: false,
-            message:
-              "Department name is required",
-          });
-      }
-
-      // Department Head Validation
-      if (
-        departmentHead &&
-        !mongoose.Types.ObjectId.isValid(
-          departmentHead
-        )
-      ) {
-        return res
-          .status(400)
-          .json({
-            success: false,
-            message:
-              "Invalid department head ID",
-          });
-      }
-
-      // Team IDs Validation
-      if (
-        teams &&
-        teams.length > 0
-      ) {
-        const invalidTeam =
-          teams.some(
-            (teamId) =>
-              !mongoose.Types.ObjectId.isValid(
-                teamId
-              )
-          );
-
-        if (invalidTeam) {
-          return res
-            .status(400)
-            .json({
-              success: false,
-              message:
-                "Invalid team ID",
-            });
-        }
-      }
-
-      // Check Existing Department
-      const existDepartment =
-        await Department.findOne({
-          departmentName,
-        });
-
-      if (existDepartment) {
-        return res
-          .status(400)
-          .json({
-            success: false,
-            message:
-              "Department already exists",
-          });
-      }
-
-      // Create Department
-      const department =
-        await Department.create({
-          departmentName,
-          departmentHead:
-            departmentHead ||
-            null,
-          departmentBudget:
-            departmentBudget ||
-            0,
-          teams:
-            teams || [],
-          description,
-        });
-
-      // Update Team Table
-      if (
-        teams &&
-        teams.length > 0
-      ) {
-        await Team.updateMany(
-          {
-            _id: {
-              $in: teams,
-            },
-          },
-          {
-            $set: {
-              departmentId:
-                department._id,
-            },
-          }
-        );
-      }
-
-      return res
-        .status(201)
-        .json({
-          success: true,
-          message:
-            "Department created successfully",
-          data: department,
-        });
-    } catch (error) {
-      return res
-        .status(500)
-        .json({
-          success: false,
-          message:
-            error.message,
-        });
+    if (!Array.isArray(departments)) {
+      return res.status(400).json({
+        success: false,
+        message: "Send array of departments"
+      });
     }
-  };
+
+    for (const dept of departments) {
+      if (!dept.departmentName) {
+        return res.status(400).json({
+          success: false,
+          message: "Department name is required"
+        });
+      }
+    }
+
+    const createdDepartments =
+      await Department.insertMany(departments);
+
+    return res.status(201).json({
+      success: true,
+      message: "Departments created successfully",
+      data: createdDepartments
+    });
+
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
 
 // ================= GET ALL DEPARTMENTS =================
 exports.getDepartmentList =
