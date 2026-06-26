@@ -33,21 +33,23 @@ exports.addEmployee =
         email,
         mobile,
         department,
+        designation,
         teamLead,
       } = req.body;
 
       // VALIDATION
       if (
-        !firstName ||
-        !email ||
-        !mobile
+          !firstName ||
+  !email ||
+  !mobile ||
+  !designation
       ) {
         return res
           .status(400)
           .json({
             success: false,
             message:
-              "First name, email and mobile are required",
+              "First name, email, mobile and designation are required",
           });
       }
 
@@ -193,23 +195,18 @@ exports.getEmployeeList = async (req, res) => {
       )
       .sort({ createdAt: -1 });
 
-   const employeeList = employees.map(
+ const employeeList = employees.map(
   (emp) => ({
     ...emp.toObject(),
 
     currentAction:
-      emp.currentAction || "all",
+      emp.currentAction || "created",
 
     departmentName:
       emp.department?.departmentName || "",
 
     designationName:
-      emp.experience &&
-      emp.experience.length > 0
-        ? emp.experience[
-            emp.experience.length - 1
-          ].designation
-        : "",
+      emp.designation || "",
   })
 );
 

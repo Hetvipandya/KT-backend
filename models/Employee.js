@@ -132,6 +132,13 @@ permanentAddress: {
         },
       },
 
+      // DESIGNATION
+designation: {
+  type: String,
+  required: true,
+  trim: true,
+},
+
       // DEPARTMENT
       department: {
         type:
