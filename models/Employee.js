@@ -170,7 +170,7 @@ permanentAddress: {
     "resignation",
     "exit",
   ],
-  default: "all",
+  default: "created",
 },
     },
     {
