@@ -3,28 +3,66 @@ const TaskManagement =
 
 
 // ================= CREATE TASK =================
-exports.createTask =
-  async (req, res) => {
-    try {
-      const task = 
-        await TaskManagement.create(
-          req.body
-        );
+exports.createTask = async (req, res) => {
+  try {
+    console.log("Incoming Body:", req.body);
 
-      res.status(201).json({
-        success: true, 
-        message:
-          "Task created successfully",
-        data: task,
-      });
-    } catch (error) {
-      res.status(500).json({
+    if (!req.body || Object.keys(req.body).length === 0) {
+      return res.status(400).json({
         success: false,
-        message:
-          error.message,
+        message: "Request body is empty"
       });
     }
-  };
+
+    const {
+      taskTitle,
+      dueDate
+    } = req.body;
+
+    // Optional manual validation
+    if (!taskTitle) {
+      return res.status(400).json({
+        success: false,
+        message: "Task title is required"
+      });
+    }
+
+    if (!dueDate) {
+      return res.status(400).json({
+        success: false,
+        message: "Due date is required"
+      });
+    }
+
+    const task = await TaskManagement.create(req.body);
+
+    return res.status(201).json({
+      success: true,
+      message: "Task created successfully",
+      data: task
+    });
+
+  } catch (error) {
+    console.error("Create Task Error:", error);
+
+    // Mongoose validation errors
+    if (error.name === "ValidationError") {
+      const errors = Object.values(error.errors).map(
+        (err) => err.message
+      );
+
+      return res.status(400).json({
+        success: false,
+        message: errors.join(", ")
+      });
+    }
+
+    return res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
 
 
 // ================= GET ALL TASKS =================
