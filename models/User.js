@@ -71,6 +71,7 @@ const userSchema =
           "admin",
           "hr",
           "employee",
+          "intern",
           "team lead",
         ],
       },

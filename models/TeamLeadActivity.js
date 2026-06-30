@@ -10,7 +10,7 @@ const teamLeadActivitySchema =
             .ObjectId,
         ref: "User",
         required: true,
-      },
+      }, 
 
       employeeId: {
         type:

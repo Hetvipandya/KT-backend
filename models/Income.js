@@ -29,7 +29,7 @@ const incomeSchema =
         required: true,
       },
 
-      paymentMode: {
+      paymentMode: { 
         type: String,
         enum: [
           "cash",

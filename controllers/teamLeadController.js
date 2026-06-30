@@ -6,7 +6,7 @@ const Attendance =
 
 const DailyReport =
   require("../models/DailyReport");
-
+ 
 const Task =
   require("../models/taskModel");
 

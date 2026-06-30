@@ -21,7 +21,7 @@ const teamMemberSchema =
       role: {
         type: String,
         enum: [
-          "Project Manager",
+          "Project Manager", 
           "Team Lead",
           "Senior Developer",
           "Junior Developer",

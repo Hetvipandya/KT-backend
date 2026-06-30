@@ -6,7 +6,7 @@ const {
   createSalaryStructure,
   getSalaryStructure,
   processPayroll,
-  generatePayslip,
+  generatePayslip, 
   getPayroll,
   getPayslips,
   markSalaryPaid,
