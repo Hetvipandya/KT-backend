@@ -128,151 +128,162 @@ exports.getAllLeaves = async (req, res) => {
   }
 };
 
+const updateLeaveBalance = async (leave) => {
+  let balance = await LeaveBalance.findOne({
+    employeeId: leave.employeeId,
+  });
+
+  if (!balance) {
+    balance = await LeaveBalance.create({
+      employeeId: leave.employeeId,
+      totalLeaves: 20,
+      usedLeaves: 0,
+      remainingLeaves: 20,
+    });
+  }
+
+  balance.usedLeaves += leave.totalDays;
+  balance.remainingLeaves -= leave.totalDays;
+
+  await balance.save();
+};
+
 // ================= TEAM LEAD APPROVAL =================
-exports.teamLeadApproval = 
-  async (req, res) => {
-    try {
-      const {
-        leaveId,
-        status,
-        remark,
-      } = req.body;
+exports.teamLeadApproval = async (req, res) => {
+  try {
+    const { leaveId, status, remark } = req.body;
 
-      const leave =
-        await Leave.findById(
-          leaveId
-        );
+    const leave = await Leave.findById(leaveId);
 
-      if (!leave) {
-        return res
-          .status(404)
-          .json({
-            success: false,
-            message:
-              "Leave not found",
-          });
-      }
-
-      leave.teamLeadStatus =
-        status;
-
-      leave.remark =
-        remark;
-
-      if (
-        status === "approved"
-      ) {
-        leave.status =
-          "pending_hr";
-      } else {
-        leave.status =
-          "rejected";
-      }
-
-      await leave.save();
-
-      res.status(200).json({
-        success: true,
-        message:
-          "Team lead action completed",
-        data: leave,
-      });
-    } catch (error) {
-      res.status(500).json({
+    if (!leave) {
+      return res.status(404).json({
         success: false,
-        message:
-          error.message,
+        message: "Leave not found",
       });
     }
-  };
+
+    if (leave.status === "approved") {
+      return res.status(400).json({
+        success: false,
+        message: "Leave already approved",
+      });
+    }
+
+    leave.teamLeadStatus = status;
+    leave.remark = remark;
+
+    if (status === "approved") {
+      leave.status = "approved";
+      await updateLeaveBalance(leave);
+    } else {
+      leave.status = "rejected";
+    }
+
+    await leave.save();
+
+    res.status(200).json({
+      success: true,
+      message: "Team Lead action completed",
+      data: leave,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+exports.adminApproval = async (req, res) => {
+  try {
+    const { leaveId, status, remark } = req.body;
+
+    const leave = await Leave.findById(leaveId);
+
+    if (!leave) {
+      return res.status(404).json({
+        success: false,
+        message: "Leave not found",
+      });
+    }
+
+    if (leave.status === "approved") {
+      return res.status(400).json({
+        success: false,
+        message: "Leave already approved",
+      });
+    }
+
+    leave.adminStatus = status;
+    leave.remark = remark;
+
+    if (status === "approved") {
+      leave.status = "approved";
+      await updateLeaveBalance(leave);
+    } else {
+      leave.status = "rejected";
+    }
+
+    await leave.save();
+
+    res.status(200).json({
+      success: true,
+      message: "Admin approval completed",
+      data: leave,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
 
 // ================= HR APPROVAL =================
-exports.hrApproval =
-  async (req, res) => {
-    try {
-      const {
-        leaveId,
-        status,
-        remark,
-      } = req.body;
+exports.hrApproval = async (req, res) => {
+  try {
+    const { leaveId, status, remark } = req.body;
 
-      const leave =
-        await Leave.findById(
-          leaveId
-        );
+    const leave = await Leave.findById(leaveId);
 
-      if (!leave) {
-        return res
-          .status(404)
-          .json({
-            success: false,
-            message:
-              "Leave not found",
-          });
-      }
-
-      leave.hrStatus =
-        status;
-
-      leave.remark =
-        remark;
-
-      if (
-        status === "approved"
-      ) {
-        leave.status =
-          "approved";
-
-        let balance =
-          await LeaveBalance.findOne(
-            {
-              employeeId:
-                leave.employeeId,
-            }
-          );
-
-        // Create balance if missing
-        if (!balance) {
-          balance =
-            await LeaveBalance.create(
-              {
-                employeeId:
-                  leave.employeeId,
-                totalLeaves: 20,
-                usedLeaves: 0,
-                remainingLeaves: 20,
-              }
-            );
-        }
-
-        balance.usedLeaves +=
-          leave.totalDays;
-
-        balance.remainingLeaves -=
-          leave.totalDays;
-
-        await balance.save();
-      } else {
-        leave.status =
-          "rejected";
-      }
-
-      await leave.save();
-
-      res.status(200).json({
-        success: true,
-        message:
-          "HR approval completed",
-        data: leave,
-      });
-    } catch (error) {
-      res.status(500).json({
+    if (!leave) {
+      return res.status(404).json({
         success: false,
-        message:
-          error.message,
+        message: "Leave not found",
       });
     }
-  };
+
+    if (leave.status === "approved") {
+      return res.status(400).json({
+        success: false,
+        message: "Leave already approved",
+      });
+    }
+
+    leave.hrStatus = status;
+    leave.remark = remark;
+
+    if (status === "approved") {
+      leave.status = "approved";
+      await updateLeaveBalance(leave);
+    } else {
+      leave.status = "rejected";
+    }
+
+    await leave.save();
+
+    res.status(200).json({
+      success: true,
+      message: "HR approval completed",
+      data: leave,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
 
 // ================= GET USER LEAVES =================
 exports.getMyLeaves =

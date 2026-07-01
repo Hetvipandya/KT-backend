@@ -8,6 +8,7 @@ const {
   applyLeave,
   teamLeadApproval,
   hrApproval,
+    adminApproval,
   getMyLeaves,
   getLeaveBalance,
   createHoliday,
@@ -63,6 +64,13 @@ router.put(
     "admin",
   ),
   hrApproval
+);
+
+router.put(
+  "/admin-approval",
+  protect,
+  authorizeRoles("admin"),
+  adminApproval
 );
 
 // ================= GET USER LEAVES =================

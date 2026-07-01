@@ -24,7 +24,7 @@ const {
 router.post(
   "/register",
   registerUser
-);  //done
+);  //done 
 
 // ================= APPROVE EMPLOYEE =================
 router.put( 
