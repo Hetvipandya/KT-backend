@@ -216,8 +216,17 @@ const projectManagementRoutes =
  require(
   "./routes/contactRoutes"
  )
+
+ const positionRoutes =
+ require(
+  "./routes/positionRoutes"
+ )
  
 // ================= API PREFIX =================
+app.use(
+  "/api/position",
+  positionRoutes
+)
 
 app.use(
   "/api/contact",
