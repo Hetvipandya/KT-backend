@@ -9,7 +9,7 @@ const salaryStructureSchema =
         required: true,
       },
 
-      basicSalary: {
+      basicSalary: { 
         type: Number,
         required: true,
       },

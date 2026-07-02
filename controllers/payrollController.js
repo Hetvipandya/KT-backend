@@ -6,7 +6,7 @@ const Payslip = require("../models/Payslip");
 // ===============================
 // Create Salary Structure
 // ===============================
-exports.createSalaryStructure =
+exports.createSalaryStructure = 
   async (req, res) => {
     try {
       const {

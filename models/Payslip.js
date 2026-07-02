@@ -39,7 +39,7 @@ const payslipSchema =
 
       totalDeduction: {
         type: Number,
-        default: 0,
+        default: 0, 
       },
 
       tdsAmount: {
