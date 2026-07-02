@@ -22,7 +22,7 @@ exports.createApplication = async (req, res) => {
 // ================= GET ALL APPLICATIONS =================
 exports.getApplications = async (req, res) => {
   try {
-    const applications = await Application.find().populate("studentId");
+    const applications = await Application.find();
 
     res.status(200).json({
       success: true,
@@ -41,9 +41,7 @@ exports.getApplications = async (req, res) => {
 // ================= GET APPLICATION BY ID =================
 exports.getApplicationById = async (req, res) => {
   try {
-    const application = await Application.findById(
-      req.params.id
-    ).populate("studentId");
+    const application = await Application.findById(req.params.id);
 
     if (!application) {
       return res.status(404).json({
@@ -68,15 +66,14 @@ exports.getApplicationById = async (req, res) => {
 // ================= UPDATE APPLICATION BY ID =================
 exports.updateApplicationById = async (req, res) => {
   try {
-    const application =
-      await Application.findByIdAndUpdate(
-        req.params.id,
-        req.body,
-        {
-          new: true,
-          runValidators: true,
-        }
-      );
+    const application = await Application.findByIdAndUpdate(
+      req.params.id,
+      req.body,
+      {
+        new: true,
+        runValidators: true,
+      }
+    );
 
     if (!application) {
       return res.status(404).json({
@@ -102,10 +99,7 @@ exports.updateApplicationById = async (req, res) => {
 // ================= DELETE APPLICATION =================
 exports.deleteApplication = async (req, res) => {
   try {
-    const application =
-      await Application.findByIdAndDelete(
-        req.params.id
-      );
+    const application = await Application.findByIdAndDelete(req.params.id);
 
     if (!application) {
       return res.status(404).json({
