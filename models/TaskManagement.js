@@ -75,19 +75,10 @@ const taskManagementSchema =
       },
 
       // Status
-      status: {
-        type: String,
-        enum: [
-          "Pending",
-          "Assigned",
-          "In Progress",
-          "Testing",
-          "Review",
-          "Completed",
-          "Rejected",
-        ],
-        default: "Pending",
-      },
+     status: {
+  type: String,
+  default: "Pending",
+},
 
       // Progress
       progress: {

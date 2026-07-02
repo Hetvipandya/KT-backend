@@ -10,6 +10,9 @@ const {
   getAllTasks,
   getTaskById,
   updateTask,
+  createStatus,
+  getStatus,
+  deleteStatus,
   updateTaskStatus, 
   addComment,
   deleteTask, 
@@ -43,6 +46,8 @@ router.get(
   getTaskById
 );
 
+
+
 // Update Task
 router.put(
   "/update/:id",
@@ -50,10 +55,13 @@ router.put(
 );
 
 // Update Task Status
-router.patch(
+router.put(
   "/status/:id",
   updateTaskStatus
 );
+router.post("/create", createStatus);
+router.get("/:taskId", getStatus);
+router.delete("/delete/:taskId", deleteStatus);
 
 // Add Comment
 router.post(

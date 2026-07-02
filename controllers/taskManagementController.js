@@ -271,6 +271,72 @@ exports.updateTask =
 
 
 // ================= UPDATE TASK STATUS =================
+exports.createStatus = async (req, res) => {
+  try {
+    const { taskId, status } = req.body;
+
+    if (!taskId || !status) {
+      return res.status(400).json({
+        success: false,
+        message: "Task ID and Status are required",
+      });
+    }
+
+    const task = await TaskManagement.findById(taskId);
+
+    if (!task) {
+      return res.status(404).json({
+        success: false,
+        message: "Task not found",
+      });
+    }
+
+    task.status = status;
+
+    task.taskHistory.push({
+      action: `Status created: ${status}`,
+    });
+
+    await task.save();
+
+    res.status(200).json({
+      success: true,
+      message: "Status added successfully",
+      data: task,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+// ================= GET STATUS =================
+exports.getStatus = async (req, res) => {
+  try {
+    const task = await TaskManagement.findById(req.params.taskId);
+
+    if (!task) {
+      return res.status(404).json({
+        success: false,
+        message: "Task not found",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      status: task.status,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+
 exports.updateTaskStatus =
   async (req, res) => {
     try {
@@ -346,6 +412,38 @@ exports.updateTaskStatus =
       });
     }
   };
+
+  exports.deleteStatus = async (req, res) => {
+  try {
+    const task = await TaskManagement.findById(req.params.taskId);
+
+    if (!task) {
+      return res.status(404).json({
+        success: false,
+        message: "Task not found",
+      });
+    }
+
+    task.status = "";
+
+    task.taskHistory.push({
+      action: "Status deleted",
+    });
+
+    await task.save();
+
+    res.status(200).json({
+      success: true,
+      message: "Status deleted successfully",
+      data: task,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
 
 
 // ================= ADD COMMENT =================
