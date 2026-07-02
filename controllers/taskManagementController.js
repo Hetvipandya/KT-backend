@@ -384,6 +384,47 @@ exports.addComment =
     }
   };
 
+  // ================= GET TASKS BY EMPLOYEE ID =================
+exports.getTasksByEmployeeId = async (req, res) => {
+  try {
+    const { employeeId } = req.params;
+
+    if (!employeeId) {
+      return res.status(400).json({
+        success: false,
+        message: "Employee ID is required",
+      });
+    }
+
+    const tasks = await TaskManagement
+      .find({ assignedEmployee: employeeId })
+      .populate("projectId", "projectName")
+      .populate("milestoneId", "milestoneName")
+      .populate("assignedEmployee", "name email")
+      .populate("assignedIntern", "name email")
+      .populate("assignedBy", "name email")
+      .populate("comments.commentedBy", "name email");
+
+    if (!tasks || tasks.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "No tasks found for this employee",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      count: tasks.length,
+      data: tasks,
+    });
+
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
 
 // ================= DELETE TASK =================
 exports.deleteTask =

@@ -5,19 +5,25 @@ const router =
   express.Router();
 
 const {
+  getTasksByEmployeeId,
   createTask,
   getAllTasks,
   getTaskById,
   updateTask,
   updateTaskStatus, 
   addComment,
-  deleteTask,
+  deleteTask, 
 } = require(
   "../controllers/taskManagementController"
 );
 const upload = require("../middleware/uploadMiddleware");
 
  
+
+router.get(
+  "/employee/:employeeId",getTasksByEmployeeId
+);
+
 // Create Task
 router.post(
   "/create",
