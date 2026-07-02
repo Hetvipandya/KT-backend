@@ -1,11 +1,11 @@
 const Student = require("../models/Student");
 const Education = require("../models/StudentEducation");
 const Skills = require("../models/StudentSkills");
-const Application = require("../models/Application");
+
 
 
 // ================= STUDENT =================
-
+ 
 // REGISTER STUDENT
 exports.registerStudent = async (req, res) => {
   try {
