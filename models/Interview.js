@@ -8,7 +8,7 @@ const interviewSchema =
         type:
           mongoose.Schema.Types.ObjectId,
         ref: "Candidate",
-        required: true,
+        required: true, 
       },
 
       interviewerName:

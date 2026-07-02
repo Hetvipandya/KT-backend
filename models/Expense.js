@@ -12,7 +12,7 @@ const expenseSchema =
 
       projectId: {
         type:
-          mongoose.Schema.Types.ObjectId,  
+          mongoose.Schema.Types.ObjectId,   
         ref: "Project",
         default: null,
       },
