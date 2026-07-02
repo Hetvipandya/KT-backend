@@ -201,8 +201,17 @@ const projectManagementRoutes =
  require(
   "./routes/clientProjectRoutes"
  )
+
+ const holidayRoutes =
+ require(
+  "./routes/holidayRoutes"
+ )
  
 // ================= API PREFIX =================
+app.use(
+  "/api/holiday",
+  holidayRoutes
+)
 
 app.use(
   "/api/users",
