@@ -26,7 +26,7 @@ const userSchema =
         required: true,
         unique: true,
         trim: true,
-      },
+      }, 
 
       dob: {
         type: String,
