@@ -10,7 +10,7 @@ const Holiday =
 const Policy =
   require("../models/Policy");
 
-// ================= CREATE COMPANY =================
+// ================= CREATE COMPANY ================= 
 exports.createCompany =
   async (req, res) => {
     try {

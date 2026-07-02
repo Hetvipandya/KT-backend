@@ -14,6 +14,7 @@ const {
   // Income APIs
   createIncome,
   getAllIncome,
+  updateIncome,
 
   // Transaction APIs
   getTransactions,
@@ -47,6 +48,11 @@ router.get(
 router.put(
   "/update/:id",
   updateExpense
+);
+
+router.put(
+  "/update/income/:id",
+  updateIncome
 );
 
 router.delete(

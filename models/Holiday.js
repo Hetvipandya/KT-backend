@@ -1,7 +1,7 @@
 const mongoose =
   require("mongoose");
 
-const holidaySchema =
+const holidaySchema = 
   new mongoose.Schema(
     {
       holidayName: {

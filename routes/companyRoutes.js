@@ -23,7 +23,7 @@ router.get(
 );
 
 router.put(
-  "/update",
+  "/update", 
   updateCompany
 );
 
