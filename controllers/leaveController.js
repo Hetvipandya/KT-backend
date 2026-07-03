@@ -49,7 +49,7 @@ exports.applyLeave =
  
       const leave =
         await Leave.create({
-          employeeId:
+          employeeId: 
             userId,
           leaveType,
           startDate,

@@ -74,7 +74,7 @@ router.get(
     "hr",
     "admin"
   ),
-  getMyLeaves
+  getMyLeaves 
 );
 
 // ================= GET LEAVE BALANCE =================

@@ -87,6 +87,109 @@ exports.getSalaryStructure =
     }
   };
 
+  exports.updateSalaryStructure = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const {
+      userId,
+      basicSalary,
+      hra,
+      allowance,
+      bonus,
+      deduction,
+      tdsPercentage,
+    } = req.body;
+
+    // Existing salary structure check
+    const existingSalary = await SalaryStructure.findById(id);
+
+    if (!existingSalary) {
+      return res.status(404).json({
+        success: false,
+        message: "Salary structure not found",
+      });
+    }
+
+    // Updated values (if field not passed, keep old value)
+    const updatedBasicSalary =
+      basicSalary !== undefined
+        ? basicSalary
+        : existingSalary.basicSalary;
+
+    const updatedHra =
+      hra !== undefined
+        ? hra
+        : existingSalary.hra;
+
+    const updatedAllowance =
+      allowance !== undefined
+        ? allowance
+        : existingSalary.allowance;
+
+    const updatedBonus =
+      bonus !== undefined
+        ? bonus
+        : existingSalary.bonus;
+
+    const updatedDeduction =
+      deduction !== undefined
+        ? deduction
+        : existingSalary.deduction;
+
+    const updatedTdsPercentage =
+      tdsPercentage !== undefined
+        ? tdsPercentage
+        : existingSalary.tdsPercentage;
+
+    // Recalculate salary
+    const grossSalary =
+      updatedBasicSalary +
+      updatedHra +
+      updatedAllowance +
+      updatedBonus;
+
+    const tdsAmount =
+      (grossSalary * updatedTdsPercentage) / 100;
+
+    const netSalary =
+      grossSalary -
+      updatedDeduction -
+      tdsAmount;
+
+    // Update
+    const updatedSalary =
+      await SalaryStructure.findByIdAndUpdate(
+        id,
+        {
+          userId:
+            userId || existingSalary.userId,
+          basicSalary: updatedBasicSalary,
+          hra: updatedHra,
+          allowance: updatedAllowance,
+          bonus: updatedBonus,
+          deduction: updatedDeduction,
+          tdsPercentage:
+            updatedTdsPercentage,
+          netSalary,
+        },
+        { new: true, runValidators: true }
+      );
+
+    res.status(200).json({
+      success: true,
+      message:
+        "Salary structure updated successfully",
+      data: updatedSalary,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
 
 // ===============================
 // Process Payroll
