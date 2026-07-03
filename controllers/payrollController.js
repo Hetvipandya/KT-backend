@@ -370,7 +370,7 @@ exports.getPayroll =
         await Payroll.find()
           .populate(
             "userId",
-            "name email"
+            "firstName lastName email"
           )
           .populate(
             "salaryStructureId"
