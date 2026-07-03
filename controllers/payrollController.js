@@ -71,7 +71,7 @@ exports.getSalaryStructure =
       const salary =
         await SalaryStructure.find()
           .populate(
-            "userId",
+            "userId", 
             "name email"
           );
 
