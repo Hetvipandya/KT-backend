@@ -19,7 +19,7 @@ const employeeSchema =
       firstName: {
         type: String,
         required: true,
-        trim: true,
+        trim: true, 
       },
 
       lastName: {
