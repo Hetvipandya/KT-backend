@@ -46,7 +46,7 @@ exports.applyLeave =
               24
             )
         ) + 1;
-
+ 
       const leave =
         await Leave.create({
           employeeId:

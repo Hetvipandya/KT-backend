@@ -63,7 +63,7 @@ const userSchema =
         type: String,
         default: null,
       },
-
+ 
       // ================= ROLE =================
       role: {
         type: String,

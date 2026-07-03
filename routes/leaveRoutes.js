@@ -1,40 +1,30 @@
-const express =
-  require("express");
-
-const router =
-  express.Router();
+const express = require("express");
+const router = express.Router();
 
 const {
   applyLeave,
   teamLeadApproval,
   hrApproval,
-    adminApproval,
+  adminApproval,
   getMyLeaves,
   getLeaveBalance,
   createHoliday,
   getAllHolidays,
   getAllLeaves,
-} = require(
-  "../controllers/leaveController"
-);
+} = require("../controllers/leaveController");
 
-const {
-  protect,
-} = require(
-  "../middleware/authMiddleware"
-);
+const { protect } = require("../middleware/authMiddleware");
 
 const {
   authorizeRoles,
-} = require(
-  "../middleware/roleMiddleware"
-);
+} = require("../middleware/roleMiddleware");
 
 // ================= APPLY LEAVE =================
 router.post(
   "/apply",
   protect,
   authorizeRoles(
+    "intern",
     "employee",
     "hr",
     "admin",
@@ -61,11 +51,12 @@ router.put(
   protect,
   authorizeRoles(
     "hr",
-    "admin",
+    "admin"
   ),
   hrApproval
 );
 
+// ================= ADMIN APPROVAL =================
 router.put(
   "/admin-approval",
   protect,
@@ -78,6 +69,7 @@ router.get(
   "/my-leaves/:userId",
   protect,
   authorizeRoles(
+    "intern",
     "employee",
     "hr",
     "admin"
@@ -90,6 +82,7 @@ router.get(
   "/leave-balance/:userId",
   protect,
   authorizeRoles(
+    "intern",
     "employee",
     "hr",
     "admin"
@@ -113,6 +106,7 @@ router.get(
   "/holiday/all",
   protect,
   authorizeRoles(
+    "intern",
     "employee",
     "hr",
     "admin"
@@ -132,5 +126,4 @@ router.get(
   getAllLeaves
 );
 
-module.exports =
-  router;
+module.exports = router;
