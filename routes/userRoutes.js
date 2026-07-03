@@ -5,6 +5,7 @@ const router =
   express.Router();
 
 const {
+  getMyProfile,
   registerUser,
   approveEmployee,
   loginUser,
@@ -20,7 +21,14 @@ const {
   "../controllers/userControllers"
 );
 
+const { protect } = require("../middleware/authMiddleware");
 
+
+router.get(
+  "/profile",
+  protect,
+  getMyProfile
+);
 
 // ================= REGISTER =================
 router.post(

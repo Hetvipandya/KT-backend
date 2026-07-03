@@ -194,6 +194,47 @@ const createDefaultHR =
   };
   createDefaultHR();
 
+  exports.getMyProfile = async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id).select(
+      "-password -plainPassword -refreshToken -forgotPasswordOTP -otpExpireTime"
+    );
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      profile: {
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        phoneNumber: user.phoneNumber,
+        dob: user.dob,
+        address: user.address,
+        department: user.department,
+        bloodGroup: user.bloodGroup,
+        uniqueID: user.uniqueID,
+        role: user.role,
+        isApproved: user.isApproved,
+        isFirstLogin: user.isFirstLogin,
+        lastLogin: user.lastLogin,
+        isActive: user.isActive,
+      },
+    });
+  } catch (error) {
+    console.log("Profile Error:", error);
+
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
 
 // ================= REGISTER USER =================
 exports.registerUser =
