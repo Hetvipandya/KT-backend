@@ -5,6 +5,7 @@ const router =
   express.Router();
 
 const {
+   getMyProfile,
   registerUser,
   approveEmployee,
   loginUser,
@@ -18,6 +19,11 @@ const {
   logoutUser,
 } = require(
   "../controllers/userControllers"
+);
+
+router.get(
+  "/profile",
+  getMyProfile
 );
 
 // ================= REGISTER =================
@@ -57,7 +63,7 @@ router.post(
 ); //done
 
 // ================= CHANGE PASSWORD =================
-router.put(
+router.put( 
   "/change-password",
   changePassword
 ); //done

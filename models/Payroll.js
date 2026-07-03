@@ -1,6 +1,6 @@
 const mongoose = require("mongoose");
  
-const payrollSchema =
+const payrollSchema = 
   new mongoose.Schema(
     {
       userId: {
