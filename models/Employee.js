@@ -6,7 +6,7 @@ const employeeSchema =
     {
       employeeID: {
         type: String, 
-        unique: true,
+        unique: true, 
       },
 
       userID: {
@@ -139,6 +139,11 @@ designation: {
   trim: true,
 },
 
+isTeamLead: {
+  type: Boolean,
+  default: false
+},
+
       // DEPARTMENT
       department: {
         type:
@@ -146,12 +151,7 @@ designation: {
         ref: "Department",
       },
 
-      // TEAM LEAD
-      teamLead: {
-        type:
-          mongoose.Schema.Types.ObjectId,
-        ref: "User",
-      },
+    
 
       joiningDate: {
         type: Date,

@@ -6,10 +6,11 @@ const EmployeeDocument =
     "../models/EmployeeDocument"
   ); 
 
-const EmployeeHistory =
+const EmployeeHistory = 
   require(
     "../models/EmployeeHistory"
   );
+
 
 
 // ================= GENERATE EMPLOYEE ID =================
@@ -23,6 +24,38 @@ const generateEmployeeID =
     ).padStart(4, "0")}`;
   };
  
+exports.assignTeamLead = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const employee = await Employee.findByIdAndUpdate(
+      id,
+      {
+        isTeamLead: true
+      },
+      { new: true }
+    );
+
+    if (!employee) {
+      return res.status(404).json({
+        success: false,
+        message: "Employee not found"
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Assigned as TL",
+      employee
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
+
 // ================= ADD EMPLOYEE =================
 exports.addEmployee =
   async (req, res) => {
@@ -189,10 +222,6 @@ exports.getEmployeeList = async (req, res) => {
         "department",
         "departmentName"
       )
-      .populate(
-        "teamLead",
-        "firstName lastName email"
-      )
       .sort({ createdAt: -1 });
 
  const employeeList = employees.map(
@@ -233,10 +262,6 @@ exports.getEmployeeProfile =
         )
           .populate(
             "department"
-          )
-          .populate(
-            "teamLead",
-            "firstName lastName email"
           );
 
       if (

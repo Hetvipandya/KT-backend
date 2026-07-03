@@ -11,6 +11,7 @@ const path =
   require("path");
 
 const {
+  assignTeamLead,
   addEmployee,
   getEmployeeList,
   getEmployeeProfile,
@@ -88,6 +89,8 @@ const employeeDocuments =
       maxCount: 10,
     },
   ]);
+
+  router.put("/assign-tl/:id", assignTeamLead);
 
 // ================= ADD EMPLOYEE ================= 
 router.post( 
