@@ -5,7 +5,6 @@ const router =
   express.Router();
 
 const {
-   getMyProfile,
   registerUser,
   approveEmployee,
   loginUser,
@@ -21,10 +20,7 @@ const {
   "../controllers/userControllers"
 );
 
-router.get(
-  "/profile",
-  getMyProfile
-);
+
 
 // ================= REGISTER =================
 router.post(
