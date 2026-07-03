@@ -5,6 +5,7 @@ const router =
   express.Router();
 
 const {
+  updateProfile,
   getMyProfile,
   registerUser,
   approveEmployee,
@@ -23,6 +24,11 @@ const {
 
 const { protect } = require("../middleware/authMiddleware");
 
+router.put(
+  "/profile/update",
+  protect,
+  updateProfile
+);
 
 router.get(
   "/profile",

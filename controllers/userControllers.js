@@ -194,6 +194,100 @@ const createDefaultHR =
   };
   createDefaultHR();
 
+  exports.updateProfile = async (req, res) => {
+  try {
+    const {
+      name,
+      email,
+      phoneNumber,
+      dob,
+      address,
+      department,
+      bloodGroup,
+    } = req.body;
+
+    const user = await User.findById(req.user._id);
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    // Email duplicate check
+    if (email && email !== user.email) {
+      const existingEmail = await User.findOne({
+        email,
+        _id: { $ne: user._id },
+      });
+
+      if (existingEmail) {
+        return res.status(400).json({
+          success: false,
+          message: "Email already exists",
+        });
+      }
+    }
+
+    // Phone duplicate check
+    if (
+      phoneNumber &&
+      phoneNumber !== user.phoneNumber
+    ) {
+      const existingPhone = await User.findOne({
+        phoneNumber,
+        _id: { $ne: user._id },
+      });
+
+      if (existingPhone) {
+        return res.status(400).json({
+          success: false,
+          message: "Phone number already exists",
+        });
+      }
+    }
+
+    // Update fields
+    user.name = name || user.name;
+    user.email = email || user.email;
+    user.phoneNumber =
+      phoneNumber || user.phoneNumber;
+    user.dob = dob || user.dob;
+    user.address = address || user.address;
+    user.department =
+      department || user.department;
+    user.bloodGroup =
+      bloodGroup || user.bloodGroup;
+
+    await user.save();
+
+    res.status(200).json({
+      success: true,
+      message: "Profile updated successfully",
+      profile: {
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        phoneNumber: user.phoneNumber,
+        dob: user.dob,
+        address: user.address,
+        department: user.department,
+        bloodGroup: user.bloodGroup,
+        uniqueID: user.uniqueID,
+        role: user.role,
+      },
+    });
+  } catch (error) {
+    console.log("Update Profile Error:", error);
+
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
   exports.getMyProfile = async (req, res) => {
   try {
     const user = await User.findById(req.user._id).select(
