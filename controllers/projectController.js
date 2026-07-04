@@ -276,6 +276,24 @@ exports.createMilestone =
     }
   };
 
+  exports.getAllMilestones = async (req, res) => {
+  try {
+    const milestones = await Milestone.find()
+      .populate("projectId", "projectName clientName");
+
+    res.status(200).json({
+      success: true,
+      count: milestones.length,
+      data: milestones,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
 // Get Project Milestones
 exports.getProjectMilestones =
   async (req, res) => {

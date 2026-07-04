@@ -19,6 +19,7 @@ const {
   createMilestone,
   getProjectMilestones,
   completeMilestone,
+  getAllMilestones,
 
   // Task
   createTask,
@@ -102,6 +103,8 @@ router.get(
   "/milestone/:projectId",
   getProjectMilestones
 );
+
+router.get("/milestones/all", getAllMilestones);
 
 // Complete Milestone
 router.put(
