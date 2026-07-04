@@ -56,6 +56,38 @@ exports.assignTeamLead = async (req, res) => {
   }
 };
 
+exports.removeTeamLead = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const employee = await Employee.findByIdAndUpdate(
+      id,
+      {
+        isTeamLead: false,
+      },
+      { new: true }
+    );
+
+    if (!employee) {
+      return res.status(404).json({
+        success: false,
+        message: "Employee not found",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Removed as TL",
+      employee,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
 // ================= ADD EMPLOYEE =================
 exports.addEmployee =
   async (req, res) => {

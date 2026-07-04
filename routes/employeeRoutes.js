@@ -12,6 +12,7 @@ const path =
 
 const {
   assignTeamLead,
+   removeTeamLead,
   addEmployee,
   getEmployeeList,
   getEmployeeProfile,
@@ -91,6 +92,7 @@ const employeeDocuments =
   ]);
 
   router.put("/assign-tl/:id", assignTeamLead);
+  router.put("/remove-tl/:id", removeTeamLead);
 
 // ================= ADD EMPLOYEE ================= 
 router.post( 
