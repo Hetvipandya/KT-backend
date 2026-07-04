@@ -101,6 +101,6 @@ router.get(
   "/all",
   getAllUsers
 ); //done
-
+ 
 module.exports =
   router;
