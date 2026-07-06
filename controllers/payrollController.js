@@ -399,7 +399,7 @@ exports.getPayslips =
         await Payslip.find()
           .populate(
             "userId",
-            "firstName lastName"
+            "firstName lastName email"
           )
           .populate(
             "payrollId"
