@@ -36,7 +36,7 @@ router.put(
     req.body.status =
       "Rejected";
 
-    return updateReportStatus(
+    return updateReportStatus( 
       req,
       res
     );

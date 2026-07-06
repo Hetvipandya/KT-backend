@@ -134,39 +134,23 @@ exports.createDailyReport =
 // ==========================
 // GET ALL DAILY REPORTS
 // ==========================
-exports.getAllDailyReports =
-  async (req, res) => {
-    try {
-      const reports =
-        await DailyReport.find()
-          .populate(
-            "employeeId"
-          )
-          .populate(
-            "projectId"
-          )
-          .populate(
-            "taskReferences"
-          )
-          .populate(
-            "reviewedBy"
-          )
-          .sort({
-            createdAt: -1,
-          });
+exports.getAllDailyReports = async (req, res) => {
+  try {
+    const reports = await DailyReport.find().sort({
+      createdAt: -1,
+    });
 
-      return res.status(200).json({
-        success: true,
-        data: reports,
-      });
-    } catch (error) {
-      return res.status(500).json({
-        success: false,
-        message:
-          error.message,
-      });
-    }
-  };
+    return res.status(200).json({
+      success: true,
+      data: reports,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
 
 // ==========================
 // GET SINGLE DAILY REPORT
