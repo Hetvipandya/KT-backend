@@ -13,7 +13,7 @@ const employeeSchema =
         type:
           mongoose.Schema.Types.ObjectId,
         ref: "User",
-      },
+      }, 
 
       // PERSONAL DETAILS
       firstName: {
