@@ -109,30 +109,31 @@ exports.createTask = async (req, res) => {
       });
     }
 
-    const task = await TaskManagement.create({
-      projectId,
-      milestoneId: milestoneId || null,
-      taskTitle,
-      taskDescription,
-      assignedEmployee,
-      assignedIntern: assignedIntern || null,
-      assignedBy,
-      dueDate,
-      estimatedHours,
-      priority,
-      status,
-      progress,
-      taskDependencies,
-      subTasks,
-      checklist,
-      comments,
-      attachments,
-    });
+const createdTask = await TaskManagement.create({
+  projectId,
+  milestoneId: milestoneId || null,
+  taskTitle,
+  taskDescription,
+  assignedEmployee,
+  assignedIntern: assignedIntern || null,
+  assignedBy,
+  dueDate,
+  estimatedHours,
+  priority,
+  status,
+  progress,
+  taskDependencies,
+  subTasks,
+  checklist,
+  comments,
+  attachments,
+});
 
-    const task = await TaskManagement.findById(createdTask._id)
+const task = await TaskManagement.findById(createdTask._id)
   .populate("projectId", "projectName")
   .populate("milestoneId", "title") // અથવા milestoneName
   .populate("assignedEmployee", "name")
+  .populate("assignedIntern", "name")
   .populate("assignedBy", "name");
 
     return res.status(201).json({
