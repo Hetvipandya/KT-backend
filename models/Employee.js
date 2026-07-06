@@ -145,11 +145,17 @@ isTeamLead: {
 },
 
       // DEPARTMENT
+      // department: {
+      //   type:
+      //     mongoose.Schema.Types.ObjectId,
+      //   ref: "Department",
+      // },
+
       department: {
-        type:
-          mongoose.Schema.Types.ObjectId,
-        ref: "Department",
-      },
+  type: String,
+  required: true,
+  trim: true,
+},
 
     
 

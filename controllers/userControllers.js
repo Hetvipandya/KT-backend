@@ -368,6 +368,53 @@ exports.registerUser =
           });
       }
 
+      // ================= CREATE EMPLOYEE =================
+if (role === "employee") {
+  // Generate Employee ID
+  const lastEmployee = await Employee.findOne().sort({
+    createdAt: -1,
+  });
+
+  let nextEmployeeNumber = 1001;
+
+  if (lastEmployee && lastEmployee.employeeID) {
+    const lastNumber = parseInt(
+      lastEmployee.employeeID.replace("EMP", "")
+    );
+
+    nextEmployeeNumber = isNaN(lastNumber)
+      ? 1001
+      : lastNumber + 1;
+  }
+
+  const employeeID = `EMP${nextEmployeeNumber}`;
+
+  await Employee.create({
+    employeeID,
+    userID: user._id,
+
+    firstName: name,
+    lastName: "",
+
+    email,
+    mobile: phoneNumber,
+
+    dob,
+    bloodGroup,
+
+    currentAddress: address,
+    permanentAddress: address,
+
+    designation: "Employee",
+
+    department, // String
+
+    joiningDate: new Date(),
+
+    employeeStatus: "Active",
+  });
+}
+
       // ================= CHECK EXISTING USER =================
       const existingUser =
         await User.findOne({
@@ -799,62 +846,16 @@ exports.loginUser =
         );
 
       // ================= SAVE LOGIN =================
-    // ================= SAVE LOGIN =================
-user.refreshToken = refreshToken;
-user.deviceId = deviceId || null;
-user.lastLogin = new Date();
+      user.refreshToken =
+        refreshToken;
 
-// ================= CREATE EMPLOYEE IF NOT EXISTS =================
-if (user.role === "employee") {
-  const existingEmployee = await Employee.findOne({
-    userID: user._id,
-  });
+      user.deviceId =
+        deviceId || null;
 
-  if (!existingEmployee) {
-    // Generate Employee ID
-    const lastEmployee = await Employee.findOne()
-      .sort({ createdAt: -1 });
+      user.lastLogin = 
+        new Date();
 
-    let nextNumber = 1001;
-
-    if (lastEmployee && lastEmployee.employeeID) {
-      const num = parseInt(
-        lastEmployee.employeeID.replace("EMP", "")
-      );
-
-      nextNumber = isNaN(num) ? 1001 : num + 1;
-    }
-
-    const employeeID = `EMP${nextNumber}`;
-
-    await Employee.create({
-      employeeID,
-      userID: user._id,
-
-      firstName: user.name,
-      lastName: "",
-
-      email: user.email,
-      mobile: user.phoneNumber,
-
-      dob: user.dob,
-      bloodGroup: user.bloodGroup,
-
-      currentAddress: user.address,
-      permanentAddress: user.address,
-
-      designation: "Employee",
-
-      department: user.department || null,
-
-      joiningDate: new Date(),
-
-      employeeStatus: "Active",
-    });
-  }
-}
-
-await user.save();
+      await user.save();
 
       // ================= RESPONSE =================
       res.status(200).json({
