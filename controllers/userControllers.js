@@ -368,53 +368,6 @@ exports.registerUser =
           });
       }
 
-      // ================= CREATE EMPLOYEE =================
-if (role === "employee") {
-  // Generate Employee ID
-  const lastEmployee = await Employee.findOne().sort({
-    createdAt: -1,
-  });
-
-  let nextEmployeeNumber = 1001;
-
-  if (lastEmployee && lastEmployee.employeeID) {
-    const lastNumber = parseInt(
-      lastEmployee.employeeID.replace("EMP", "")
-    );
-
-    nextEmployeeNumber = isNaN(lastNumber)
-      ? 1001
-      : lastNumber + 1;
-  }
-
-  const employeeID = `EMP${nextEmployeeNumber}`;
-
-  await Employee.create({
-    employeeID,
-    userID: user._id,
-
-    firstName: name,
-    lastName: "",
-
-    email,
-    mobile: phoneNumber,
-
-    dob,
-    bloodGroup,
-
-    currentAddress: address,
-    permanentAddress: address,
-
-    designation: "Employee",
-
-    department, // String
-
-    joiningDate: new Date(),
-
-    employeeStatus: "Active",
-  });
-}
-
       // ================= CHECK EXISTING USER =================
       const existingUser =
         await User.findOne({
@@ -508,6 +461,52 @@ const uniqueID =
               true,
           }
         );
+        // ================= CREATE EMPLOYEE =================
+if (role === "employee") {
+  // Generate Employee ID
+  const lastEmployee = await Employee.findOne().sort({
+    createdAt: -1,
+  });
+
+  let nextEmployeeNumber = 1001;
+
+  if (lastEmployee && lastEmployee.employeeID) {
+    const lastNumber = parseInt(
+      lastEmployee.employeeID.replace("EMP", "")
+    );
+
+    nextEmployeeNumber = isNaN(lastNumber)
+      ? 1001
+      : lastNumber + 1;
+  }
+
+  const employeeID = `EMP${nextEmployeeNumber}`;
+
+  await Employee.create({
+    employeeID,
+    userID: user._id,
+
+    firstName: name,
+    lastName: "",
+
+    email,
+    mobile: phoneNumber,
+
+    dob,
+    bloodGroup,
+
+    currentAddress: address,
+    permanentAddress: address,
+
+    designation: "Employee",
+
+    department,
+
+    joiningDate: new Date(),
+
+    employeeStatus: "Active",
+  });
+}
 
       // ================= SEND EMAIL =================
       try {
