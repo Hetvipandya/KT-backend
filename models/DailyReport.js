@@ -1,4 +1,4 @@
-const mongoose = require("mongoose");b 
+const mongoose = require("mongoose");
 
 const dailyReportSchema =
   new mongoose.Schema(
