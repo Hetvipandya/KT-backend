@@ -129,6 +129,12 @@ exports.createTask = async (req, res) => {
       attachments,
     });
 
+    const task = await TaskManagement.findById(createdTask._id)
+  .populate("projectId", "projectName")
+  .populate("milestoneId", "title") // અથવા milestoneName
+  .populate("assignedEmployee", "name")
+  .populate("assignedBy", "name");
+
     return res.status(201).json({
       success: true,
       message: "Task created successfully",
@@ -165,6 +171,7 @@ exports.getAllTasks =
             "projectId",
             "projectName"
           )
+          .populate("milestoneId", "title")
           .populate(
             "assignedEmployee",
             "name email"
@@ -210,6 +217,7 @@ exports.getTaskById =
           .populate(
             "projectId"
           )
+          .populate("milestoneId", "title")
           .populate(
             "assignedEmployee"
           )
@@ -352,7 +360,7 @@ exports.updateTaskStatus =
       if (!task) {
         return res
           .status(404)
-          .json({
+          .json({ 
             success: false,
             message:
               "Task not found",
