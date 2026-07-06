@@ -72,7 +72,7 @@ exports.getSalaryStructure =
         await SalaryStructure.find()
           .populate(
   "userId",
-  "firstName lastName email"
+  "firstName lastName"
 );
 
       res.status(200).json({

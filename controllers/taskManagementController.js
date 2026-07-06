@@ -131,7 +131,7 @@ const createdTask = await TaskManagement.create({
 
 const task = await TaskManagement.findById(createdTask._id)
   .populate("projectId", "projectName")
-  .populate("milestoneId", "title") // અથવા milestoneName
+  .populate("milestoneId", "title") 
   .populate("assignedEmployee", "name")
   .populate("assignedIntern", "name")
   .populate("assignedBy", "name");
