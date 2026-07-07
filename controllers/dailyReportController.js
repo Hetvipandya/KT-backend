@@ -136,9 +136,20 @@ exports.createDailyReport =
 // ==========================
 exports.getAllDailyReports = async (req, res) => {
   try {
-    const reports = await DailyReport.find().sort({
-      createdAt: -1,
-    });
+    const reports = await DailyReport.find()
+      .populate({
+        path: "employeeId",
+        select: "name email",
+      })
+      .populate({
+        path: "projectId",
+        select: "projectName", // or "title" if your project uses title
+      })
+      .populate({
+        path: "taskReferences",
+        select: "taskTitle", // or "title" if your task uses title
+      })
+      .sort({ createdAt: -1 });
 
     return res.status(200).json({
       success: true,
