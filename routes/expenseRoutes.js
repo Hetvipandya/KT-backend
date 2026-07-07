@@ -60,15 +60,15 @@ router.delete(
   deleteExpense
 );
 
-router.put(
-  "/approve/:id",
-  approveExpense
-);
+// router.put(
+//   "/approve/:id",
+//   approveExpense
+// );
 
-router.put(
-  "/reject/:id",
-  rejectExpense
-);
+// router.put(
+//   "/reject/:id",
+//   rejectExpense
+// );
 
 
 // Income Routes
