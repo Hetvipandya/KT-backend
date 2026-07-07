@@ -81,7 +81,7 @@ const userSchema =
         type: Boolean,
         default: false,
       },
-
+ 
       // ================= FIRST LOGIN =================
       isFirstLogin: {
         type: Boolean,

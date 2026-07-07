@@ -5,7 +5,7 @@ const router = express.Router();
 const {
   createSalaryStructure,
   getSalaryStructure,
-    updateSalaryStructure,
+  updateSalaryStructure,
   processPayroll,
   generatePayslip, 
   getPayroll,

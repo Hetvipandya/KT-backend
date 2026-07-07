@@ -62,32 +62,32 @@ const expenseSchema =
         default: "",
       },
 
-      approvalStatus: {
-        type: String,
-        enum: [
-          "pending",
-          "approved",
-          "rejected",
-        ],
-        default: "pending",
-      },
+      // approvalStatus: {
+      //   type: String,
+      //   enum: [
+      //     "pending",
+      //     "approved",
+      //     "rejected",
+      //   ],
+      //   default: "pending",
+      // },
 
-      approvedBy: {
-        type:
-          mongoose.Schema.Types.ObjectId,
-        ref: "User",
-        default: null,
-      },
+      // approvedBy: {
+      //   type:
+      //     mongoose.Schema.Types.ObjectId,
+      //   ref: "User",
+      //   default: null,
+      // },
 
-      approvedAt: {
-        type: Date,
-        default: null,
-      },
+      // approvedAt: {
+      //   type: Date,
+      //   default: null,
+      // },
 
-      rejectionReason: {
-        type: String,
-        default: "",
-      },
+      // rejectionReason: {
+      //   type: String,
+      //   default: "",
+      // },
     },
     {
       timestamps: true,

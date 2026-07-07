@@ -10,7 +10,7 @@ exports.createExpense = async (req, res) => {
     const expense = await Expense.create(req.body);
 
     res.status(201).json({
-      success: true,
+      success: true, 
       message: "Expense created successfully",
       data: expense,
     });
@@ -157,80 +157,80 @@ exports.deleteExpense = async (req, res) => {
 /**
  * Approve Expense
  */
-exports.approveExpense = async (req, res) => {
-  try {
-    const { approvedBy } = req.body;
+// exports.approveExpense = async (req, res) => {
+//   try {
+//     const { approvedBy } = req.body;
 
-    const expense = await Expense.findById(req.params.id);
+//     const expense = await Expense.findById(req.params.id);
 
-    if (!expense) {
-      return res.status(404).json({
-        success: false,
-        message: "Expense not found",
-      });
-    }
+//     if (!expense) {
+//       return res.status(404).json({
+//         success: false,
+//         message: "Expense not found",
+//       });
+//     }
 
-    expense.approvalStatus = "approved";
-    expense.approvedBy = approvedBy;
-    expense.approvedAt = new Date();
+//     expense.approvalStatus = "approved";
+//     expense.approvedBy = approvedBy;
+//     expense.approvedAt = new Date();
 
-    await expense.save();
+//     await expense.save();
 
-    await Transaction.create({
-      transactionType: "expense",
-      referenceId: expense._id,
-      amount: expense.amount,
-      paymentMode: expense.paymentMode,
-    });
+//     await Transaction.create({
+//       transactionType: "expense",
+//       referenceId: expense._id,
+//       amount: expense.amount,
+//       paymentMode: expense.paymentMode,
+//     });
 
-    res.status(200).json({
-      success: true,
-      message: "Expense approved successfully",
-      data: expense,
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: error.message,
-    });
-  }
-};
+//     res.status(200).json({
+//       success: true,
+//       message: "Expense approved successfully",
+//       data: expense,
+//     });
+//   } catch (error) {
+//     res.status(500).json({
+//       success: false,
+//       message: error.message,
+//     });
+//   }
+// };
 
-/**
- * Reject Expense
- */
-exports.rejectExpense = async (req, res) => {
-  try {
-    const { approvedBy, rejectionReason } = req.body;
+// /**
+//  * Reject Expense
+//  */
+// exports.rejectExpense = async (req, res) => {
+//   try {
+//     const { approvedBy, rejectionReason } = req.body;
 
-    const expense = await Expense.findById(req.params.id);
+//     const expense = await Expense.findById(req.params.id);
 
-    if (!expense) {
-      return res.status(404).json({
-        success: false,
-        message: "Expense not found",
-      });
-    }
+//     if (!expense) {
+//       return res.status(404).json({
+//         success: false,
+//         message: "Expense not found",
+//       });
+//     }
 
-    expense.approvalStatus = "rejected";
-    expense.approvedBy = approvedBy;
-    expense.approvedAt = new Date();
-    expense.rejectionReason = rejectionReason;
+//     expense.approvalStatus = "rejected";
+//     expense.approvedBy = approvedBy;
+//     expense.approvedAt = new Date();
+//     expense.rejectionReason = rejectionReason;
 
-    await expense.save();
+//     await expense.save();
 
-    res.status(200).json({
-      success: true,
-      message: "Expense rejected successfully",
-      data: expense,
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: error.message,
-    });
-  }
-};
+//     res.status(200).json({
+//       success: true,
+//       message: "Expense rejected successfully",
+//       data: expense,
+//     });
+//   } catch (error) {
+//     res.status(500).json({
+//       success: false,
+//       message: error.message,
+//     });
+//   }
+// };
 
 /**
  * Create Income
