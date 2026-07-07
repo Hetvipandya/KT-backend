@@ -30,7 +30,6 @@ exports.getExpenses = async (req, res) => {
     const expenses = await Expense.find()
       .populate("employeeId", "name email")
       .populate("projectId", "projectName")
-      .populate("approvedBy", "name")
       .sort({ createdAt: -1 });
 
     res.status(200).json({
