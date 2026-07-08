@@ -31,7 +31,7 @@ exports.getExpenses = async (req, res) => {
       .populate("employeeId", "name email")
       .populate("projectId", "projectName")
       .sort({ createdAt: -1 });
-
+ 
     res.status(200).json({
       success: true,
       count: expenses.length,

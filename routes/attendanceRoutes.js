@@ -9,15 +9,17 @@ const {
   getReport,
 } = require("../controllers/attendanceController");
 
-// Attendance flow APIs
-router.post("/checkin", checkIn);
-router.post("/checkout", checkOut);
+const { protect } = require("../middleware/auth");
 
-// Break APIs
-router.post("/break/start", startBreak);
-router.post("/break/end", endBreak);
+// ================= ATTENDANCE =================
+router.post("/checkin", protect, checkIn);
+router.post("/checkout", protect, checkOut);
 
-// Report API
-router.get("/report", getReport);
+// ================= BREAK =================
+router.post("/break/start", protect, startBreak);
+router.post("/break/end", protect, endBreak);
+
+// ================= REPORT =================
+router.get("/report", protect, getReport);
 
 module.exports = router;
