@@ -41,6 +41,7 @@ exports.checkIn = async (req, res) => {
 
     const attendance = await Attendance.create({
       userId,
+       userType,
       date,
       checkInTime: now,
       isLate,
