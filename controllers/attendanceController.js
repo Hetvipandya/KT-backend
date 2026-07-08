@@ -8,7 +8,7 @@ const OFFICE_START_TIME = "10:00";
 // ================= CHECK IN =================
 exports.checkIn = async (req, res) => {
   try {
-    const { userId } = req.body;
+    const { userId, userType  } = req.body;
 
     const date = getToday();
 
