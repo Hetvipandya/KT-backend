@@ -9,7 +9,7 @@ const {
   getReport,
 } = require("../controllers/attendanceController");
 
-const { protect } = require("../middleware/auth");
+const { protect } = require("../middleware/authMiddleware");
 
 // ================= ATTENDANCE =================
 router.post("/checkin", protect, checkIn);
