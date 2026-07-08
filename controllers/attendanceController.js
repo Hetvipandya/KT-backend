@@ -239,9 +239,11 @@ exports.getReport = async (req, res) => {
   try {
     const { userId, from, to } = req.query;
 
-    const query = {
-      userId,
-    };
+    const query = {};
+
+    if (userId) {
+      query.userId = userId;
+    }
 
     if (from && to) {
       query.date = {
@@ -255,15 +257,14 @@ exports.getReport = async (req, res) => {
         "userId",
         "name email uniqueID department role"
       )
-      .sort({
-        date: -1,
-      });
+      .sort({ date: -1 });
 
     res.json({
       success: true,
       count: data.length,
       data,
     });
+
   } catch (err) {
     res.status(500).json({
       success: false,
