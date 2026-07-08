@@ -45,7 +45,7 @@ exports.checkIn = async (req, res) => {
       date,
       checkInTime: now,
       isLate,
-      status: isLate ? "late-coming" : "present",
+       status: "present",
     });
 
     res.status(201).json({

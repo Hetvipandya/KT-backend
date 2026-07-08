@@ -43,16 +43,21 @@ const attendanceSchema = new mongoose.Schema(
       default: 0, // minutes
     },
 
-    isLate: {
-      type: Boolean,
-      default: false,
-    },
+ status: {
+  type: String,
+  enum: [
+    "present",
+    "absent",
+    "half-day",
+    "leave"
+  ],
+  default: "absent",
+},
 
-    status: {
-      type: String,
-      enum: ["present", "absent"],
-      default: "absent",
-    },
+isLate: {
+  type: Boolean,
+  default: false,
+},
   },
   { timestamps: true }
 );
