@@ -3,12 +3,12 @@ const Attendance = require("../models/Attendance");
 // ================= HELPER =================
 const getToday = () => new Date().toISOString().split("T")[0];
 
-const OFFICE_START_TIME = "10:00";
+const OFFICE_START_TIME = "10:10";
 
 // ================= CHECK IN =================
 exports.checkIn = async (req, res) => {
   try {
-    const { userId, userType  } = req.body;
+    const { userId, userType } = req.body;
 
     const date = getToday();
 
@@ -41,18 +41,21 @@ exports.checkIn = async (req, res) => {
 
     const attendance = await Attendance.create({
       userId,
-       userType,
+      userType,
       date,
       checkInTime: now,
       isLate,
-       status: "present",
+      status: "present",
     });
 
     res.status(201).json({
       success: true,
-      message: "Check-in successful",
+      message: isLate
+        ? "Late Check-In Successful"
+        : "Check-In Successful",
       data: attendance,
     });
+
   } catch (err) {
     res.status(500).json({
       success: false,
@@ -88,7 +91,9 @@ exports.startBreak = async (req, res) => {
     }
 
     const lastBreak =
-      attendance.breaks[attendance.breaks.length - 1];
+      attendance.breaks[
+        attendance.breaks.length - 1
+      ];
 
     if (lastBreak && !lastBreak.endTime) {
       return res.status(400).json({
@@ -105,8 +110,10 @@ exports.startBreak = async (req, res) => {
 
     res.json({
       success: true,
-      message: "Break started",
+      message: "Break started successfully",
+      data: attendance,
     });
+
   } catch (err) {
     res.status(500).json({
       success: false,
@@ -135,7 +142,9 @@ exports.endBreak = async (req, res) => {
     }
 
     const lastBreak =
-      attendance.breaks[attendance.breaks.length - 1];
+      attendance.breaks[
+        attendance.breaks.length - 1
+      ];
 
     if (!lastBreak || lastBreak.endTime) {
       return res.status(400).json({
@@ -147,19 +156,26 @@ exports.endBreak = async (req, res) => {
     lastBreak.endTime = new Date();
 
     const duration =
-      (lastBreak.endTime - lastBreak.startTime) /
+      (lastBreak.endTime -
+        lastBreak.startTime) /
       (1000 * 60);
 
-    lastBreak.duration = duration;
+    lastBreak.duration = Number(
+      duration.toFixed(2)
+    );
 
-    attendance.totalBreakTime += duration;
+    attendance.totalBreakTime += Number(
+      duration.toFixed(2)
+    );
 
     await attendance.save();
 
     res.json({
       success: true,
-      message: "Break ended",
+      message: "Break ended successfully",
+      data: attendance,
     });
+
   } catch (err) {
     res.status(500).json({
       success: false,
@@ -205,15 +221,22 @@ exports.checkOut = async (req, res) => {
 
     totalMinutes -= attendance.totalBreakTime;
 
-    if (totalMinutes < 0) totalMinutes = 0;
+    if (totalMinutes < 0) {
+      totalMinutes = 0;
+    }
 
     attendance.totalWorkTime = Number(
       (totalMinutes / 60).toFixed(2)
     );
 
+    // ================= STATUS =================
+
     if (attendance.totalWorkTime >= 8) {
       attendance.status = "present";
-    } else if (attendance.totalWorkTime >= 4) {
+    } else if (
+      attendance.totalWorkTime > 0 &&
+      attendance.totalWorkTime < 8
+    ) {
       attendance.status = "half-day";
     } else {
       attendance.status = "absent";
@@ -223,9 +246,10 @@ exports.checkOut = async (req, res) => {
 
     res.json({
       success: true,
-      message: "Check-out successful",
+      message: "Check-Out Successful",
       data: attendance,
     });
+
   } catch (err) {
     res.status(500).json({
       success: false,
@@ -237,7 +261,8 @@ exports.checkOut = async (req, res) => {
 // ================= ATTENDANCE REPORT =================
 exports.getReport = async (req, res) => {
   try {
-    const { userId, from, to } = req.query;
+    const { userId, from, to } =
+      req.query;
 
     const query = {};
 
@@ -257,9 +282,11 @@ exports.getReport = async (req, res) => {
         "userId",
         "name email uniqueID department role"
       )
-      .sort({ date: -1 });
+      .sort({
+        date: -1,
+      });
 
-    res.json({
+    res.status(200).json({
       success: true,
       count: data.length,
       data,
