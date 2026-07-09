@@ -197,16 +197,30 @@ exports.checkOut = async (req, res) => {
       });
     }
 
+    // Check-In Validation
+    const checkInTime =
+      attendance.approvedCheckInTime ||
+      attendance.checkInTime;
+
+    if (!checkInTime) {
+      return res.status(400).json({
+        success: false,
+        message: "Check-in time not found.",
+      });
+    }
+
+    // Current Checkout Time
     attendance.checkOutTime = new Date();
 
+    // Total Minutes
     let totalMinutes =
-      (attendance.checkOutTime -
-        attendance.approvedCheckInTime) /
+      (attendance.checkOutTime.getTime() -
+        new Date(checkInTime).getTime()) /
       (1000 * 60);
 
-    // Maximum 60 minutes break deduct
+    // Deduct Break Time (Maximum 60 Minutes)
     const breakMinutes = Math.min(
-      attendance.totalBreakTime,
+      attendance.totalBreakTime || 0,
       60
     );
 
@@ -216,14 +230,18 @@ exports.checkOut = async (req, res) => {
       totalMinutes = 0;
     }
 
+    // Total Working Hours
     attendance.totalWorkTime = Number(
       (totalMinutes / 60).toFixed(2)
     );
 
+    // Attendance Status
     if (attendance.totalWorkTime >= 8) {
       attendance.status = "present";
-    } else {
+    } else if (attendance.totalWorkTime >= 4) {
       attendance.status = "half-day";
+    } else {
+      attendance.status = "absent";
     }
 
     await attendance.save();
@@ -231,6 +249,8 @@ exports.checkOut = async (req, res) => {
     res.status(200).json({
       success: true,
       message: "Check-Out Successful",
+      totalWorkTime: attendance.totalWorkTime,
+      totalBreakTime: attendance.totalBreakTime,
       data: attendance,
     });
 
