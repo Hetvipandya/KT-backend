@@ -70,6 +70,21 @@ const attendanceSchema = new mongoose.Schema(
       ],
       default: "present",
     },
+
+    approvalStatus: {
+  type: String,
+  enum: ["pending", "approved", "rejected"],
+  default: "pending",
+},
+
+approvedBy: {
+  type: mongoose.Schema.Types.ObjectId,
+  ref: "User",
+},
+
+approvedAt: Date,
+
+approvedCheckInTime: Date,
   },
   {
     timestamps: true,

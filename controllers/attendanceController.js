@@ -54,6 +54,7 @@ exports.checkIn = async (req, res) => {
       checkInTime: now, // Store actual UTC time in DB
       isLate,
       status: "present",
+      approvalStatus: "pending"
     });
 
     return res.status(201).json({
@@ -212,7 +213,7 @@ exports.checkOut = async (req, res) => {
 
     let totalMinutes =
       (attendance.checkOutTime -
-        attendance.checkInTime) /
+        attendance.approvedCheckInTime) /
       (1000 * 60);
 
     // Maximum 60 minutes break deduct
@@ -294,3 +295,68 @@ exports.getReport = async (req, res) => {
     });
   }
 };
+
+  exports.getPendingAttendance = async(req,res)=>{
+
+const data = await Attendance.find({
+approvalStatus:"pending"
+})
+.populate("userId","name uniqueID role");
+
+res.json({
+success:true,
+data
+});
+
+}
+
+exports.approveAttendance = async(req,res)=>{
+
+const {attendanceId,adminId}=req.body;
+
+const attendance =
+await Attendance.findById(attendanceId);
+
+if(!attendance){
+
+return res.status(404).json({
+success:false,
+message:"Attendance not found"
+});
+
+}
+
+attendance.approvalStatus="approved";
+attendance.approvedBy=adminId;
+attendance.approvedAt=new Date();
+
+// Timing starts here
+attendance.approvedCheckInTime=new Date();
+
+await attendance.save();
+
+res.json({
+success:true,
+message:"Attendance Approved Successfully",
+data:attendance
+});
+
+}
+
+exports.rejectAttendance = async(req,res)=>{
+
+const {attendanceId}=req.body;
+
+const attendance=
+await Attendance.findById(attendanceId);
+
+attendance.approvalStatus="rejected";
+
+await attendance.save();
+
+res.json({
+success:true,
+message:"Attendance Rejected"
+});
+
+}

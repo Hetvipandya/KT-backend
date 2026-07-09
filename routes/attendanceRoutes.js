@@ -1,4 +1,5 @@
 const express = require("express");
+
 const router = express.Router();
 
 const {
@@ -7,19 +8,67 @@ const {
   startBreak,
   endBreak,
   getReport,
+  getPendingAttendance,
+  approveAttendance,
+  rejectAttendance,
 } = require("../controllers/attendanceController");
 
 const { protect } = require("../middleware/authMiddleware");
 
-// ================= ATTENDANCE =================
-router.post("/checkin", protect, checkIn);
-router.post("/checkout", protect, checkOut);
+// ================= CHECK IN =================
+router.post(
+  "/check-in",
+  protect,
+  checkIn
+);
 
-// ================= BREAK =================
-router.post("/break/start", protect, startBreak);
-router.post("/break/end", protect, endBreak);
+// ================= CHECK OUT =================
+router.post(
+  "/check-out",
+  protect,
+  checkOut
+);
 
-// ================= REPORT =================
-router.get("/report", protect, getReport);
+// ================= BREAK START =================
+router.post(
+  "/break/start",
+  protect,
+  startBreak
+);
+
+// ================= BREAK END =================
+router.post(
+  "/break/end",
+  protect,
+  endBreak
+);
+
+// ================= ATTENDANCE REPORT =================
+router.get(
+  "/report",
+  protect,
+  getReport
+);
+
+// ================= PENDING ATTENDANCE =================
+router.get(
+  "/pending",
+  protect,
+  getPendingAttendance
+);
+
+// ================= APPROVE ATTENDANCE =================
+router.put(
+  "/approve",
+  protect,
+  approveAttendance
+);
+
+// ================= REJECT ATTENDANCE =================
+router.put(
+  "/reject",
+  protect,
+  rejectAttendance
+);
 
 module.exports = router;
