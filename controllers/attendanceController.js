@@ -407,3 +407,125 @@ message:"Attendance Rejected"
 });
 
 }
+
+exports.getMyAttendanceHistory = async (req, res) => {
+  try {
+
+    const { userId } = req.params;
+
+    const attendance = await Attendance.find({
+      userId,
+    })
+      .populate(
+        "userId",
+        "name email uniqueID role department"
+      )
+      .sort({
+        date: -1,
+      });
+
+    res.status(200).json({
+      success: true,
+      count: attendance.length,
+      data: attendance,
+    });
+
+  } catch (err) {
+
+    res.status(500).json({
+      success: false,
+      message: err.message,
+    });
+
+  }
+};
+
+exports.getAttendanceByDate = async (req, res) => {
+  try {
+
+    const { date } = req.params;
+
+    const attendance = await Attendance.find({
+      date,
+    }).populate(
+      "userId",
+      "name uniqueID role department"
+    );
+
+    res.status(200).json({
+      success: true,
+      count: attendance.length,
+      data: attendance,
+    });
+
+  } catch (err) {
+
+    res.status(500).json({
+      success: false,
+      message: err.message,
+    });
+
+  }
+};
+
+exports.getSingleAttendance = async (req, res) => {
+  try {
+
+    const attendance =
+      await Attendance.findById(req.params.id)
+        .populate(
+          "userId",
+          "name email uniqueID role department"
+        );
+
+    if (!attendance) {
+      return res.status(404).json({
+        success: false,
+        message: "Attendance not found",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      data: attendance,
+    });
+
+  } catch (err) {
+
+    res.status(500).json({
+      success: false,
+      message: err.message,
+    });
+
+  }
+};
+
+exports.getMonthlyAttendance = async (req, res) => {
+  try {
+
+    const { userId, month } = req.params;
+
+    const attendance = await Attendance.find({
+      userId,
+      date: {
+        $regex: `^${month}`,
+      },
+    }).sort({
+      date: -1,
+    });
+
+    res.status(200).json({
+      success: true,
+      count: attendance.length,
+      data: attendance,
+    });
+
+  } catch (err) {
+
+    res.status(500).json({
+      success: false,
+      message: err.message,
+    });
+
+  }
+};

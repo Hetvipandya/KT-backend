@@ -11,6 +11,10 @@ const {
   getPendingAttendance,
   approveAttendance,
   rejectAttendance,
+  getMyAttendanceHistory,
+  getAttendanceByDate,
+  getSingleAttendance,
+  getMonthlyAttendance,
 } = require("../controllers/attendanceController");
 
 const { protect } = require("../middleware/authMiddleware");
@@ -69,6 +73,26 @@ router.put(
   "/reject",
   protect,
   rejectAttendance
+);
+
+router.get(
+  "/history/:userId",
+  getMyAttendanceHistory
+);
+
+router.get(
+  "/history/date/:date",
+  getAttendanceByDate
+);
+
+router.get(
+  "/history/details/:id",
+  getSingleAttendance
+);
+
+router.get(
+  "/history/month/:userId/:month",
+  getMonthlyAttendance
 );
 
 module.exports = router;
