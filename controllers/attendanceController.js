@@ -12,6 +12,7 @@ exports.checkIn = async (req, res) => {
 
     const date = getToday();
 
+    // Already requested today?
     const existing = await Attendance.findOne({
       userId,
       date,
@@ -20,48 +21,35 @@ exports.checkIn = async (req, res) => {
     if (existing) {
       return res.status(400).json({
         success: false,
-        message: "Already checked in today",
+        message:
+          existing.approvalStatus === "pending"
+            ? "Your check-in request is already pending admin approval."
+            : "You have already checked in today.",
       });
     }
 
-    // Current UTC Time
-    const now = new Date();
-
-    // Convert to IST
-    const istNow = new Date(
-      now.toLocaleString("en-US", {
-        timeZone: "Asia/Kolkata",
-      })
-    );
-
-    // Office Grace Time (10:10 AM IST)
-    const officeTime = new Date(istNow);
-    officeTime.setHours(10, 10, 0, 0);
-
-    // After 10:10 => Late
-    const isLate = istNow > officeTime;
-
-    // Debug Logs (optional)
-    console.log("UTC Time:", now);
-    console.log("IST Time:", istNow);
-    console.log("Office Time:", officeTime);
-    console.log("Late:", isLate);
-
+    // Only create request
     const attendance = await Attendance.create({
       userId,
       userType,
       date,
-      checkInTime: now, // Store actual UTC time in DB
-      isLate,
-      status: "present",
-      approvalStatus: "pending"
+
+      // Check-in will be set after admin approval
+      checkInTime: null,
+
+      // Late will also be calculated after approval
+      isLate: false,
+
+      // Employee is not present until approval
+      status: "absent",
+
+      approvalStatus: "pending",
     });
 
     return res.status(201).json({
       success: true,
-      message: isLate
-        ? "Late Check-In Successful"
-        : "Check-In Successful",
+      message:
+        "Check-in request has been sent to the admin. Please wait for approval.",
       data: attendance,
     });
 
@@ -310,38 +298,77 @@ data
 
 }
 
-exports.approveAttendance = async(req,res)=>{
+exports.approveAttendance = async (req, res) => {
+  try {
+    const { attendanceId, adminId } = req.body;
 
-const {attendanceId,adminId}=req.body;
+    const attendance = await Attendance.findById(attendanceId);
 
-const attendance =
-await Attendance.findById(attendanceId);
+    if (!attendance) {
+      return res.status(404).json({
+        success: false,
+        message: "Attendance request not found",
+      });
+    }
 
-if(!attendance){
+    if (attendance.approvalStatus === "approved") {
+      return res.status(400).json({
+        success: false,
+        message: "Attendance already approved",
+      });
+    }
 
-return res.status(404).json({
-success:false,
-message:"Attendance not found"
-});
+    if (attendance.approvalStatus === "rejected") {
+      return res.status(400).json({
+        success: false,
+        message: "Attendance request has already been rejected",
+      });
+    }
 
-}
+    // Current UTC Time
+    const now = new Date();
 
-attendance.approvalStatus="approved";
-attendance.approvedBy=adminId;
-attendance.approvedAt=new Date();
+    // Current IST Time
+    const istNow = new Date(
+      now.toLocaleString("en-US", {
+        timeZone: "Asia/Kolkata",
+      })
+    );
 
-// Timing starts here
-attendance.approvedCheckInTime=new Date();
+    // Office Grace Time (10:10 AM IST)
+    const officeTime = new Date(istNow);
+    officeTime.setHours(10, 10, 0, 0);
 
-await attendance.save();
+    // Calculate Late Status
+    const isLate = istNow > officeTime;
 
-res.json({
-success:true,
-message:"Attendance Approved Successfully",
-data:attendance
-});
+    // ================= APPROVAL =================
+    attendance.approvalStatus = "approved";
+    attendance.approvedBy = adminId;
+    attendance.approvedAt = now;
 
-}
+    // ================= ACTUAL CHECK-IN =================
+    attendance.checkInTime = now;
+    attendance.isLate = isLate;
+    attendance.status = "present";
+
+    await attendance.save();
+
+    return res.status(200).json({
+      success: true,
+      message: isLate
+        ? "Attendance Approved. Employee checked in as Late."
+        : "Attendance Approved. Employee checked in successfully.",
+      data: attendance,
+    });
+
+  } catch (err) {
+    return res.status(500).json({
+      success: false,
+      message: err.message,
+    });
+  }
+};
 
 exports.rejectAttendance = async(req,res)=>{
 
