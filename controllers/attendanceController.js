@@ -24,37 +24,38 @@ exports.checkIn = async (req, res) => {
       });
     }
 
-    const now = new Date();
+const now = new Date();
 
-    const officeTime = new Date();
+const officeTime = new Date();
 
-    const [hour, minute] = OFFICE_START_TIME.split(":");
+const [hour, minute] = OFFICE_START_TIME.split(":");
 
-    officeTime.setHours(
-      Number(hour),
-      Number(minute),
-      0,
-      0
-    );
+officeTime.setHours(
+  Number(hour),
+  Number(minute),
+  0,
+  0
+);
 
-    const isLate = now > officeTime;
+// 10:10 પછી આવશે તો Late
+const isLate = now > officeTime;
 
-    const attendance = await Attendance.create({
-      userId,
-      userType,
-      date,
-      checkInTime: now,
-      isLate,
-      status: "present",
-    });
+const attendance = await Attendance.create({
+  userId,
+  userType,
+  date,
+  checkInTime: now,
+  isLate,
+  status: "present",
+});
 
-    res.status(201).json({
-      success: true,
-      message: isLate
-        ? "Late Check-In Successful"
-        : "Check-In Successful",
-      data: attendance,
-    });
+res.status(201).json({
+  success: true,
+  message: isLate
+    ? "Late Check-In Successful"
+    : "Check-In Successful",
+  data: attendance,
+});
 
   } catch (err) {
     res.status(500).json({
@@ -69,11 +70,9 @@ exports.startBreak = async (req, res) => {
   try {
     const { userId } = req.body;
 
-    const date = getToday();
-
     const attendance = await Attendance.findOne({
       userId,
-      date,
+      date: getToday(),
     });
 
     if (!attendance) {
@@ -90,12 +89,11 @@ exports.startBreak = async (req, res) => {
       });
     }
 
-    const lastBreak =
-      attendance.breaks[
-        attendance.breaks.length - 1
-      ];
+    const activeBreak = attendance.breaks.find(
+      (b) => !b.endTime
+    );
 
-    if (lastBreak && !lastBreak.endTime) {
+    if (activeBreak) {
       return res.status(400).json({
         success: false,
         message: "Break already started",
@@ -108,7 +106,7 @@ exports.startBreak = async (req, res) => {
 
     await attendance.save();
 
-    res.json({
+    res.status(200).json({
       success: true,
       message: "Break started successfully",
       data: attendance,
@@ -127,11 +125,9 @@ exports.endBreak = async (req, res) => {
   try {
     const { userId } = req.body;
 
-    const date = getToday();
-
     const attendance = await Attendance.findOne({
       userId,
-      date,
+      date: getToday(),
     });
 
     if (!attendance) {
@@ -141,28 +137,24 @@ exports.endBreak = async (req, res) => {
       });
     }
 
-    const lastBreak =
-      attendance.breaks[
-        attendance.breaks.length - 1
-      ];
+    const activeBreak = attendance.breaks.find(
+      (b) => !b.endTime
+    );
 
-    if (!lastBreak || lastBreak.endTime) {
+    if (!activeBreak) {
       return res.status(400).json({
         success: false,
         message: "No active break found",
       });
     }
 
-    lastBreak.endTime = new Date();
+    activeBreak.endTime = new Date();
 
     const duration =
-      (lastBreak.endTime -
-        lastBreak.startTime) /
+      (activeBreak.endTime - activeBreak.startTime) /
       (1000 * 60);
 
-    lastBreak.duration = Number(
-      duration.toFixed(2)
-    );
+    activeBreak.duration = Number(duration.toFixed(2));
 
     attendance.totalBreakTime += Number(
       duration.toFixed(2)
@@ -170,9 +162,10 @@ exports.endBreak = async (req, res) => {
 
     await attendance.save();
 
-    res.json({
+    res.status(200).json({
       success: true,
       message: "Break ended successfully",
+      totalBreakTime: attendance.totalBreakTime,
       data: attendance,
     });
 
@@ -189,11 +182,9 @@ exports.checkOut = async (req, res) => {
   try {
     const { userId } = req.body;
 
-    const date = getToday();
-
     const attendance = await Attendance.findOne({
       userId,
-      date,
+      date: getToday(),
     });
 
     if (!attendance) {
@@ -210,16 +201,20 @@ exports.checkOut = async (req, res) => {
       });
     }
 
-    const now = new Date();
-
-    attendance.checkOutTime = now;
+    attendance.checkOutTime = new Date();
 
     let totalMinutes =
       (attendance.checkOutTime -
         attendance.checkInTime) /
       (1000 * 60);
 
-    totalMinutes -= attendance.totalBreakTime;
+    // Maximum 60 minutes break deduct
+    const breakMinutes = Math.min(
+      attendance.totalBreakTime,
+      60
+    );
+
+    totalMinutes -= breakMinutes;
 
     if (totalMinutes < 0) {
       totalMinutes = 0;
@@ -229,22 +224,15 @@ exports.checkOut = async (req, res) => {
       (totalMinutes / 60).toFixed(2)
     );
 
-    // ================= STATUS =================
-
     if (attendance.totalWorkTime >= 8) {
       attendance.status = "present";
-    } else if (
-      attendance.totalWorkTime > 0 &&
-      attendance.totalWorkTime < 8
-    ) {
-      attendance.status = "half-day";
     } else {
-      attendance.status = "absent";
+      attendance.status = "half-day";
     }
 
     await attendance.save();
 
-    res.json({
+    res.status(200).json({
       success: true,
       message: "Check-Out Successful",
       data: attendance,

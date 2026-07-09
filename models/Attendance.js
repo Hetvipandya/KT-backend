@@ -2,9 +2,20 @@ const mongoose = require("mongoose");
 
 const breakSchema = new mongoose.Schema(
   {
-    startTime: Date,
-    endTime: Date,
-    duration: Number, // in minutes
+    startTime: {
+      type: Date,
+      required: true,
+    },
+
+    endTime: {
+      type: Date,
+      default: null,
+    },
+
+    duration: {
+      type: Number,
+      default: 0, // Minutes
+    },
   },
   { _id: false }
 );
@@ -13,7 +24,7 @@ const attendanceSchema = new mongoose.Schema(
   {
     userId: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "User", // Employee or Intern
+      ref: "User",
       required: true,
     },
 
@@ -24,42 +35,54 @@ const attendanceSchema = new mongoose.Schema(
     },
 
     date: {
-      type: String, // "2026-06-04"
+      type: String,
       required: true,
     },
 
     checkInTime: Date,
+
     checkOutTime: Date,
 
     breaks: [breakSchema],
 
     totalBreakTime: {
       type: Number,
-      default: 0, // minutes
+      default: 0, // Minutes
     },
 
-    totalWorkTime: { 
+    totalWorkTime: {
       type: Number,
-      default: 0, // minutes
+      default: 0, // Hours
     },
 
- status: {
-  type: String,
-  enum: [
-    "present",
-    "absent",
-    "half-day",
-    "leave"
-  ],
-  default: "absent",
-},
+    isLate: {
+      type: Boolean,
+      default: false,
+    },
 
-isLate: {
-  type: Boolean,
-  default: false,
-},
+    status: {
+      type: String,
+      enum: [
+        "present",
+        "half-day",
+        "absent",
+        "leave",
+      ],
+      default: "present",
+    },
   },
-  { timestamps: true }
+  {
+    timestamps: true,
+  }
 );
 
-module.exports = mongoose.model("Attendance", attendanceSchema);
+// One attendance per user per day
+attendanceSchema.index(
+  { userId: 1, date: 1 },
+  { unique: true }
+);
+
+module.exports = mongoose.model(
+  "Attendance",
+  attendanceSchema
+);
