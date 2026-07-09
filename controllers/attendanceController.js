@@ -24,41 +24,48 @@ exports.checkIn = async (req, res) => {
       });
     }
 
-const now = new Date();
+    // Current UTC Time
+    const now = new Date();
 
-const officeTime = new Date();
+    // Convert to IST
+    const istNow = new Date(
+      now.toLocaleString("en-US", {
+        timeZone: "Asia/Kolkata",
+      })
+    );
 
-const [hour, minute] = OFFICE_START_TIME.split(":");
+    // Office Grace Time (10:10 AM IST)
+    const officeTime = new Date(istNow);
+    officeTime.setHours(10, 10, 0, 0);
 
-officeTime.setHours(
-  Number(hour),
-  Number(minute),
-  0,
-  0
-);
+    // After 10:10 => Late
+    const isLate = istNow > officeTime;
 
-// 10:10 પછી આવશે તો Late
-const isLate = now > officeTime;
+    // Debug Logs (optional)
+    console.log("UTC Time:", now);
+    console.log("IST Time:", istNow);
+    console.log("Office Time:", officeTime);
+    console.log("Late:", isLate);
 
-const attendance = await Attendance.create({
-  userId,
-  userType,
-  date,
-  checkInTime: now,
-  isLate,
-  status: "present",
-});
+    const attendance = await Attendance.create({
+      userId,
+      userType,
+      date,
+      checkInTime: now, // Store actual UTC time in DB
+      isLate,
+      status: "present",
+    });
 
-res.status(201).json({
-  success: true,
-  message: isLate
-    ? "Late Check-In Successful"
-    : "Check-In Successful",
-  data: attendance,
-});
+    return res.status(201).json({
+      success: true,
+      message: isLate
+        ? "Late Check-In Successful"
+        : "Check-In Successful",
+      data: attendance,
+    });
 
   } catch (err) {
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: err.message,
     });
