@@ -1,4 +1,5 @@
 const AdjustmentRequest = require("../models/AdjustmentRequest");
+const Attendance = require("../models/Attendance");
 
 
 // ==========================================
@@ -313,61 +314,142 @@ message:error.message,
 // Admin Approve / Reject
 // ==========================================
 
-exports.updateAdjustmentStatus =
-async(req,res)=>{
+exports.updateAdjustmentStatus = async (req, res) => {
+  try {
 
-try{
+    const {
+      status,
+      adminDecision,
+      adminNote
+    } = req.body;
 
-const {
-status,
-adminDecision,
-adminNote,
-}=req.body;
+    const request =
+      await AdjustmentRequest.findById(req.params.id);
 
-const request =
-await AdjustmentRequest.findById(
-req.params.id
-);
+    if (!request) {
+      return res.status(404).json({
+        success: false,
+        message: "Adjustment request not found"
+      });
+    }
 
-if(!request){
+    request.status = status;
+    request.adminDecision = adminDecision || null;
+    request.adminNote = adminNote || "";
+    request.resolvedAt = new Date();
 
-return res.status(404).json({
-success:false,
-message:"Request not found.",
-});
+    // ==========================
+    // Update Attendance
+    // ==========================
 
-}
+    if (status === "approved") {
 
-request.status=status;
+      const attendance =
+        await Attendance.findOne({
+          userId: request.employeeId,
+          date: request.date
+        });
 
-if(status=="approved"){
+      if (!attendance) {
+        return res.status(404).json({
+          success: false,
+          message: "Attendance not found."
+        });
+      }
 
-request.adminDecision=
-adminDecision;
+      // First Session
+      if (
+        request.sessions &&
+        request.sessions.length > 0
+      ) {
 
-}
+        const first =
+          request.sessions[0];
 
-request.adminNote=
-adminNote || "";
+        const last =
+          request.sessions[
+          request.sessions.length - 1
+          ];
 
-request.resolvedAt=
-new Date();
+        // Check In
+        if (first.checkin) {
 
-await request.save();
+          const checkIn =
+            new Date(
+              `${request.date}T${first.checkin}:00`
+            );
 
-res.json({
-success:true,
-message:"Status updated successfully.",
-data:request,
-});
+          attendance.checkInTime =
+            checkIn;
 
-}catch(error){
+          attendance.approvedCheckInTime =
+            checkIn;
+        }
 
-res.status(500).json({
-success:false,
-message:error.message,
-});
+        // Check Out
+        if (last.checkout) {
 
-}
+          const checkOut =
+            new Date(
+              `${request.date}T${last.checkout}:00`
+            );
 
+          attendance.checkOutTime =
+            checkOut;
+
+          let totalMinutes =
+            (checkOut -
+              attendance.checkInTime) /
+            (1000 * 60);
+
+          totalMinutes -=
+            Math.min(
+              attendance.totalBreakTime,
+              60
+            );
+
+          if (totalMinutes < 0)
+            totalMinutes = 0;
+
+          attendance.totalWorkTime =
+            Number(
+              (
+                totalMinutes / 60
+              ).toFixed(2)
+            );
+        }
+
+      }
+
+      // Attendance Status
+
+      if (adminDecision) {
+        attendance.status =
+          adminDecision;
+      }
+
+      attendance.approvalStatus =
+        "approved";
+
+      await attendance.save();
+
+    }
+
+    await request.save();
+
+    res.json({
+      success: true,
+      message:
+        "Adjustment processed successfully.",
+      data: request
+    });
+
+  } catch (err) {
+
+    res.status(500).json({
+      success: false,
+      message: err.message
+    });
+
+  }
 };
