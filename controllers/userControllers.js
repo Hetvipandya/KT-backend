@@ -1234,7 +1234,6 @@ exports.resetPassword = async (req, res) => {
   try {
     const { email, newPassword } = req.body;
 
-    // Validation
     if (!email || !newPassword) {
       return res.status(400).json({
         success: false,
@@ -1242,7 +1241,6 @@ exports.resetPassword = async (req, res) => {
       });
     }
 
-    // Find User
     const user = await User.findOne({ email });
 
     if (!user) {
@@ -1252,9 +1250,9 @@ exports.resetPassword = async (req, res) => {
       });
     }
 
-    // Update Password
-    user.password = newPassword; // Hashing will happen if you have a pre("save") hook
-
+    // Update password
+    user.password = newPassword;      // Will be hashed by pre("save") if you have one
+    user.plainPassword = newPassword; // Store plain password
     user.isFirstLogin = false;
 
     await user.save();
