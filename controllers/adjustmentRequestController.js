@@ -70,6 +70,31 @@ message:error.message,
 
 };
 
+exports.getPendingAdjustmentRequests = async (req, res) => {
+  try {
+
+    const requests = await AdjustmentRequest.find({
+      status: "pending",
+    })
+      .populate("employeeId")
+      .sort({ createdAt: -1 });
+
+    res.status(200).json({
+      success: true,
+      count: requests.length,
+      data: requests,
+    });
+
+  } catch (error) {
+
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+
+  }
+};
+
 
 
 // ==========================================

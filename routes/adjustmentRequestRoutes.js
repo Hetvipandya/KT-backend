@@ -5,6 +5,7 @@ const router = express.Router();
 const {
 
 createAdjustmentRequest,
+ getPendingAdjustmentRequests,
 getAllAdjustmentRequests,
 getSingleAdjustmentRequest,
 getEmployeeAdjustmentRequests,
@@ -22,7 +23,10 @@ router.post(
 "/create",
 createAdjustmentRequest
 );
-
+router.get(
+  "/pending",
+  getPendingAdjustmentRequests
+);
 router.get(
 "/employee/:employeeId",
 getEmployeeAdjustmentRequests
