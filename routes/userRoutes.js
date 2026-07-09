@@ -67,7 +67,7 @@ router.post(
 ); //done
 
 // ================= RESET PASSWORD =================
-router.post(
+router.put(
   "/reset-password",
   resetPassword
 ); //done
