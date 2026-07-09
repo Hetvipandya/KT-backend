@@ -1230,94 +1230,46 @@ exports.forgotPassword =
   };
 
 // ================= RESET PASSWORD =================
-exports.resetPassword =
-  async (req, res) => {
-    try {
-      const {
-        email,
-        otp,
-        newPassword,
-      } = req.body;
+exports.resetPassword = async (req, res) => {
+  try {
+    const { email, newPassword } = req.body;
 
-      const user =
-        await User.findOne(
-          {
-            email,
-          }
-        );
-
-      if (!user) {
-        return res
-          .status(404)
-          .json({
-            success:
-              false,
-            message:
-              "User not found",
-          });
-      }
-
-      if (
-        user.forgotPasswordOTP !==
-        otp
-      ) {
-        return res
-          .status(400)
-          .json({
-            success:
-              false,
-            message:
-              "Invalid OTP",
-          });
-      }
-
-      if (
-        user.otpExpireTime <
-        new Date()
-      ) {
-        return res
-          .status(400)
-          .json({
-            success:
-              false,
-            message:
-              "OTP expired",
-          });
-      }
-
-      user.password =
-        newPassword;
-
-      user.forgotPasswordOTP =
-        null;
-
-      user.otpExpireTime =
-        null;
-
-      user.otpVerified =
-        false;
-
-      await user.save();
-
-      res.json({
-        success:
-          true,
-        message:
-          "Password reset successfully",
+    // Validation
+    if (!email || !newPassword) {
+      return res.status(400).json({
+        success: false,
+        message: "Email and new password are required",
       });
-    } catch (
-      error
-    ) {
-      res
-        .status(500)
-        .json({
-          success:
-            false,
-          message:
-            error.message,
-        });
     }
-  };
+
+    // Find User
+    const user = await User.findOne({ email });
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    // Update Password
+    user.password = newPassword; // Hashing will happen if you have a pre("save") hook
+
+    user.isFirstLogin = false;
+
+    await user.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "Password reset successfully",
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
 
 // ================= REFRESH TOKEN =================
 exports.refreshUserToken =

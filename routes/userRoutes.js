@@ -31,7 +31,7 @@ router.put(
 );
 
 router.get(
-  "/profile",
+  "/profile", 
   protect,
   getMyProfile
 );
