@@ -17,24 +17,65 @@ const getISTDateParts = (date = new Date()) => {
   return Object.fromEntries(parts.map(({ type, value }) => [type, value]));
 };
 
-const getISTDate = (date = new Date()) => {
-  const parts = getISTDateParts(date);
-
-  return new Date(
-    Date.UTC(
-      Number(parts.year),
-      Number(parts.month) - 1,
-      Number(parts.day),
-      Number(parts.hour),
-      Number(parts.minute),
-      Number(parts.second)
-    )
-  );
-};
-
 const getToday = (date = new Date()) => {
   const parts = getISTDateParts(date);
   return `${parts.year}-${parts.month}-${parts.day}`;
+};
+
+const formatISTTime = (value) => {
+  if (!value) return null;
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Kolkata",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  }).formatToParts(date);
+
+  const hour = parts.find((part) => part.type === "hour")?.value;
+  const minute = parts.find((part) => part.type === "minute")?.value;
+  const meridiem = parts.find((part) => part.type === "dayPeriod")?.value;
+
+  return `${hour}:${minute}${meridiem}`;
+};
+
+const formatAttendanceDocument = (attendance) => {
+  if (!attendance) return attendance;
+
+  const plainAttendance =
+    attendance.toObject?.() ?? JSON.parse(JSON.stringify(attendance));
+
+  const formatDateField = (fieldName) => {
+    if (plainAttendance[fieldName]) {
+      plainAttendance[`${fieldName}Display`] = formatISTTime(
+        plainAttendance[fieldName]
+      );
+    }
+  };
+
+  formatDateField("checkInTime");
+  formatDateField("checkOutTime");
+  formatDateField("approvedAt");
+  formatDateField("approvedCheckInTime");
+
+  if (plainAttendance.breaks?.length) {
+    plainAttendance.breaks = plainAttendance.breaks.map((breakItem) => ({
+      ...breakItem,
+      startTimeDisplay: formatISTTime(breakItem.startTime),
+      endTimeDisplay: formatISTTime(breakItem.endTime),
+    }));
+  }
+
+  if (plainAttendance.totalWorkTime != null) {
+    plainAttendance.totalWorkTimeDisplay = `${Number(
+      plainAttendance.totalWorkTime
+    ).toFixed(2)} hours`;
+  }
+
+  return plainAttendance;
 };
 
 const OFFICE_START_TIME = "10:10";
@@ -84,7 +125,7 @@ exports.checkIn = async (req, res) => {
       success: true,
       message:
         "Check-in request has been sent to the admin. Please wait for approval.",
-      data: attendance,
+      data: formatAttendanceDocument(attendance),
     });
 
   } catch (err) {
@@ -131,7 +172,7 @@ exports.startBreak = async (req, res) => {
     }
 
     attendance.breaks.push({
-      startTime: getISTDate(),
+      startTime: new Date(),
     });
 
     await attendance.save();
@@ -139,7 +180,7 @@ exports.startBreak = async (req, res) => {
     res.status(200).json({
       success: true,
       message: "Break started successfully",
-      data: attendance,
+      data: formatAttendanceDocument(attendance),
     });
 
   } catch (err) {
@@ -178,7 +219,7 @@ exports.endBreak = async (req, res) => {
       });
     }
 
-    activeBreak.endTime = getISTDate();
+    activeBreak.endTime = new Date();
 
     const duration =
       (activeBreak.endTime - activeBreak.startTime) /
@@ -196,7 +237,7 @@ exports.endBreak = async (req, res) => {
       success: true,
       message: "Break ended successfully",
       totalBreakTime: attendance.totalBreakTime,
-      data: attendance,
+      data: formatAttendanceDocument(attendance),
     });
 
   } catch (err) {
@@ -244,7 +285,7 @@ exports.checkOut = async (req, res) => {
     }
 
     // Current Checkout Time
-    attendance.checkOutTime = getISTDate();
+    attendance.checkOutTime = new Date();
 
     // Total Minutes
     let totalMinutes =
@@ -285,7 +326,7 @@ exports.checkOut = async (req, res) => {
       message: "Check-Out Successful",
       totalWorkTime: attendance.totalWorkTime,
       totalBreakTime: attendance.totalBreakTime,
-      data: attendance,
+      data: formatAttendanceDocument(attendance),
     });
 
   } catch (err) {
@@ -339,7 +380,7 @@ approvalStatus:"pending"
 
 res.json({
 success:true,
-data
+data: data.map(formatAttendanceDocument),
 });
 
 }
@@ -371,12 +412,17 @@ exports.approveAttendance = async (req, res) => {
       });
     }
 
-    const now = getISTDate();
+    const now = new Date();
+    const istNow = new Date(
+      now.toLocaleString("en-US", {
+        timeZone: "Asia/Kolkata",
+      })
+    );
 
-    const officeTime = new Date(now);
-    officeTime.setUTCHours(10, 10, 0, 0);
+    const officeTime = new Date(istNow);
+    officeTime.setHours(10, 10, 0, 0);
 
-    const isLate = now > officeTime;
+    const isLate = istNow > officeTime;
 
     // ================= APPROVAL =================
     attendance.approvalStatus = "approved";
@@ -396,7 +442,7 @@ exports.approveAttendance = async (req, res) => {
       message: isLate
         ? "Attendance Approved. Employee checked in as Late."
         : "Attendance Approved. Employee checked in successfully.",
-      data: attendance,
+      data: formatAttendanceDocument(attendance),
     });
 
   } catch (err) {
