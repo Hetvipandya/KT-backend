@@ -28,17 +28,18 @@ const formatISTTime = (value) => {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return null;
 
-  const parts = new Intl.DateTimeFormat("en-GB", {
+  const parts = new Intl.DateTimeFormat("en-US", {
     timeZone: "Asia/Kolkata",
-    hour: "2-digit",
+    hour: "numeric",
     minute: "2-digit",
-    hour12: false,
+    hour12: true,
   }).formatToParts(date);
 
   const hour = parts.find((part) => part.type === "hour")?.value;
   const minute = parts.find((part) => part.type === "minute")?.value;
+  const meridiem = parts.find((part) => part.type === "dayPeriod")?.value;
 
-  return `${hour}:${minute}`;
+  return `${hour}:${minute}${meridiem}`;
 };
 
 const formatAttendanceDocument = (attendance) => {
@@ -48,10 +49,10 @@ const formatAttendanceDocument = (attendance) => {
     attendance.toObject?.() ?? JSON.parse(JSON.stringify(attendance));
 
   const formatDateField = (fieldName) => {
-    if (plainAttendance[fieldName] != null) {
-      const formattedValue = formatISTTime(plainAttendance[fieldName]);
-      plainAttendance[`${fieldName}Display`] = formattedValue;
-      plainAttendance[fieldName] = formattedValue;
+    if (plainAttendance[fieldName]) {
+      plainAttendance[`${fieldName}Display`] = formatISTTime(
+        plainAttendance[fieldName]
+      );
     }
   };
 
@@ -61,29 +62,11 @@ const formatAttendanceDocument = (attendance) => {
   formatDateField("approvedCheckInTime");
 
   if (plainAttendance.breaks?.length) {
-    plainAttendance.breaks = plainAttendance.breaks.map((breakItem) => {
-      const formattedBreak = {
-        ...breakItem,
-        startTimeDisplay: formatISTTime(breakItem.startTime),
-        endTimeDisplay: formatISTTime(breakItem.endTime),
-      };
-
-      if (breakItem.startTime) {
-        formattedBreak.startTime = formatISTTime(breakItem.startTime);
-      }
-
-      if (breakItem.endTime) {
-        formattedBreak.endTime = formatISTTime(breakItem.endTime);
-      }
-
-      return formattedBreak;
-    });
-  }
-
-  if (plainAttendance.totalBreakTime != null) {
-    plainAttendance.totalBreakTimeDisplay = `${Number(
-      plainAttendance.totalBreakTime
-    ).toFixed(2)} minutes`;
+    plainAttendance.breaks = plainAttendance.breaks.map((breakItem) => ({
+      ...breakItem,
+      startTimeDisplay: formatISTTime(breakItem.startTime),
+      endTimeDisplay: formatISTTime(breakItem.endTime),
+    }));
   }
 
   if (plainAttendance.totalWorkTime != null) {
@@ -93,18 +76,6 @@ const formatAttendanceDocument = (attendance) => {
   }
 
   return plainAttendance;
-};
-
-const getISTNow = () => {
-  const parts = getISTDateParts(new Date());
-  return `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}:${parts.second}+05:30`;
-};
-
-const parseStoredISTTime = (value) => {
-  if (!value) return null;
-
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? null : date;
 };
 
 const OFFICE_START_TIME = "10:10";
@@ -201,7 +172,7 @@ exports.startBreak = async (req, res) => {
     }
 
     attendance.breaks.push({
-      startTime: getISTNow(),
+      startTime: new Date(),
     });
 
     await attendance.save();
@@ -248,13 +219,11 @@ exports.endBreak = async (req, res) => {
       });
     }
 
-    activeBreak.endTime = getISTNow();
-
-    const startTimeValue = parseStoredISTTime(activeBreak.startTime);
-    const endTimeValue = parseStoredISTTime(activeBreak.endTime);
+    activeBreak.endTime = new Date();
 
     const duration =
-      (endTimeValue - startTimeValue) / (1000 * 60);
+      (activeBreak.endTime - activeBreak.startTime) /
+      (1000 * 60);
 
     activeBreak.duration = Number(duration.toFixed(2));
 
@@ -316,7 +285,7 @@ exports.checkOut = async (req, res) => {
     }
 
     // Current Checkout Time
-    attendance.checkOutTime = getISTNow();
+    attendance.checkOutTime = new Date();
 
     // Total Minutes
     let totalMinutes =
@@ -368,7 +337,6 @@ exports.checkOut = async (req, res) => {
   }
 };
 
-// ================= ATTENDANCE REPORT =================
 exports.getAttendanceById = async (req, res) => {
   try {
     const { id } = req.params;
@@ -392,7 +360,7 @@ exports.getAttendanceById = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      data: formatAttendanceDocument(attendance),
+      data: attendance,
     });
 
   } catch (err) {
@@ -444,14 +412,16 @@ exports.approveAttendance = async (req, res) => {
       });
     }
 
-    const now = getISTNow();
-    const istNow = new Date(now);
+    const now = new Date();
+    const istNow = new Date(
+      now.toLocaleString("en-US", {
+        timeZone: "Asia/Kolkata",
+      })
+    );
 
-    // Office Grace Time (10:10 AM IST)
     const officeTime = new Date(istNow);
     officeTime.setHours(10, 10, 0, 0);
 
-    // Calculate Late Status
     const isLate = istNow > officeTime;
 
     // ================= APPROVAL =================
@@ -461,6 +431,7 @@ exports.approveAttendance = async (req, res) => {
 
     // ================= ACTUAL CHECK-IN =================
     attendance.checkInTime = now;
+    attendance.approvedCheckInTime = now;
     attendance.isLate = isLate;
     attendance.status = "present";
 
@@ -519,7 +490,7 @@ exports.getMyAttendanceHistory = async (req, res) => {
     res.status(200).json({
       success: true,
       count: attendance.length,
-      data: attendance.map(formatAttendanceDocument),
+      data: attendance,
     });
 
   } catch (err) {
@@ -547,7 +518,7 @@ exports.getAttendanceByDate = async (req, res) => {
     res.status(200).json({
       success: true,
       count: attendance.length,
-      data: attendance.map(formatAttendanceDocument),
+      data: attendance,
     });
 
   } catch (err) {
@@ -579,7 +550,7 @@ exports.getSingleAttendance = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      data: formatAttendanceDocument(attendance),
+      data: attendance,
     });
 
   } catch (err) {
@@ -609,7 +580,7 @@ exports.getMonthlyAttendance = async (req, res) => {
     res.status(200).json({
       success: true,
       count: attendance.length,
-      data: attendance.map(formatAttendanceDocument),
+      data: attendance,
     });
 
   } catch (err) {
