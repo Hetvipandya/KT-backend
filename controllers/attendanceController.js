@@ -1,9 +1,45 @@
 const Attendance = require("../models/Attendance");
 
-// ================= HELPER =================
 const getToday = () => new Date().toISOString().split("T")[0];
 
 const OFFICE_START_TIME = "10:10";
+
+// Convert UTC Date -> Indian Time
+const formatIST = (date) => {
+  if (!date) return null;
+
+  return new Intl.DateTimeFormat("en-IN", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: true,
+  }).format(new Date(date));
+};
+
+// Format Complete Attendance Object
+const formatAttendance = (attendance) => {
+  const data = attendance.toObject();
+
+  data.checkInTime = formatIST(data.checkInTime);
+  data.checkOutTime = formatIST(data.checkOutTime);
+  data.approvedAt = formatIST(data.approvedAt);
+  data.createdAt = formatIST(data.createdAt);
+  data.updatedAt = formatIST(data.updatedAt);
+
+  if (data.breaks && data.breaks.length) {
+    data.breaks = data.breaks.map((b) => ({
+      ...b,
+      startTime: formatIST(b.startTime),
+      endTime: formatIST(b.endTime),
+    }));
+  }
+
+  return data;
+};
 
 // ================= CHECK IN =================
 exports.checkIn = async (req, res) => {
@@ -50,7 +86,7 @@ exports.checkIn = async (req, res) => {
       success: true,
       message:
         "Check-in request has been sent to the admin. Please wait for approval.",
-      data: attendance,
+      data: formatAttendance(attendance)
     });
 
   } catch (err) {
@@ -105,7 +141,7 @@ exports.startBreak = async (req, res) => {
     res.status(200).json({
       success: true,
       message: "Break started successfully",
-      data: attendance,
+      data: formatAttendance(attendance)
     });
 
   } catch (err) {
@@ -162,7 +198,7 @@ exports.endBreak = async (req, res) => {
       success: true,
       message: "Break ended successfully",
       totalBreakTime: attendance.totalBreakTime,
-      data: attendance,
+      data: formatAttendance(attendance)
     });
 
   } catch (err) {
@@ -251,7 +287,7 @@ exports.checkOut = async (req, res) => {
       message: "Check-Out Successful",
       totalWorkTime: attendance.totalWorkTime,
       totalBreakTime: attendance.totalBreakTime,
-      data: attendance,
+     data: formatAttendance(attendance)
     });
 
   } catch (err) {
@@ -286,7 +322,7 @@ exports.getAttendanceById = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      data: attendance,
+  data: formatAttendance(attendance)
     });
 
   } catch (err) {
@@ -372,7 +408,7 @@ exports.approveAttendance = async (req, res) => {
       message: isLate
         ? "Attendance Approved. Employee checked in as Late."
         : "Attendance Approved. Employee checked in successfully.",
-      data: attendance,
+    data: formatAttendance(attendance),
     });
 
   } catch (err) {
@@ -420,7 +456,7 @@ exports.getMyAttendanceHistory = async (req, res) => {
     res.status(200).json({
       success: true,
       count: attendance.length,
-      data: attendance,
+    data: formatAttendance(attendance)
     });
 
   } catch (err) {
@@ -448,7 +484,7 @@ exports.getAttendanceByDate = async (req, res) => {
     res.status(200).json({
       success: true,
       count: attendance.length,
-      data: attendance,
+      data: formatAttendance(attendance)
     });
 
   } catch (err) {
@@ -480,7 +516,7 @@ exports.getSingleAttendance = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      data: attendance,
+      data: formatAttendance(attendance)
     });
 
   } catch (err) {
@@ -510,7 +546,7 @@ exports.getMonthlyAttendance = async (req, res) => {
     res.status(200).json({
       success: true,
       count: attendance.length,
-      data: attendance,
+     data: formatAttendance(attendance)
     });
 
   } catch (err) {
