@@ -262,38 +262,30 @@ exports.checkOut = async (req, res) => {
   }
 };
 
-// ================= ATTENDANCE REPORT =================
-exports.getReport = async (req, res) => {
+exports.getAttendanceById = async (req, res) => {
   try {
-    const { userId, from, to } =
-      req.query;
+    const { id } = req.params;
 
-    const query = {};
-
-    if (userId) {
-      query.userId = userId;
-    }
-
-    if (from && to) {
-      query.date = {
-        $gte: from,
-        $lte: to,
-      };
-    }
-
-    const data = await Attendance.find(query)
+    const attendance = await Attendance.findById(id)
       .populate(
         "userId",
-        "name email uniqueID department role"
+        "name email phoneNumber uniqueID department role"
       )
-      .sort({
-        date: -1,
+      .populate(
+        "approvedBy",
+        "name email role uniqueID"
+      );
+
+    if (!attendance) {
+      return res.status(404).json({
+        success: false,
+        message: "Attendance not found",
       });
+    }
 
     res.status(200).json({
       success: true,
-      count: data.length,
-      data,
+      data: attendance,
     });
 
   } catch (err) {

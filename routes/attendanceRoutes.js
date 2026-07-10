@@ -7,7 +7,7 @@ const {
   checkOut,
   startBreak,
   endBreak,
-  getReport,
+  getAttendanceById,
   getPendingAttendance,
   approveAttendance,
   rejectAttendance,
@@ -49,9 +49,9 @@ router.post(
 
 // ================= ATTENDANCE REPORT =================
 router.get(
-  "/report",
+  "/:id",
   protect,
-  getReport
+  getAttendanceById
 );
 
 // ================= PENDING ATTENDANCE =================
