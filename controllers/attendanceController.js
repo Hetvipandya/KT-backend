@@ -1,7 +1,88 @@
 const Attendance = require("../models/Attendance");
 
 // ================= HELPER =================
-const getToday = () => new Date().toISOString().split("T")[0];
+const getISTDateParts = (date = new Date()) => {
+  const formatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  });
+
+  const parts = formatter.formatToParts(date);
+  return Object.fromEntries(parts.map(({ type, value }) => [type, value]));
+};
+
+const getToday = (date = new Date()) => {
+  const parts = getISTDateParts(date);
+  return `${parts.year}-${parts.month}-${parts.day}`;
+};
+
+const formatISTTime = (value) => {
+  if (!value) return null;
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Kolkata",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  }).formatToParts(date);
+
+  const hour = parts.find((part) => part.type === "hour")?.value;
+  const minute = parts.find((part) => part.type === "minute")?.value;
+  const meridiem = parts.find((part) => part.type === "dayPeriod")?.value;
+
+  return `${hour}:${minute}${meridiem}`;
+};
+
+const formatAttendanceDocument = (attendance) => {
+  if (!attendance) return attendance;
+
+  const plainAttendance =
+    attendance.toObject?.() ?? JSON.parse(JSON.stringify(attendance));
+
+  const formatDateField = (fieldName) => {
+    if (plainAttendance[fieldName]) {
+      plainAttendance[`${fieldName}Display`] = formatISTTime(
+        plainAttendance[fieldName]
+      );
+    }
+  };
+
+  formatDateField("checkInTime");
+  formatDateField("checkOutTime");
+  formatDateField("approvedAt");
+  formatDateField("approvedCheckInTime");
+
+  if (plainAttendance.breaks?.length) {
+    plainAttendance.breaks = plainAttendance.breaks.map((breakItem) => ({
+      ...breakItem,
+      startTimeDisplay: formatISTTime(breakItem.startTime),
+      endTimeDisplay: formatISTTime(breakItem.endTime),
+    }));
+  }
+
+  if (plainAttendance.totalWorkTime != null) {
+    plainAttendance.totalWorkTimeDisplay = `${Number(
+      plainAttendance.totalWorkTime
+    ).toFixed(2)} hours`;
+  }
+
+  return plainAttendance;
+};
+
+const getISTNow = () => {
+  const parts = getISTDateParts(new Date());
+  const istValue = `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}:${parts.second}+05:30`;
+  return new Date(istValue);
+};
 
 const OFFICE_START_TIME = "10:10";
 
@@ -50,7 +131,7 @@ exports.checkIn = async (req, res) => {
       success: true,
       message:
         "Check-in request has been sent to the admin. Please wait for approval.",
-      data: attendance,
+      data: formatAttendanceDocument(attendance),
     });
 
   } catch (err) {
@@ -97,7 +178,7 @@ exports.startBreak = async (req, res) => {
     }
 
     attendance.breaks.push({
-      startTime: new Date(),
+      startTime: getISTNow(),
     });
 
     await attendance.save();
@@ -105,7 +186,7 @@ exports.startBreak = async (req, res) => {
     res.status(200).json({
       success: true,
       message: "Break started successfully",
-      data: attendance,
+      data: formatAttendanceDocument(attendance),
     });
 
   } catch (err) {
@@ -144,7 +225,7 @@ exports.endBreak = async (req, res) => {
       });
     }
 
-    activeBreak.endTime = new Date();
+    activeBreak.endTime = getISTNow();
 
     const duration =
       (activeBreak.endTime - activeBreak.startTime) /
@@ -162,7 +243,7 @@ exports.endBreak = async (req, res) => {
       success: true,
       message: "Break ended successfully",
       totalBreakTime: attendance.totalBreakTime,
-      data: attendance,
+      data: formatAttendanceDocument(attendance),
     });
 
   } catch (err) {
@@ -210,7 +291,7 @@ exports.checkOut = async (req, res) => {
     }
 
     // Current Checkout Time
-    attendance.checkOutTime = new Date();
+    attendance.checkOutTime = getISTNow();
 
     // Total Minutes
     let totalMinutes =
@@ -251,7 +332,7 @@ exports.checkOut = async (req, res) => {
       message: "Check-Out Successful",
       totalWorkTime: attendance.totalWorkTime,
       totalBreakTime: attendance.totalBreakTime,
-      data: attendance,
+      data: formatAttendanceDocument(attendance),
     });
 
   } catch (err) {
@@ -286,7 +367,7 @@ exports.getAttendanceById = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      data: attendance,
+      data: formatAttendanceDocument(attendance),
     });
 
   } catch (err) {
@@ -306,7 +387,7 @@ approvalStatus:"pending"
 
 res.json({
 success:true,
-data
+data: data.map(formatAttendanceDocument),
 });
 
 }
@@ -338,15 +419,8 @@ exports.approveAttendance = async (req, res) => {
       });
     }
 
-    // Current UTC Time
-    const now = new Date();
-
-    // Current IST Time
-    const istNow = new Date(
-      now.toLocaleString("en-US", {
-        timeZone: "Asia/Kolkata",
-      })
-    );
+    const now = getISTNow();
+    const istNow = now;
 
     // Office Grace Time (10:10 AM IST)
     const officeTime = new Date(istNow);
@@ -372,7 +446,7 @@ exports.approveAttendance = async (req, res) => {
       message: isLate
         ? "Attendance Approved. Employee checked in as Late."
         : "Attendance Approved. Employee checked in successfully.",
-      data: attendance,
+      data: formatAttendanceDocument(attendance),
     });
 
   } catch (err) {
@@ -420,7 +494,7 @@ exports.getMyAttendanceHistory = async (req, res) => {
     res.status(200).json({
       success: true,
       count: attendance.length,
-      data: attendance,
+      data: attendance.map(formatAttendanceDocument),
     });
 
   } catch (err) {
@@ -448,7 +522,7 @@ exports.getAttendanceByDate = async (req, res) => {
     res.status(200).json({
       success: true,
       count: attendance.length,
-      data: attendance,
+      data: attendance.map(formatAttendanceDocument),
     });
 
   } catch (err) {
@@ -480,7 +554,7 @@ exports.getSingleAttendance = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      data: attendance,
+      data: formatAttendanceDocument(attendance),
     });
 
   } catch (err) {
@@ -510,7 +584,7 @@ exports.getMonthlyAttendance = async (req, res) => {
     res.status(200).json({
       success: true,
       count: attendance.length,
-      data: attendance,
+      data: attendance.map(formatAttendanceDocument),
     });
 
   } catch (err) {
