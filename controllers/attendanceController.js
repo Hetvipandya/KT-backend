@@ -97,8 +97,14 @@ const formatAttendanceDocument = (attendance) => {
 
 const getISTNow = () => {
   const parts = getISTDateParts(new Date());
-  const istValue = `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}:${parts.second}+05:30`;
-  return new Date(istValue);
+  return `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}:${parts.second}+05:30`;
+};
+
+const parseStoredISTTime = (value) => {
+  if (!value) return null;
+
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
 };
 
 const OFFICE_START_TIME = "10:10";
@@ -244,9 +250,11 @@ exports.endBreak = async (req, res) => {
 
     activeBreak.endTime = getISTNow();
 
+    const startTimeValue = parseStoredISTTime(activeBreak.startTime);
+    const endTimeValue = parseStoredISTTime(activeBreak.endTime);
+
     const duration =
-      (activeBreak.endTime - activeBreak.startTime) /
-      (1000 * 60);
+      (endTimeValue - startTimeValue) / (1000 * 60);
 
     activeBreak.duration = Number(duration.toFixed(2));
 
@@ -437,7 +445,7 @@ exports.approveAttendance = async (req, res) => {
     }
 
     const now = getISTNow();
-    const istNow = now;
+    const istNow = new Date(now);
 
     // Office Grace Time (10:10 AM IST)
     const officeTime = new Date(istNow);
