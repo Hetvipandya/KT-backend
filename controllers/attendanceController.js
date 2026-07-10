@@ -22,23 +22,30 @@ const formatIST = (date) => {
 
 // Format Complete Attendance Object
 const formatAttendance = (attendance) => {
-  const data = attendance.toObject();
 
-  data.checkInTime = formatIST(data.checkInTime);
-  data.checkOutTime = formatIST(data.checkOutTime);
-  data.approvedAt = formatIST(data.approvedAt);
-  data.createdAt = formatIST(data.createdAt);
-  data.updatedAt = formatIST(data.updatedAt);
+    if (!attendance) return null;
 
-  if (data.breaks && data.breaks.length) {
-    data.breaks = data.breaks.map((b) => ({
-      ...b,
-      startTime: formatIST(b.startTime),
-      endTime: formatIST(b.endTime),
-    }));
-  }
+    const data = attendance.toObject
+        ? attendance.toObject()
+        : attendance;
 
-  return data;
+    data.checkInTime = formatIST(data.checkInTime);
+    data.checkOutTime = formatIST(data.checkOutTime);
+    data.approvedAt = formatIST(data.approvedAt);
+    data.approvedCheckInTime = formatIST(data.approvedCheckInTime);
+
+    data.createdAt = formatIST(data.createdAt);
+    data.updatedAt = formatIST(data.updatedAt);
+
+    if (data.breaks?.length) {
+        data.breaks = data.breaks.map((b) => ({
+            ...b,
+            startTime: formatIST(b.startTime),
+            endTime: formatIST(b.endTime),
+        }));
+    }
+
+    return data;
 };
 
 // ================= CHECK IN =================
@@ -341,10 +348,9 @@ approvalStatus:"pending"
 .populate("userId","name uniqueID role");
 
 res.json({
-success:true,
-data
+    success: true,
+    data: data.map((item) => formatAttendance(item))
 });
-
 }
 
 exports.approveAttendance = async (req, res) => {
@@ -456,7 +462,7 @@ exports.getMyAttendanceHistory = async (req, res) => {
     res.status(200).json({
       success: true,
       count: attendance.length,
-    data: formatAttendance(attendance)
+  data: attendance.map((item) => formatAttendance(item))
     });
 
   } catch (err) {
@@ -484,7 +490,7 @@ exports.getAttendanceByDate = async (req, res) => {
     res.status(200).json({
       success: true,
       count: attendance.length,
-      data: formatAttendance(attendance)
+      data: attendance.map((item) => formatAttendance(item))
     });
 
   } catch (err) {
@@ -546,7 +552,7 @@ exports.getMonthlyAttendance = async (req, res) => {
     res.status(200).json({
       success: true,
       count: attendance.length,
-     data: formatAttendance(attendance)
+     data: attendance.map((item) => formatAttendance(item))
     });
 
   } catch (err) {
