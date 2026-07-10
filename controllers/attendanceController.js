@@ -77,10 +77,19 @@ const formatAttendanceDocument = (attendance) => {
   return plainAttendance;
 };
 
+// FIXED: Proper IST date creation
 const getISTNow = () => {
   const parts = getISTDateParts(new Date());
-  const istValue = `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}:${parts.second}+05:30`;
-  return new Date(istValue);
+  // Create ISO string without timezone conversion issues
+  const isoString = `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}:${parts.second}.000+05:30`;
+  return new Date(isoString);
+};
+
+// FIXED: Get proper office time in IST
+const getOfficeTimeIST = (date = new Date()) => {
+  const parts = getISTDateParts(date);
+  // Create office time at 10:10 AM IST
+  return new Date(`${parts.year}-${parts.month}-${parts.day}T10:10:00.000+05:30`);
 };
 
 const OFFICE_START_TIME = "10:10";
@@ -292,10 +301,12 @@ exports.checkOut = async (req, res) => {
     // Current Checkout Time
     attendance.checkOutTime = getISTNow();
 
-    // Total Minutes
+    // Total Minutes - FIXED: Proper date comparison
+    const checkInDate = new Date(checkInTime);
+    const checkOutDate = new Date(attendance.checkOutTime);
+    
     let totalMinutes =
-      (attendance.checkOutTime.getTime() -
-        new Date(checkInTime).getTime()) /
+      (checkOutDate.getTime() - checkInDate.getTime()) /
       (1000 * 60);
 
     // Deduct Break Time (Maximum 60 Minutes)
@@ -377,7 +388,7 @@ exports.getAttendanceById = async (req, res) => {
   }
 };
 
-  exports.getPendingAttendance = async(req,res)=>{
+exports.getPendingAttendance = async(req,res)=>{
 
 const data = await Attendance.find({
 approvalStatus:"pending"
@@ -391,6 +402,7 @@ data: data.map(formatAttendanceDocument),
 
 }
 
+// ================= APPROVE ATTENDANCE - FIXED =================
 exports.approveAttendance = async (req, res) => {
   try {
     const { attendanceId, adminId } = req.body;
@@ -418,15 +430,15 @@ exports.approveAttendance = async (req, res) => {
       });
     }
 
+    // Get current IST time
     const now = getISTNow();
-    const istNow = now;
-
-    // Office Grace Time (10:10 AM IST)
-    const officeTime = new Date(istNow);
-    officeTime.setHours(10, 10, 0, 0);
-
-    // Calculate Late Status
-    const isLate = istNow > officeTime;
+    
+    // Get office time at 10:10 AM IST for TODAY
+    const officeTime = getOfficeTimeIST(now);
+    
+    // FIXED: Proper comparison - Check if now is after office time
+    // Compare timestamps directly, not dates
+    const isLate = now.getTime() > officeTime.getTime();
 
     // ================= APPROVAL =================
     attendance.approvalStatus = "approved";
@@ -443,7 +455,7 @@ exports.approveAttendance = async (req, res) => {
     return res.status(200).json({
       success: true,
       message: isLate
-        ? "Attendance Approved. Employee checked in as Late."
+        ? `Attendance Approved. Employee checked in as Late. (Checked in at ${formatISTTime(now)})`
         : "Attendance Approved. Employee checked in successfully.",
       data: formatAttendanceDocument(attendance),
     });
