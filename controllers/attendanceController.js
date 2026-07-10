@@ -2,21 +2,22 @@ const Attendance = require("../models/Attendance");
 
 // ================= HELPER FUNCTIONS =================
 
+const pad = (value) => String(value).padStart(2, "0");
+
 // Get IST date parts from any date
 const getISTDateParts = (date = new Date()) => {
-  const formatter = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Kolkata",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: false,
-  });
+  const utc = date.getTime() + date.getTimezoneOffset() * 60000;
+  const istOffset = 5.5 * 60 * 60000;
+  const istDate = new Date(utc + istOffset);
 
-  const parts = formatter.formatToParts(date);
-  return Object.fromEntries(parts.map(({ type, value }) => [type, value]));
+  return {
+    year: istDate.getFullYear(),
+    month: pad(istDate.getMonth() + 1),
+    day: pad(istDate.getDate()),
+    hour: pad(istDate.getHours()),
+    minute: pad(istDate.getMinutes()),
+    second: pad(istDate.getSeconds()),
+  };
 };
 
 // Get today's date in IST format (YYYY-MM-DD)
@@ -128,24 +129,37 @@ const formatAttendanceDocument = (attendance) => {
   return plainAttendance;
 };
 
-// Get current time in IST as Date object
+// Convert IST parts to a UTC Date object representing the same instant
+const getISTDateFromParts = ({ year, month, day, hour, minute, second }) => {
+  const utcHour = Number(hour) - 5;
+  const utcMinute = Number(minute) - 30;
+  return new Date(Date.UTC(
+    Number(year),
+    Number(month) - 1,
+    Number(day),
+    utcHour,
+    utcMinute,
+    Number(second)
+  ));
+};
+
+// Get current time in IST as a Date object representing the current instant
 const getISTNow = () => {
   const now = new Date();
   const parts = getISTDateParts(now);
-  
-  // Create date in IST with +05:30 offset
-  const istDate = new Date(`${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}:${parts.second}.000+05:30`);
-  return istDate;
+  return getISTDateFromParts(parts);
 };
 
 // Get office time at 10:10 AM IST
 const getOfficeTimeIST = () => {
   const now = new Date();
   const parts = getISTDateParts(now);
-  
-  // Create office time at 10:10 AM IST
-  const officeDate = new Date(`${parts.year}-${parts.month}-${parts.day}T10:10:00.000+05:30`);
-  return officeDate;
+  return getISTDateFromParts({
+    ...parts,
+    hour: "10",
+    minute: "10",
+    second: "00",
+  });
 };
 
 // Check if current time is late (after 10:10 AM IST)
