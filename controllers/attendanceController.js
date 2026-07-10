@@ -28,18 +28,17 @@ const formatISTTime = (value) => {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return null;
 
-  const parts = new Intl.DateTimeFormat("en-US", {
+  const parts = new Intl.DateTimeFormat("en-GB", {
     timeZone: "Asia/Kolkata",
-    hour: "numeric",
+    hour: "2-digit",
     minute: "2-digit",
-    hour12: true,
+    hour12: false,
   }).formatToParts(date);
 
   const hour = parts.find((part) => part.type === "hour")?.value;
   const minute = parts.find((part) => part.type === "minute")?.value;
-  const meridiem = parts.find((part) => part.type === "dayPeriod")?.value;
 
-  return `${hour}:${minute}${meridiem}`;
+  return `${hour}:${minute}`;
 };
 
 const formatAttendanceDocument = (attendance) => {
