@@ -3,18 +3,18 @@ const mongoose = require("mongoose");
 const breakSchema = new mongoose.Schema(
   {
     startTime: {
-      type: String,
+      type: Date,
       required: true,
     },
 
     endTime: {
-      type: String,
+      type: Date,
       default: null,
     },
 
     duration: {
       type: Number,
-      default: 0,
+      default: 0, // Minutes
     },
   },
   { _id: false }
@@ -39,27 +39,20 @@ const attendanceSchema = new mongoose.Schema(
       required: true,
     },
 
-    // IST Time String
-    checkInTime: {
-      type: String,
-      default: null,
-    },
+    checkInTime: Date,
 
-    checkOutTime: {
-      type: String,
-      default: null,
-    },
+    checkOutTime: Date,
 
     breaks: [breakSchema],
 
     totalBreakTime: {
       type: Number,
-      default: 0,
+      default: 0, // Minutes
     },
 
     totalWorkTime: {
       type: Number,
-      default: 0,
+      default: 0, // Hours
     },
 
     isLate: {
@@ -79,30 +72,19 @@ const attendanceSchema = new mongoose.Schema(
     },
 
     approvalStatus: {
-      type: String,
-      enum: [
-        "pending",
-        "approved",
-        "rejected",
-      ],
-      default: "pending",
-    },
+  type: String,
+  enum: ["pending", "approved", "rejected"],
+  default: "pending",
+},
 
-    approvedBy: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "User",
-      default: null,
-    },
+approvedBy: {
+  type: mongoose.Schema.Types.ObjectId,
+  ref: "User",
+},
 
-    approvedAt: {
-      type: String,
-      default: null,
-    },
+approvedAt: Date,
 
-    approvedCheckInTime: {
-      type: String,
-      default: null,
-    },
+approvedCheckInTime: Date,
   },
   {
     timestamps: true,
@@ -111,13 +93,8 @@ const attendanceSchema = new mongoose.Schema(
 
 // One attendance per user per day
 attendanceSchema.index(
-  {
-    userId: 1,
-    date: 1,
-  },
-  {
-    unique: true,
-  }
+  { userId: 1, date: 1 },
+  { unique: true }
 );
 
 module.exports = mongoose.model(
