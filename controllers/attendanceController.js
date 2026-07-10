@@ -1,6 +1,8 @@
 const Attendance = require("../models/Attendance");
 
-// ================= HELPER =================
+// ================= HELPER FUNCTIONS =================
+
+// Get IST date parts from any date
 const getISTDateParts = (date = new Date()) => {
   const formatter = new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Kolkata",
@@ -17,11 +19,13 @@ const getISTDateParts = (date = new Date()) => {
   return Object.fromEntries(parts.map(({ type, value }) => [type, value]));
 };
 
+// Get today's date in IST format (YYYY-MM-DD)
 const getToday = (date = new Date()) => {
   const parts = getISTDateParts(date);
   return `${parts.year}-${parts.month}-${parts.day}`;
 };
 
+// Format time in IST (HH:MM)
 const formatISTTime = (value) => {
   if (!value) return null;
 
@@ -41,15 +45,48 @@ const formatISTTime = (value) => {
   return `${hour}:${minute}`;
 };
 
+// Format full date time in IST
+const formatISTDateTime = (value) => {
+  if (!value) return null;
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  }).formatToParts(date);
+
+  const year = parts.find((p) => p.type === "year")?.value;
+  const month = parts.find((p) => p.type === "month")?.value;
+  const day = parts.find((p) => p.type === "day")?.value;
+  const hour = parts.find((p) => p.type === "hour")?.value;
+  const minute = parts.find((p) => p.type === "minute")?.value;
+  const second = parts.find((p) => p.type === "second")?.value;
+
+  return `${year}-${month}-${day} ${hour}:${minute}:${second}`;
+};
+
+// Format attendance document for response
 const formatAttendanceDocument = (attendance) => {
   if (!attendance) return attendance;
 
   const plainAttendance =
     attendance.toObject?.() ?? JSON.parse(JSON.stringify(attendance));
 
+  // Add display fields for all date fields
   const formatDateField = (fieldName) => {
     if (plainAttendance[fieldName]) {
       plainAttendance[`${fieldName}Display`] = formatISTTime(
+        plainAttendance[fieldName]
+      );
+      plainAttendance[`${fieldName}FullDisplay`] = formatISTDateTime(
         plainAttendance[fieldName]
       );
     }
@@ -60,34 +97,48 @@ const formatAttendanceDocument = (attendance) => {
   formatDateField("approvedAt");
   formatDateField("approvedCheckInTime");
 
+  // Format breaks
   if (plainAttendance.breaks?.length) {
     plainAttendance.breaks = plainAttendance.breaks.map((breakItem) => ({
       ...breakItem,
       startTimeDisplay: formatISTTime(breakItem.startTime),
       endTimeDisplay: formatISTTime(breakItem.endTime),
+      startTimeFullDisplay: formatISTDateTime(breakItem.startTime),
+      endTimeFullDisplay: formatISTDateTime(breakItem.endTime),
     }));
   }
 
+  // Format total work time
   if (plainAttendance.totalWorkTime != null) {
-    plainAttendance.totalWorkTimeDisplay = `${Number(
+    const hours = Math.floor(plainAttendance.totalWorkTime);
+    const minutes = Math.round((plainAttendance.totalWorkTime - hours) * 60);
+    plainAttendance.totalWorkTimeDisplay = `${hours}h ${minutes}m`;
+    plainAttendance.totalWorkTimeHours = `${Number(
       plainAttendance.totalWorkTime
     ).toFixed(2)} hours`;
+  }
+
+  // Format total break time
+  if (plainAttendance.totalBreakTime != null) {
+    const hours = Math.floor(plainAttendance.totalBreakTime / 60);
+    const minutes = Math.round(plainAttendance.totalBreakTime % 60);
+    plainAttendance.totalBreakTimeDisplay = `${hours}h ${minutes}m`;
   }
 
   return plainAttendance;
 };
 
-// FIXED: Get current time in IST
+// Get current time in IST as Date object
 const getISTNow = () => {
   const now = new Date();
   const parts = getISTDateParts(now);
   
-  // Create date in IST
+  // Create date in IST with +05:30 offset
   const istDate = new Date(`${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}:${parts.second}.000+05:30`);
   return istDate;
 };
 
-// FIXED: Get office time at 10:10 AM IST
+// Get office time at 10:10 AM IST
 const getOfficeTimeIST = () => {
   const now = new Date();
   const parts = getISTDateParts(now);
@@ -97,11 +148,27 @@ const getOfficeTimeIST = () => {
   return officeDate;
 };
 
-// NEW: Get IST time as UTC string for storage
-const getISTTimeForStorage = () => {
+// Check if current time is late (after 10:10 AM IST)
+const isLateCheck = () => {
   const now = getISTNow();
-  // Return the UTC string representation
-  return now.toISOString();
+  const officeTime = getOfficeTimeIST();
+  return now.getTime() > officeTime.getTime();
+};
+
+// Get working hours between two dates
+const getWorkingHours = (checkIn, checkOut, breakTime = 0) => {
+  if (!checkIn || !checkOut) return 0;
+  
+  const checkInDate = new Date(checkIn);
+  const checkOutDate = new Date(checkOut);
+  
+  let totalMinutes = (checkOutDate.getTime() - checkInDate.getTime()) / (1000 * 60);
+  
+  // Deduct break time (max 60 minutes)
+  const breakMinutes = Math.min(breakTime || 0, 60);
+  totalMinutes -= breakMinutes;
+  
+  return Math.max(0, totalMinutes / 60);
 };
 
 const OFFICE_START_TIME = "10:10";
@@ -111,50 +178,56 @@ exports.checkIn = async (req, res) => {
   try {
     const { userId, userType } = req.body;
 
+    if (!userId) {
+      return res.status(400).json({
+        success: false,
+        message: "userId is required",
+      });
+    }
+
     const date = getToday();
 
-    // Already requested today?
+    // Check if already checked in today
     const existing = await Attendance.findOne({
       userId,
       date,
     });
 
     if (existing) {
+      let message = "You have already checked in today.";
+      if (existing.approvalStatus === "pending") {
+        message = "Your check-in request is already pending admin approval.";
+      } else if (existing.approvalStatus === "approved") {
+        message = "You have already checked in today.";
+      }
       return res.status(400).json({
         success: false,
-        message:
-          existing.approvalStatus === "pending"
-            ? "Your check-in request is already pending admin approval."
-            : "You have already checked in today.",
+        message,
       });
     }
 
-    // Only create request
+    // Create attendance request
     const attendance = await Attendance.create({
       userId,
-      userType,
+      userType: userType || "employee",
       date,
-
-      // Check-in will be set after admin approval
       checkInTime: null,
-
-      // Late will also be calculated after approval
       isLate: false,
-
-      // Employee is not present until approval
       status: "absent",
-
       approvalStatus: "pending",
+      totalBreakTime: 0,
+      totalWorkTime: 0,
+      breaks: [],
     });
 
     return res.status(201).json({
       success: true,
-      message:
-        "Check-in request has been sent to the admin. Please wait for approval.",
+      message: "Check-in request has been sent to the admin. Please wait for approval.",
       data: formatAttendanceDocument(attendance),
     });
 
   } catch (err) {
+    console.error("CheckIn Error:", err);
     return res.status(500).json({
       success: false,
       message: err.message,
@@ -166,6 +239,13 @@ exports.checkIn = async (req, res) => {
 exports.startBreak = async (req, res) => {
   try {
     const { userId } = req.body;
+
+    if (!userId) {
+      return res.status(400).json({
+        success: false,
+        message: "userId is required",
+      });
+    }
 
     const attendance = await Attendance.findOne({
       userId,
@@ -179,6 +259,13 @@ exports.startBreak = async (req, res) => {
       });
     }
 
+    if (attendance.approvalStatus !== "approved") {
+      return res.status(400).json({
+        success: false,
+        message: "Your check-in request is not approved yet. Please wait for admin approval.",
+      });
+    }
+
     if (attendance.checkOutTime) {
       return res.status(400).json({
         success: false,
@@ -186,9 +273,14 @@ exports.startBreak = async (req, res) => {
       });
     }
 
-    const activeBreak = attendance.breaks.find(
-      (b) => !b.endTime
-    );
+    if (!attendance.checkInTime) {
+      return res.status(400).json({
+        success: false,
+        message: "Please check in first",
+      });
+    }
+
+    const activeBreak = attendance.breaks.find((b) => !b.endTime);
 
     if (activeBreak) {
       return res.status(400).json({
@@ -210,6 +302,7 @@ exports.startBreak = async (req, res) => {
     });
 
   } catch (err) {
+    console.error("StartBreak Error:", err);
     res.status(500).json({
       success: false,
       message: err.message,
@@ -222,6 +315,13 @@ exports.endBreak = async (req, res) => {
   try {
     const { userId } = req.body;
 
+    if (!userId) {
+      return res.status(400).json({
+        success: false,
+        message: "userId is required",
+      });
+    }
+
     const attendance = await Attendance.findOne({
       userId,
       date: getToday(),
@@ -234,9 +334,7 @@ exports.endBreak = async (req, res) => {
       });
     }
 
-    const activeBreak = attendance.breaks.find(
-      (b) => !b.endTime
-    );
+    const activeBreak = attendance.breaks.find((b) => !b.endTime);
 
     if (!activeBreak) {
       return res.status(400).json({
@@ -245,17 +343,13 @@ exports.endBreak = async (req, res) => {
       });
     }
 
-    activeBreak.endTime = getISTNow();
+    const endTime = getISTNow();
+    activeBreak.endTime = endTime;
 
-    const duration =
-      (activeBreak.endTime - activeBreak.startTime) /
-      (1000 * 60);
-
+    const duration = (endTime - activeBreak.startTime) / (1000 * 60);
     activeBreak.duration = Number(duration.toFixed(2));
 
-    attendance.totalBreakTime += Number(
-      duration.toFixed(2)
-    );
+    attendance.totalBreakTime = (attendance.totalBreakTime || 0) + Number(duration.toFixed(2));
 
     await attendance.save();
 
@@ -267,6 +361,7 @@ exports.endBreak = async (req, res) => {
     });
 
   } catch (err) {
+    console.error("EndBreak Error:", err);
     res.status(500).json({
       success: false,
       message: err.message,
@@ -279,6 +374,13 @@ exports.checkOut = async (req, res) => {
   try {
     const { userId } = req.body;
 
+    if (!userId) {
+      return res.status(400).json({
+        success: false,
+        message: "userId is required",
+      });
+    }
+
     const attendance = await Attendance.findOne({
       userId,
       date: getToday(),
@@ -291,6 +393,13 @@ exports.checkOut = async (req, res) => {
       });
     }
 
+    if (attendance.approvalStatus !== "approved") {
+      return res.status(400).json({
+        success: false,
+        message: "Your check-in request is not approved yet. Please wait for admin approval.",
+      });
+    }
+
     if (attendance.checkOutTime) {
       return res.status(400).json({
         success: false,
@@ -298,10 +407,7 @@ exports.checkOut = async (req, res) => {
       });
     }
 
-    // Check-In Validation
-    const checkInTime =
-      attendance.approvedCheckInTime ||
-      attendance.checkInTime;
+    const checkInTime = attendance.approvedCheckInTime || attendance.checkInTime;
 
     if (!checkInTime) {
       return res.status(400).json({
@@ -310,35 +416,19 @@ exports.checkOut = async (req, res) => {
       });
     }
 
-    // Current Checkout Time
+    // Set checkout time
     attendance.checkOutTime = getISTNow();
 
-    // Total Minutes
-    const checkInDate = new Date(checkInTime);
-    const checkOutDate = new Date(attendance.checkOutTime);
-    
-    let totalMinutes =
-      (checkOutDate.getTime() - checkInDate.getTime()) /
-      (1000 * 60);
-
-    // Deduct Break Time (Maximum 60 Minutes)
-    const breakMinutes = Math.min(
-      attendance.totalBreakTime || 0,
-      60
+    // Calculate working hours
+    const totalHours = getWorkingHours(
+      checkInTime,
+      attendance.checkOutTime,
+      attendance.totalBreakTime
     );
 
-    totalMinutes -= breakMinutes;
+    attendance.totalWorkTime = Number(totalHours.toFixed(2));
 
-    if (totalMinutes < 0) {
-      totalMinutes = 0;
-    }
-
-    // Total Working Hours
-    attendance.totalWorkTime = Number(
-      (totalMinutes / 60).toFixed(2)
-    );
-
-    // Attendance Status
+    // Determine attendance status based on total working hours
     if (attendance.totalWorkTime >= 8) {
       attendance.status = "present";
     } else if (attendance.totalWorkTime >= 4) {
@@ -358,6 +448,7 @@ exports.checkOut = async (req, res) => {
     });
 
   } catch (err) {
+    console.error("CheckOut Error:", err);
     res.status(500).json({
       success: false,
       message: err.message,
@@ -371,14 +462,8 @@ exports.getAttendanceById = async (req, res) => {
     const { id } = req.params;
 
     const attendance = await Attendance.findById(id)
-      .populate(
-        "userId",
-        "name email phoneNumber uniqueID department role"
-      )
-      .populate(
-        "approvedBy",
-        "name email role uniqueID"
-      );
+      .populate("userId", "name email phoneNumber uniqueID department role")
+      .populate("approvedBy", "name email role uniqueID");
 
     if (!attendance) {
       return res.status(404).json({
@@ -393,6 +478,7 @@ exports.getAttendanceById = async (req, res) => {
     });
 
   } catch (err) {
+    console.error("GetAttendanceById Error:", err);
     res.status(500).json({
       success: false,
       message: err.message,
@@ -400,24 +486,38 @@ exports.getAttendanceById = async (req, res) => {
   }
 };
 
-exports.getPendingAttendance = async(req,res)=>{
+// ================= GET PENDING ATTENDANCE =================
+exports.getPendingAttendance = async (req, res) => {
+  try {
+    const data = await Attendance.find({
+      approvalStatus: "pending",
+    }).populate("userId", "name uniqueID role");
 
-const data = await Attendance.find({
-approvalStatus:"pending"
-})
-.populate("userId","name uniqueID role");
+    res.json({
+      success: true,
+      count: data.length,
+      data: data.map(formatAttendanceDocument),
+    });
+  } catch (err) {
+    console.error("GetPendingAttendance Error:", err);
+    res.status(500).json({
+      success: false,
+      message: err.message,
+    });
+  }
+};
 
-res.json({
-success:true,
-data: data.map(formatAttendanceDocument),
-});
-
-}
-
-// ================= APPROVE ATTENDANCE - FIXED =================
+// ================= APPROVE ATTENDANCE =================
 exports.approveAttendance = async (req, res) => {
   try {
     const { attendanceId, adminId } = req.body;
+
+    if (!attendanceId || !adminId) {
+      return res.status(400).json({
+        success: false,
+        message: "attendanceId and adminId are required",
+      });
+    }
 
     const attendance = await Attendance.findById(attendanceId);
 
@@ -444,37 +544,26 @@ exports.approveAttendance = async (req, res) => {
 
     // Get current time in IST
     const now = getISTNow();
-    
-    // Get office time at 10:10 AM IST for today
     const officeTime = getOfficeTimeIST();
-    
-    // Check if current time is after office time
     const isLate = now.getTime() > officeTime.getTime();
 
-    console.log('=== APPROVAL DEBUG ===');
-    console.log('Current IST time:', now.toISOString());
-    console.log('Current IST time display:', formatISTTime(now));
-    console.log('Office time IST:', officeTime.toISOString());
-    console.log('Office time display:', formatISTTime(officeTime));
-    console.log('Is late:', isLate);
-    console.log('Timestamp comparison:', now.getTime(), '>', officeTime.getTime());
+    // Log for debugging
+    console.log("=== APPROVAL DEBUG ===");
+    console.log("Current IST time:", now.toISOString());
+    console.log("Current IST display:", formatISTTime(now));
+    console.log("Office time IST:", officeTime.toISOString());
+    console.log("Office display:", formatISTTime(officeTime));
+    console.log("Is late:", isLate);
 
-    // ================= APPROVAL =================
+    // Update attendance
     attendance.approvalStatus = "approved";
     attendance.approvedBy = adminId;
     attendance.approvedAt = now;
-
-    // ================= ACTUAL CHECK-IN =================
     attendance.checkInTime = now;
     attendance.isLate = isLate;
     attendance.status = "present";
 
     await attendance.save();
-
-    // Verify what was saved
-    const savedAttendance = await Attendance.findById(attendanceId);
-    console.log('Saved checkInTime (UTC):', savedAttendance.checkInTime);
-    console.log('Saved checkInTime display:', formatISTTime(savedAttendance.checkInTime));
 
     return res.status(200).json({
       success: true,
@@ -485,7 +574,7 @@ exports.approveAttendance = async (req, res) => {
     });
 
   } catch (err) {
-    console.error('Error in approveAttendance:', err);
+    console.error("ApproveAttendance Error:", err);
     return res.status(500).json({
       success: false,
       message: err.message,
@@ -493,93 +582,117 @@ exports.approveAttendance = async (req, res) => {
   }
 };
 
-exports.rejectAttendance = async(req,res)=>{
+// ================= REJECT ATTENDANCE =================
+exports.rejectAttendance = async (req, res) => {
+  try {
+    const { attendanceId } = req.body;
 
-const {attendanceId}=req.body;
+    if (!attendanceId) {
+      return res.status(400).json({
+        success: false,
+        message: "attendanceId is required",
+      });
+    }
 
-const attendance=
-await Attendance.findById(attendanceId);
+    const attendance = await Attendance.findById(attendanceId);
 
-attendance.approvalStatus="rejected";
+    if (!attendance) {
+      return res.status(404).json({
+        success: false,
+        message: "Attendance not found",
+      });
+    }
 
-await attendance.save();
+    if (attendance.approvalStatus === "approved") {
+      return res.status(400).json({
+        success: false,
+        message: "Attendance already approved, cannot reject",
+      });
+    }
 
-res.json({
-success:true,
-message:"Attendance Rejected"
-});
+    attendance.approvalStatus = "rejected";
+    await attendance.save();
 
-}
+    res.json({
+      success: true,
+      message: "Attendance Rejected",
+      data: formatAttendanceDocument(attendance),
+    });
+  } catch (err) {
+    console.error("RejectAttendance Error:", err);
+    res.status(500).json({
+      success: false,
+      message: err.message,
+    });
+  }
+};
 
+// ================= GET MY ATTENDANCE HISTORY =================
 exports.getMyAttendanceHistory = async (req, res) => {
   try {
-
     const { userId } = req.params;
 
-    const attendance = await Attendance.find({
-      userId,
-    })
-      .populate(
-        "userId",
-        "name email uniqueID role department"
-      )
-      .sort({
-        date: -1,
+    if (!userId) {
+      return res.status(400).json({
+        success: false,
+        message: "userId is required",
       });
+    }
+
+    const attendance = await Attendance.find({ userId })
+      .populate("userId", "name email uniqueID role department")
+      .sort({ date: -1 });
 
     res.status(200).json({
       success: true,
       count: attendance.length,
       data: attendance.map(formatAttendanceDocument),
     });
-
   } catch (err) {
-
+    console.error("GetMyAttendanceHistory Error:", err);
     res.status(500).json({
       success: false,
       message: err.message,
     });
-
   }
 };
 
+// ================= GET ATTENDANCE BY DATE =================
 exports.getAttendanceByDate = async (req, res) => {
   try {
-
     const { date } = req.params;
 
-    const attendance = await Attendance.find({
-      date,
-    }).populate(
-      "userId",
-      "name uniqueID role department"
-    );
+    if (!date) {
+      return res.status(400).json({
+        success: false,
+        message: "date is required (YYYY-MM-DD)",
+      });
+    }
+
+    const attendance = await Attendance.find({ date })
+      .populate("userId", "name uniqueID role department");
 
     res.status(200).json({
       success: true,
       count: attendance.length,
       data: attendance.map(formatAttendanceDocument),
     });
-
   } catch (err) {
-
+    console.error("GetAttendanceByDate Error:", err);
     res.status(500).json({
       success: false,
       message: err.message,
     });
-
   }
 };
 
+// ================= GET SINGLE ATTENDANCE =================
 exports.getSingleAttendance = async (req, res) => {
   try {
+    const { id } = req.params;
 
-    const attendance =
-      await Attendance.findById(req.params.id)
-        .populate(
-          "userId",
-          "name email uniqueID role department"
-        );
+    const attendance = await Attendance.findById(id)
+      .populate("userId", "name email uniqueID role department");
 
     if (!attendance) {
       return res.status(404).json({
@@ -592,43 +705,112 @@ exports.getSingleAttendance = async (req, res) => {
       success: true,
       data: formatAttendanceDocument(attendance),
     });
-
   } catch (err) {
-
+    console.error("GetSingleAttendance Error:", err);
     res.status(500).json({
       success: false,
       message: err.message,
     });
-
   }
 };
 
+// ================= GET MONTHLY ATTENDANCE =================
 exports.getMonthlyAttendance = async (req, res) => {
   try {
-
     const { userId, month } = req.params;
+
+    if (!userId || !month) {
+      return res.status(400).json({
+        success: false,
+        message: "userId and month are required (YYYY-MM)",
+      });
+    }
 
     const attendance = await Attendance.find({
       userId,
       date: {
         $regex: `^${month}`,
       },
-    }).sort({
-      date: -1,
-    });
+    }).sort({ date: -1 });
 
     res.status(200).json({
       success: true,
       count: attendance.length,
       data: attendance.map(formatAttendanceDocument),
     });
-
   } catch (err) {
-
+    console.error("GetMonthlyAttendance Error:", err);
     res.status(500).json({
       success: false,
       message: err.message,
     });
+  }
+};
 
+// ================= ADMIN DASHBOARD STATISTICS =================
+exports.getAttendanceStats = async (req, res) => {
+  try {
+    const today = getToday();
+
+    const stats = await Attendance.aggregate([
+      {
+        $match: {
+          date: today,
+        },
+      },
+      {
+        $group: {
+          _id: "$approvalStatus",
+          count: { $sum: 1 },
+        },
+      },
+    ]);
+
+    const result = {
+      pending: 0,
+      approved: 0,
+      rejected: 0,
+      total: 0,
+    };
+
+    stats.forEach((item) => {
+      result[item._id] = item.count;
+      result.total += item.count;
+    });
+
+    // Get present/absent counts for today
+    const presentCount = await Attendance.countDocuments({
+      date: today,
+      approvalStatus: "approved",
+      status: "present",
+    });
+
+    const absentCount = await Attendance.countDocuments({
+      date: today,
+      approvalStatus: "approved",
+      status: "absent",
+    });
+
+    const halfDayCount = await Attendance.countDocuments({
+      date: today,
+      approvalStatus: "approved",
+      status: "half-day",
+    });
+
+    res.status(200).json({
+      success: true,
+      data: {
+        ...result,
+        present: presentCount,
+        absent: absentCount,
+        halfDay: halfDayCount,
+      },
+    });
+  } catch (err) {
+    console.error("GetAttendanceStats Error:", err);
+    res.status(500).json({
+      success: false,
+      message: err.message,
+    });
   }
 };
