@@ -1,7 +1,41 @@
 const Attendance = require("../models/Attendance");
 
 // ================= HELPER =================
-const getToday = () => new Date().toISOString().split("T")[0];
+const getISTDateParts = (date = new Date()) => {
+  const formatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  });
+
+  const parts = formatter.formatToParts(date);
+  return Object.fromEntries(parts.map(({ type, value }) => [type, value]));
+};
+
+const getISTDate = (date = new Date()) => {
+  const parts = getISTDateParts(date);
+
+  return new Date(
+    Date.UTC(
+      Number(parts.year),
+      Number(parts.month) - 1,
+      Number(parts.day),
+      Number(parts.hour),
+      Number(parts.minute),
+      Number(parts.second)
+    )
+  );
+};
+
+const getToday = (date = new Date()) => {
+  const parts = getISTDateParts(date);
+  return `${parts.year}-${parts.month}-${parts.day}`;
+};
 
 const OFFICE_START_TIME = "10:10";
 
@@ -97,7 +131,7 @@ exports.startBreak = async (req, res) => {
     }
 
     attendance.breaks.push({
-      startTime: new Date(),
+      startTime: getISTDate(),
     });
 
     await attendance.save();
@@ -144,7 +178,7 @@ exports.endBreak = async (req, res) => {
       });
     }
 
-    activeBreak.endTime = new Date();
+    activeBreak.endTime = getISTDate();
 
     const duration =
       (activeBreak.endTime - activeBreak.startTime) /
@@ -210,7 +244,7 @@ exports.checkOut = async (req, res) => {
     }
 
     // Current Checkout Time
-    attendance.checkOutTime = new Date();
+    attendance.checkOutTime = getISTDate();
 
     // Total Minutes
     let totalMinutes =
@@ -337,22 +371,12 @@ exports.approveAttendance = async (req, res) => {
       });
     }
 
-    // Current UTC Time
-    const now = new Date();
+    const now = getISTDate();
 
-    // Current IST Time
-    const istNow = new Date(
-      now.toLocaleString("en-US", {
-        timeZone: "Asia/Kolkata",
-      })
-    );
+    const officeTime = new Date(now);
+    officeTime.setUTCHours(10, 10, 0, 0);
 
-    // Office Grace Time (10:10 AM IST)
-    const officeTime = new Date(istNow);
-    officeTime.setHours(10, 10, 0, 0);
-
-    // Calculate Late Status
-    const isLate = istNow > officeTime;
+    const isLate = now > officeTime;
 
     // ================= APPROVAL =================
     attendance.approvalStatus = "approved";
@@ -361,6 +385,7 @@ exports.approveAttendance = async (req, res) => {
 
     // ================= ACTUAL CHECK-IN =================
     attendance.checkInTime = now;
+    attendance.approvedCheckInTime = now;
     attendance.isLate = isLate;
     attendance.status = "present";
 
