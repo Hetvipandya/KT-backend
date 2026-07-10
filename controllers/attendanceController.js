@@ -48,10 +48,10 @@ const formatAttendanceDocument = (attendance) => {
     attendance.toObject?.() ?? JSON.parse(JSON.stringify(attendance));
 
   const formatDateField = (fieldName) => {
-    if (plainAttendance[fieldName] != null) {
-      const formattedValue = formatISTTime(plainAttendance[fieldName]);
-      plainAttendance[`${fieldName}Display`] = formattedValue;
-      plainAttendance[fieldName] = formattedValue;
+    if (plainAttendance[fieldName]) {
+      plainAttendance[`${fieldName}Display`] = formatISTTime(
+        plainAttendance[fieldName]
+      );
     }
   };
 
@@ -61,29 +61,11 @@ const formatAttendanceDocument = (attendance) => {
   formatDateField("approvedCheckInTime");
 
   if (plainAttendance.breaks?.length) {
-    plainAttendance.breaks = plainAttendance.breaks.map((breakItem) => {
-      const formattedBreak = {
-        ...breakItem,
-        startTimeDisplay: formatISTTime(breakItem.startTime),
-        endTimeDisplay: formatISTTime(breakItem.endTime),
-      };
-
-      if (breakItem.startTime) {
-        formattedBreak.startTime = formatISTTime(breakItem.startTime);
-      }
-
-      if (breakItem.endTime) {
-        formattedBreak.endTime = formatISTTime(breakItem.endTime);
-      }
-
-      return formattedBreak;
-    });
-  }
-
-  if (plainAttendance.totalBreakTime != null) {
-    plainAttendance.totalBreakTimeDisplay = `${Number(
-      plainAttendance.totalBreakTime
-    ).toFixed(2)} minutes`;
+    plainAttendance.breaks = plainAttendance.breaks.map((breakItem) => ({
+      ...breakItem,
+      startTimeDisplay: formatISTTime(breakItem.startTime),
+      endTimeDisplay: formatISTTime(breakItem.endTime),
+    }));
   }
 
   if (plainAttendance.totalWorkTime != null) {
