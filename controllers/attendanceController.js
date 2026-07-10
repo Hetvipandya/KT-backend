@@ -97,6 +97,12 @@ const formatAttendanceDocument = (attendance) => {
   formatDateField("checkOutTime");
   formatDateField("approvedAt");
   formatDateField("approvedCheckInTime");
+  formatDateField("createdAt");
+  formatDateField("updatedAt");
+
+  if (plainAttendance.date) {
+    plainAttendance.dateDisplay = plainAttendance.date;
+  }
 
   // Format breaks
   if (plainAttendance.breaks?.length) {
@@ -574,6 +580,7 @@ exports.approveAttendance = async (req, res) => {
     attendance.approvedBy = adminId;
     attendance.approvedAt = now;
     attendance.checkInTime = now;
+    attendance.approvedCheckInTime = now;
     attendance.isLate = isLate;
     attendance.status = "present";
 

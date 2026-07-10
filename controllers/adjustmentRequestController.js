@@ -1,6 +1,11 @@
 const AdjustmentRequest = require("../models/AdjustmentRequest");
 const Attendance = require("../models/Attendance");
 
+const parseISTDateTime = (dateString, timeString) => {
+  const [year, month, day] = dateString.split("-").map(Number);
+  const [hour, minute] = timeString.split(":").map(Number);
+  return new Date(Date.UTC(year, month - 1, day, hour - 5, minute - 30, 0));
+};
 
 // ==========================================
 // Create Request
@@ -399,28 +404,24 @@ exports.updateAdjustmentStatus = async (req, res) => {
         // Check In
         if (first.checkin) {
 
-          const checkIn =
-            new Date(
-              `${request.date}T${first.checkin}:00`
-            );
+          const checkIn = parseISTDateTime(
+            request.date,
+            first.checkin
+          );
 
-          attendance.checkInTime =
-            checkIn;
-
-          attendance.approvedCheckInTime =
-            checkIn;
+          attendance.checkInTime = checkIn;
+          attendance.approvedCheckInTime = checkIn;
         }
 
         // Check Out
         if (last.checkout) {
 
-          const checkOut =
-            new Date(
-              `${request.date}T${last.checkout}:00`
-            );
+          const checkOut = parseISTDateTime(
+            request.date,
+            last.checkout
+          );
 
-          attendance.checkOutTime =
-            checkOut;
+          attendance.checkOutTime = checkOut;
 
           let totalMinutes =
             (checkOut -
