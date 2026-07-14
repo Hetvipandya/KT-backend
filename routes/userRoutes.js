@@ -70,7 +70,7 @@ router.post(
 router.put(
   "/reset-password",
   resetPassword
-); //done
+); //done 
 
 // ================= CHANGE PASSWORD =================
 router.put( 

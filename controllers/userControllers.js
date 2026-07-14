@@ -1336,7 +1336,7 @@ exports.refreshUserToken =
 exports.logoutUser =
   async (req, res) => {
     try {
-      const {
+      const { 
         userId,
       } = req.body;
 

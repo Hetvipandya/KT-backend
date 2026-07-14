@@ -63,7 +63,10 @@ const taskSchema =
         enum: [
           "pending",
           "in_progress",
+          "testing",
+          "review",
           "completed",
+          "cancelled",
         ],
         default: "pending",
       },

@@ -1,7 +1,5 @@
 const Attendance = require("../models/Attendance");
 
-// ================= HELPER FUNCTIONS =================
-
 const pad = (value) => String(value).padStart(2, "0");
 
 // Get IST date parts from any date

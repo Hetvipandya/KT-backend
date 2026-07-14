@@ -52,6 +52,8 @@ const projectSchema =
         enum: [
           "pending",
           "in_progress",
+          "testing",
+          "review",
           "completed",
           "cancelled",
         ],
