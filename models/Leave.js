@@ -6,7 +6,7 @@ const leaveSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       required: true,
-    },
+    }, 
 
     leaveType: {
       type: String,
@@ -36,7 +36,7 @@ const leaveSchema = new mongoose.Schema(
 
     status: {
       type: String,
-      enum: ["pending", "approved", "rejected"],
+      enum: ["pending", "pending_hr", "pending_admin", "approved", "rejected"],
       default: "pending",
     },
 

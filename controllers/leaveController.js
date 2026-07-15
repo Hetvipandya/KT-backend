@@ -153,6 +153,20 @@ exports.teamLeadApproval = async (req, res) => {
   try {
     const { leaveId, status, remark } = req.body;
 
+    if (!leaveId) {
+      return res.status(400).json({
+        success: false,
+        message: "Leave ID is required",
+      });
+    }
+
+    if (!["approved", "rejected"].includes(status)) {
+      return res.status(400).json({
+        success: false,
+        message: "Status must be approved or rejected",
+      });
+    }
+
     const leave = await Leave.findById(leaveId);
 
     if (!leave) {
@@ -162,19 +176,18 @@ exports.teamLeadApproval = async (req, res) => {
       });
     }
 
-    if (leave.status === "approved") {
+    if (["approved", "rejected"].includes(leave.status)) {
       return res.status(400).json({
         success: false,
-        message: "Leave already approved",
+        message: "Leave already processed",
       });
     }
 
     leave.teamLeadStatus = status;
-    leave.remark = remark;
+    leave.remark = remark || leave.remark;
 
     if (status === "approved") {
-      leave.status = "approved";
-      await updateLeaveBalance(leave);
+      leave.status = "pending_hr";
     } else {
       leave.status = "rejected";
     }
@@ -183,52 +196,10 @@ exports.teamLeadApproval = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      message: "Team Lead action completed",
-      data: leave,
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: error.message,
-    });
-  }
-};
-
-exports.adminApproval = async (req, res) => {
-  try {
-    const { leaveId, status, remark } = req.body;
-
-    const leave = await Leave.findById(leaveId);
-
-    if (!leave) {
-      return res.status(404).json({
-        success: false,
-        message: "Leave not found",
-      });
-    }
-
-    if (leave.status === "approved") {
-      return res.status(400).json({
-        success: false,
-        message: "Leave already approved",
-      });
-    }
-
-    leave.adminStatus = status;
-    leave.remark = remark;
-
-    if (status === "approved") {
-      leave.status = "approved";
-      await updateLeaveBalance(leave);
-    } else {
-      leave.status = "rejected";
-    }
-
-    await leave.save();
-
-    res.status(200).json({
-      success: true,
-      message: "Admin approval completed",
+      message:
+        status === "approved"
+          ? "Leave approved by team lead and forwarded to HR"
+          : "Leave rejected by team lead",
       data: leave,
     });
   } catch (error) {
@@ -240,9 +211,23 @@ exports.adminApproval = async (req, res) => {
 };
 
 // ================= HR APPROVAL =================
-exports.hrApproval = async (req, res) => { 
+exports.hrApproval = async (req, res) => {
   try {
     const { leaveId, status, remark } = req.body;
+
+    if (!leaveId) {
+      return res.status(400).json({
+        success: false,
+        message: "Leave ID is required",
+      });
+    }
+
+    if (!["approved", "rejected"].includes(status)) {
+      return res.status(400).json({
+        success: false,
+        message: "Status must be approved or rejected",
+      });
+    }
 
     const leave = await Leave.findById(leaveId);
 
@@ -253,15 +238,91 @@ exports.hrApproval = async (req, res) => {
       });
     }
 
-    if (leave.status === "approved") {
+    if (leave.teamLeadStatus !== "approved") {
       return res.status(400).json({
         success: false,
-        message: "Leave already approved",
+        message: "Leave must be approved by team lead first",
+      });
+    }
+
+    if (["approved", "rejected"].includes(leave.status) && leave.hrStatus !== "pending") {
+      return res.status(400).json({
+        success: false,
+        message: "Leave already processed by HR",
       });
     }
 
     leave.hrStatus = status;
-    leave.remark = remark;
+    leave.remark = remark || leave.remark;
+
+    if (status === "approved") {
+      leave.status = "pending_admin";
+    } else {
+      leave.status = "rejected";
+    }
+
+    await leave.save();
+
+    res.status(200).json({
+      success: true,
+      message:
+        status === "approved"
+          ? "Leave approved by HR and forwarded to admin"
+          : "Leave rejected by HR",
+      data: leave,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+// ================= ADMIN APPROVAL =================
+exports.adminApproval = async (req, res) => {
+  try {
+    const { leaveId, status, remark } = req.body;
+
+    if (!leaveId) {
+      return res.status(400).json({
+        success: false,
+        message: "Leave ID is required",
+      });
+    }
+
+    if (!["approved", "rejected"].includes(status)) {
+      return res.status(400).json({
+        success: false,
+        message: "Status must be approved or rejected",
+      });
+    }
+
+    const leave = await Leave.findById(leaveId);
+
+    if (!leave) {
+      return res.status(404).json({
+        success: false,
+        message: "Leave not found",
+      });
+    }
+
+    if (leave.hrStatus !== "approved") {
+      return res.status(400).json({
+        success: false,
+        message: "Leave must be approved by HR first",
+      });
+    }
+
+    if (leave.status === "approved" || leave.adminStatus !== "pending") {
+      return res.status(400).json({
+        success: false,
+        message: "Leave already processed by admin",
+      });
+    }
+
+    leave.adminStatus = status;
+    leave.remark = remark || leave.remark;
 
     if (status === "approved") {
       leave.status = "approved";
@@ -274,7 +335,10 @@ exports.hrApproval = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      message: "HR approval completed",
+      message:
+        status === "approved"
+          ? "Leave approved by admin"
+          : "Leave rejected by admin",
       data: leave,
     });
   } catch (error) {
