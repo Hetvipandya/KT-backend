@@ -55,7 +55,7 @@ const storage =
 
 const upload =
   multer({
-    storage,
+    storage, 
   });
 
 // ================= FILE FIELDS =================
