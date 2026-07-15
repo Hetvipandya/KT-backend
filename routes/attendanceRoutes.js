@@ -47,6 +47,13 @@ router.post(
   endBreak
 );
 
+// ================= PENDING ATTENDANCE =================
+router.get(
+  "/pending",
+  protect,
+  getPendingAttendance
+);
+
 // ================= ATTENDANCE REPORT =================
 router.get(
   "/:id",
@@ -54,12 +61,7 @@ router.get(
   getAttendanceById
 );
 
-// ================= PENDING ATTENDANCE =================
-router.get(
-  "/pending",
-  protect,
-  getPendingAttendance
-);
+
 
 // ================= APPROVE ATTENDANCE =================
 router.put(
