@@ -528,12 +528,30 @@ exports.getPendingAttendance = async (req, res) => {
 // ================= APPROVE ATTENDANCE =================
 exports.approveAttendance = async (req, res) => {
   try {
-    const { attendanceId, adminId } = req.body;
+    const { attendanceId, approvedBy } = req.body;
 
-    if (!attendanceId || !adminId) {
+    if (!attendanceId || !approvedBy) {
       return res.status(400).json({
         success: false,
-        message: "attendanceId and adminId are required",
+        message: "attendanceId and approvedBy are required",
+      });
+    }
+
+    // Check approver
+    const approver = await User.findById(approvedBy);
+
+    if (!approver) {
+      return res.status(404).json({
+        success: false,
+        message: "Approver not found",
+      });
+    }
+
+    // Only Admin or HR can approve
+    if (!["admin", "hr"].includes(approver.role.toLowerCase())) {
+      return res.status(403).json({
+        success: false,
+        message: "Only Admin or HR can approve attendance",
       });
     }
 
@@ -560,22 +578,13 @@ exports.approveAttendance = async (req, res) => {
       });
     }
 
-    // Get current time in IST
+    // Current IST Time
     const now = getISTNow();
     const officeTime = getOfficeTimeIST();
     const isLate = now.getTime() > officeTime.getTime();
 
-    // Log for debugging
-    console.log("=== APPROVAL DEBUG ===");
-    console.log("Current IST time:", now.toISOString());
-    console.log("Current IST display:", formatISTTime(now));
-    console.log("Office time IST:", officeTime.toISOString());
-    console.log("Office display:", formatISTTime(officeTime));
-    console.log("Is late:", isLate);
-
-    // Update attendance
     attendance.approvalStatus = "approved";
-    attendance.approvedBy = adminId;
+    attendance.approvedBy = approver._id;
     attendance.approvedAt = now;
     attendance.checkInTime = now;
     attendance.approvedCheckInTime = now;
@@ -587,11 +596,10 @@ exports.approveAttendance = async (req, res) => {
     return res.status(200).json({
       success: true,
       message: isLate
-        ? `Attendance Approved. Employee checked in as Late. (Checked in at ${formatISTTime(now)})`
-        : "Attendance Approved. Employee checked in successfully.",
+        ? `Attendance Approved by ${approver.role}. Employee checked in as Late. (Checked in at ${formatISTTime(now)})`
+        : `Attendance Approved by ${approver.role}. Employee checked in successfully.`,
       data: formatAttendanceDocument(attendance),
     });
-
   } catch (err) {
     console.error("ApproveAttendance Error:", err);
     return res.status(500).json({
