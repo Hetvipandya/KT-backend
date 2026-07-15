@@ -1,4 +1,5 @@
 const Attendance = require("../models/Attendance");
+const User = require("../models/User");
 
 const pad = (value) => String(value).padStart(2, "0");
 
