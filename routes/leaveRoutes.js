@@ -51,7 +51,8 @@ router.put(
   protect,
   authorizeRoles(
     "hr",
-    "admin"
+    "admin",
+    "intern",
   ),
   hrApproval
 );

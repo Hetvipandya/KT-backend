@@ -240,7 +240,7 @@ exports.adminApproval = async (req, res) => {
 };
 
 // ================= HR APPROVAL =================
-exports.hrApproval = async (req, res) => {
+exports.hrApproval = async (req, res) => { 
   try {
     const { leaveId, status, remark } = req.body;
 
