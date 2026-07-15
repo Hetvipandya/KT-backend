@@ -122,7 +122,8 @@ router.get(
   authorizeRoles(
     "hr",
     "admin",
-    "team lead"
+    "team lead",
+    "intern"
   ),
   getAllLeaves
 );
