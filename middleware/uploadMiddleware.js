@@ -14,7 +14,7 @@ const cloudinary =
 
 const storage =
   new CloudinaryStorage({
-    cloudinary,
+    cloudinary, 
 
     params: async (
       req,

@@ -1,8 +1,8 @@
 const express = require("express");
 const router = express.Router();
 
-const multer = require("multer");
-const path = require("path");
+// Cloudinary Upload Middleware
+const upload = require("../middleware/upload");
 
 const {
   assignTeamLead,
@@ -16,21 +16,6 @@ const {
   getAllEmployeeDocuments,
   getEmployeeDocuments,
 } = require("../controllers/employeeController");
-
-// ================= MULTER STORAGE =================
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    cb(null, "uploads/employees");
-  },
-
-  filename: function (req, file, cb) {
-    cb(null, Date.now() + "-" + file.originalname);
-  },
-});
-
-const upload = multer({
-  storage,
-});
 
 // ================= FILE FIELDS =================
 const employeeDocuments = upload.fields([
@@ -85,13 +70,13 @@ router.get(
 
 // ================= EMPLOYEE DOCUMENTS =================
 
-// Get all employee documents
+// Get All Employee Documents
 router.get(
   "/documents",
   getAllEmployeeDocuments
 );
 
-// Get single employee documents
+// Get Single Employee Documents
 router.get(
   "/documents/:employeeId",
   getEmployeeDocuments

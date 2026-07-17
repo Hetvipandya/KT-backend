@@ -221,31 +221,31 @@ exports.addEmployee =
             aadharCard:
               files 
                 ?.aadharCard?.[0]
-                ?.filename ||
+                ?.path  ||
               "",
 
             panCard:
               files
                 ?.panCard?.[0]
-                ?.filename ||
+                ?.path  ||
               "",
 
             resume:
               files
                 ?.resume?.[0]
-                ?.filename ||
+                ?.path  ||
               "",
 
             offerLetter:
               files
                 ?.offerLetter?.[0]
-                ?.filename ||
+                ?.path  ||
               "",
 
             joiningLetter:
               files
                 ?.joiningLetter?.[0]
-                ?.filename ||
+                ?.path  ||
               "",
 
             certificates:
@@ -254,7 +254,7 @@ exports.addEmployee =
                   (
                     file
                   ) =>
-                    file.filename
+                    file.path 
                 ) || [],
           }
         );
@@ -442,29 +442,29 @@ exports.updateEmployee = async (req, res) => {
 
     if (employeeDocument) {
       employeeDocument.aadharCard =
-        files?.aadharCard?.[0]?.filename ||
+        files?.aadharCard?.[0]?.path  ||
         employeeDocument.aadharCard;
 
       employeeDocument.panCard =
-        files?.panCard?.[0]?.filename ||
+        files?.panCard?.[0]?.path  ||
         employeeDocument.panCard;
 
       employeeDocument.resume =
-        files?.resume?.[0]?.filename ||
+        files?.resume?.[0]?.path  ||
         employeeDocument.resume;
 
       employeeDocument.offerLetter =
-        files?.offerLetter?.[0]?.filename ||
+        files?.offerLetter?.[0]?.path  ||
         employeeDocument.offerLetter;
 
       employeeDocument.joiningLetter =
-        files?.joiningLetter?.[0]?.filename ||
+        files?.joiningLetter?.[0]?.path  ||
         employeeDocument.joiningLetter;
 
       if (files?.certificates?.length) {
         employeeDocument.certificates =
           files.certificates.map(
-            (file) => file.filename
+            (file) => file.path
           );
       }
 
