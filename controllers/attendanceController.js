@@ -267,57 +267,75 @@ exports.getAllAttendanceForAdmin = async (req, res) => {
       })
       .sort({ createdAt: -1 });
 
-    const formatted = attendance.map((item) => ({
-      _id: item._id,
+    const formatted = attendance.map((item) => {
+      const data = formatAttendanceDocument(item);
 
-      employee: {
-        _id: item.userId?._id,
-        name: item.userId?.name || "",
-        uniqueID: item.userId?.uniqueID || "",
-        email: item.userId?.email || "",
-        department: item.userId?.department || "",
-        role: item.userId?.role || item.userType,
-      },
+      return {
+        _id: data._id,
 
-      date: item.date,
+        employee: {
+          _id: data.userId?._id,
+          name: data.userId?.name || "",
+          uniqueID: data.userId?.uniqueID || "",
+          email: data.userId?.email || "",
+          department: data.userId?.department || "",
+          role: data.userId?.role || data.userType,
+        },
 
-      checkInTime: item.checkInTime,
+        date: data.date,
+        dateDisplay: data.dateDisplay,
 
-      approvedCheckInTime: item.approvedCheckInTime,
+        checkInTime: data.checkInTime,
+        checkInTimeDisplay: data.checkInTimeDisplay,
+        checkInTimeFullDisplay: data.checkInTimeFullDisplay,
 
-      checkOutTime: item.checkOutTime,
+        approvedCheckInTime: data.approvedCheckInTime,
+        approvedCheckInTimeDisplay:
+          data.approvedCheckInTimeDisplay,
+        approvedCheckInTimeFullDisplay:
+          data.approvedCheckInTimeFullDisplay,
 
-      breaks: item.breaks.map((b) => ({
-        startTime: b.startTime,
-        endTime: b.endTime,
-        duration: b.duration,
-      })),
+        checkOutTime: data.checkOutTime,
+        checkOutTimeDisplay: data.checkOutTimeDisplay,
+        checkOutTimeFullDisplay: data.checkOutTimeFullDisplay,
 
-      totalBreakTime: item.totalBreakTime,
+        breaks: data.breaks,
 
-      totalWorkTime: item.totalWorkTime,
+        totalBreakTime: data.totalBreakTime,
+        totalBreakTimeDisplay:
+          data.totalBreakTimeDisplay,
 
-      isLate: item.isLate,
+        totalWorkTime: data.totalWorkTime,
+        totalWorkTimeDisplay:
+          data.totalWorkTimeDisplay,
 
-      status: item.status,
+        isLate: data.isLate,
 
-      approvalStatus: item.approvalStatus,
+        status: data.status,
 
-      approvedAt: item.approvedAt,
+        approvalStatus: data.approvalStatus,
 
-      approvedBy: item.approvedBy
-        ? {
-            _id: item.approvedBy._id,
-            name: item.approvedBy.name,
-            uniqueID: item.approvedBy.uniqueID,
-            role: item.approvedBy.role,
-          }
-        : null,
+        approvedAt: data.approvedAt,
+        approvedAtDisplay: data.approvedAtDisplay,
+        approvedAtFullDisplay:
+          data.approvedAtFullDisplay,
 
-      createdAt: item.createdAt,
+        approvedBy: data.approvedBy
+          ? {
+              _id: data.approvedBy._id,
+              name: data.approvedBy.name,
+              uniqueID: data.approvedBy.uniqueID,
+              role: data.approvedBy.role,
+            }
+          : null,
 
-      updatedAt: item.updatedAt,
-    }));
+        createdAt: data.createdAt,
+        createdAtDisplay: data.createdAtDisplay,
+
+        updatedAt: data.updatedAt,
+        updatedAtDisplay: data.updatedAtDisplay,
+      };
+    });
 
     return res.status(200).json({
       success: true,
