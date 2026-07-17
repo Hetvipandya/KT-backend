@@ -13,7 +13,7 @@ const employeeDocumentSchema =
 
       aadharCard: {
         type: String,
-        default: "",
+        default: "", 
       },
 
       panCard: {

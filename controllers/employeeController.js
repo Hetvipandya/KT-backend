@@ -89,6 +89,64 @@ exports.removeTeamLead = async (req, res) => {
   }
 };
 
+// ================= GET ALL EMPLOYEE DOCUMENTS =================
+exports.getAllEmployeeDocuments = async (req, res) => {
+  try {
+    const documents = await EmployeeDocument.find()
+      .populate(
+        "employeeID",
+        "employeeID firstName lastName email mobile designation department"
+      )
+      .sort({ createdAt: -1 });
+
+    res.status(200).json({
+      success: true,
+      total: documents.length,
+      documents,
+    });
+  } catch (error) {
+    console.log(error);
+
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+// ================= GET SINGLE EMPLOYEE DOCUMENT =================
+exports.getEmployeeDocuments = async (req, res) => {
+  try {
+    const { employeeId } = req.params;
+
+    const documents = await EmployeeDocument.findOne({
+      employeeID: employeeId,
+    }).populate(
+      "employeeID",
+      "employeeID firstName lastName email mobile designation department"
+    );
+
+    if (!documents) {
+      return res.status(404).json({
+        success: false,
+        message: "Documents not found",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      documents,
+    });
+  } catch (error) {
+    console.log(error);
+
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
 // ================= ADD EMPLOYEE =================
 exports.addEmployee =
   async (req, res) => {

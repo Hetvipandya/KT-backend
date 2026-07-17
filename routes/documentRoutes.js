@@ -3,7 +3,7 @@ const router = express.Router();
 
 const {
   uploadDocument,
-  getAllDocuments,
+  getAllDocuments, 
   getByType,
   deleteDocument,
 } = require("../controllers/documentController");

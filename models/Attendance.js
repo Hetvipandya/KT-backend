@@ -32,7 +32,7 @@ const attendanceSchema = new mongoose.Schema(
       type: String,
       enum: ["employee", "intern"],
       required: true,
-    },
+    }, 
 
     date: {
       type: String,
