@@ -254,6 +254,86 @@ exports.checkIn = async (req, res) => {
   }
 };
 
+exports.getAllAttendanceForAdmin = async (req, res) => {
+  try {
+    const attendance = await Attendance.find()
+      .populate({
+        path: "userId",
+        select: "name uniqueID role email department",
+      })
+      .populate({
+        path: "approvedBy",
+        select: "name uniqueID role",
+      })
+      .sort({ createdAt: -1 });
+
+    const formatted = attendance.map((item) => ({
+      _id: item._id,
+
+      employee: {
+        _id: item.userId?._id,
+        name: item.userId?.name || "",
+        uniqueID: item.userId?.uniqueID || "",
+        email: item.userId?.email || "",
+        department: item.userId?.department || "",
+        role: item.userId?.role || item.userType,
+      },
+
+      date: item.date,
+
+      checkInTime: item.checkInTime,
+
+      approvedCheckInTime: item.approvedCheckInTime,
+
+      checkOutTime: item.checkOutTime,
+
+      breaks: item.breaks.map((b) => ({
+        startTime: b.startTime,
+        endTime: b.endTime,
+        duration: b.duration,
+      })),
+
+      totalBreakTime: item.totalBreakTime,
+
+      totalWorkTime: item.totalWorkTime,
+
+      isLate: item.isLate,
+
+      status: item.status,
+
+      approvalStatus: item.approvalStatus,
+
+      approvedAt: item.approvedAt,
+
+      approvedBy: item.approvedBy
+        ? {
+            _id: item.approvedBy._id,
+            name: item.approvedBy.name,
+            uniqueID: item.approvedBy.uniqueID,
+            role: item.approvedBy.role,
+          }
+        : null,
+
+      createdAt: item.createdAt,
+
+      updatedAt: item.updatedAt,
+    }));
+
+    return res.status(200).json({
+      success: true,
+      count: formatted.length,
+      attendance: formatted,
+    });
+  } catch (err) {
+    console.log(err);
+
+    return res.status(500).json({
+      success: false,
+      message: err.message,
+    });
+  }
+};
+
 // ================= BREAK START =================
 exports.startBreak = async (req, res) => {
   try {
@@ -506,7 +586,7 @@ exports.getAttendanceById = async (req, res) => {
 };
 
 // ================= GET PENDING ATTENDANCE =================
-exports.getPendingAttendance = async (req, res) => {
+exports.getPendingAttendance = async (req, res) => { 
   try {
     const data = await Attendance.find({
       approvalStatus: "pending",

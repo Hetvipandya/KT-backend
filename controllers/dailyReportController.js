@@ -11,7 +11,7 @@ exports.createDailyReport =
       console.log(
         "BODY ===>",
         req.body
-      );
+      ); 
 
       const {
         employeeId,

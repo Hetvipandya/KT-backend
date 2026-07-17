@@ -47,7 +47,7 @@ const projectSchema =
         default: "medium",
       },
 
-      status: { 
+      status: {  
         type: String,
         enum: [
           "pending",

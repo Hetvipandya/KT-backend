@@ -9,6 +9,7 @@ const {
   endBreak,
   getAttendanceById,
   getPendingAttendance,
+  getAllAttendanceForAdmin,
   approveAttendance,
   rejectAttendance,
   getMyAttendanceHistory,
@@ -23,7 +24,7 @@ const { protect } = require("../middleware/authMiddleware");
 router.post(
   "/check-in",
   protect,
-  checkIn
+  checkIn 
 );
 
 // ================= CHECK OUT =================
@@ -52,6 +53,12 @@ router.get(
   "/pending",
   protect,
   getPendingAttendance
+);
+
+router.get(
+  "/admin/all",
+  protect,
+  getAllAttendanceForAdmin
 );
 
 // ================= ATTENDANCE REPORT =================
