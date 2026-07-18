@@ -5,7 +5,7 @@ const {
   addHoliday,
   getAllHolidays,
   updateHoliday,
-  deleteHoliday,
+  deleteHoliday, 
 } = require("../controllers/holidayController");
 
 router.post("/create", addHoliday);
@@ -13,4 +13,4 @@ router.get("/all", getAllHolidays);
 router.put("/update/:id", updateHoliday);
 router.delete("/delete/:id", deleteHoliday);
 
-module.exports = router;
+module.exports = router; 

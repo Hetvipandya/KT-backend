@@ -10,7 +10,7 @@ exports.createSalaryStructure =
   async (req, res) => {
     try {
       const {
-        userId,
+        userId, 
         basicSalary,
         hra,
         allowance,

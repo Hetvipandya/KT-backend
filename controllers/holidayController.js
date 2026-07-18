@@ -10,7 +10,7 @@ exports.addHoliday =
         holidayDate,
       } = req.body;
 
-      if (
+      if ( 
         !holidayName ||
         !holidayDate
       ) {
