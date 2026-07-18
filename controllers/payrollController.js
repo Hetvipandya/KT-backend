@@ -87,6 +87,37 @@ exports.getSalaryStructure =
     }
   };
 
+  exports.getSalaryStructureByUserId = async (req, res) => {
+  try {
+    const { userId } = req.params;
+
+    const salaryStructure = await SalaryStructure.findOne({
+      userId,
+      isActive: true,
+    }).populate(
+      "userId",
+      "firstName lastName email role"
+    );
+
+    if (!salaryStructure) {
+      return res.status(404).json({
+        success: false,
+        message: "Salary structure not found.",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: salaryStructure,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
   exports.updateSalaryStructure = async (req, res) => {
   try {
     const { id } = req.params;

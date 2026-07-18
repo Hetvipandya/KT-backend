@@ -5,6 +5,7 @@ const router = express.Router();
 const {
   createSalaryStructure,
   getSalaryStructure,
+    getSalaryStructureByUserId,
   updateSalaryStructure,
   processPayroll,
   generatePayslip, 
@@ -27,6 +28,11 @@ router.post(
 router.get(
   "/salary",
   getSalaryStructure
+);
+
+router.get(
+  "/salary/user/:userId",
+  getSalaryStructureByUserId
 );
 
 router.put(
