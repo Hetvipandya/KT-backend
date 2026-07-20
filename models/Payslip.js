@@ -11,7 +11,7 @@ const payslipSchema =
       },
 
       userId: {
-        type:
+        type: 
           mongoose.Schema.Types.ObjectId,
         ref: "Employee",
         required: true,

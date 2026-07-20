@@ -24,7 +24,7 @@ exports.createTask = async (req, res) => {
       taskDescription,
       assignedEmployee,
       assignedIntern,
-      assignedBy,
+      assignedBy, 
       dueDate,
       estimatedHours,
       priority,

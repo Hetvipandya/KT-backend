@@ -9,7 +9,7 @@ const {
   removeTeamLead,
   addEmployee,
   getEmployeeList,
-  getEmployeeProfile,
+  getEmployeeProfile, 
   updateEmployee,
   removeEmployee,
   getAllEmployeeHistory,

@@ -16,7 +16,7 @@ exports.createMilestone =
   async (req, res) => {
     try {
       const milestone =
-        await Milestone.create(
+        await Milestone.create( 
           req.body
         );
 
@@ -33,6 +33,32 @@ exports.createMilestone =
     }
   };
 
+// =======================
+// GET MILESTONES BY PROJECT ID
+// =======================
+exports.getMilestonesByProjectId = async (req, res) => {
+  try {
+    const { projectId } = req.params;
+
+    const milestones = await Milestone.find({
+      projectId,
+    })
+      .populate("projectId")
+      .populate("assignedTasks")
+      .sort({ createdAt: 1 });
+
+    res.status(200).json({
+      success: true,
+      count: milestones.length,
+      data: milestones,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
 
 // =======================
 // GET ALL MILESTONES

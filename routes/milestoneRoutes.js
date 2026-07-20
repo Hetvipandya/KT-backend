@@ -8,7 +8,8 @@ const {
   createMilestone,
   getMilestones,
   getMilestoneById, 
-  assignDeadline,
+  getMilestonesByProjectId,
+  assignDeadline, 
   trackProgress,
   reviewMilestone, 
   completeMilestone,
@@ -28,6 +29,8 @@ router.get(
   "/",
   getMilestones
 );
+
+router.get("/project/:projectId", getMilestonesByProjectId);
 
 // GET ONE
 router.get(
