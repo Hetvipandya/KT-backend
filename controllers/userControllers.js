@@ -717,6 +717,40 @@ exports.approveEmployee =
     }
   };
 
+  // ================= REJECT EMPLOYEE =================
+exports.rejectEmployee =
+  async (req, res) => {
+    try {
+      const { userId } = req.body;
+
+      const user =
+        await User.findById(userId);
+
+      if (!user) {
+        return res
+          .status(404)
+          .json({
+            success: false,
+            message: "User not found",
+          });
+      }
+
+      user.isApproved = false;
+
+      await user.save();
+
+      res.json({
+        success: true,
+        message: "Employee rejected successfully",
+      });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        message: error.message,
+      });
+    }
+  };
+
 // ================= LOGIN =================
 exports.loginUser =
   async (req, res) => {

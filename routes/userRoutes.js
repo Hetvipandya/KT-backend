@@ -9,6 +9,7 @@ const {
   getMyProfile,
   registerUser,
   approveEmployee,
+  rejectEmployee,
   loginUser,
   changePassword,
   getAllUsers,
@@ -47,6 +48,11 @@ router.put(
   "/approve",
   approveEmployee
 );  //done
+
+router.put(
+  "/reject",
+  rejectEmployee
+);
 
 // ================= LOGIN =================
 router.post(
