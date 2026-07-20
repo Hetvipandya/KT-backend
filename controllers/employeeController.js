@@ -309,31 +309,13 @@ exports.addEmployee =
 exports.getEmployeeList = async (req, res) => {
   try {
     const employees = await Employee.find()
-      .populate(
-        "department",
-        "departmentName"
-      )
+      .populate("department", "departmentName")
+      .populate("designation", "designationName")
       .sort({ createdAt: -1 });
-
- const employeeList = employees.map(
-  (emp) => ({
-    ...emp.toObject(),
-
-    currentAction:
-      emp.currentAction || "created",
-
-    departmentName:
-      emp.department?.departmentName || "",
-
-    designationName:
-      emp.designation || "",
-  })
-);
 
     res.status(200).json({
       success: true,
-      total: employeeList.length,
-      employees: employeeList,
+      employees,
     });
   } catch (error) {
     res.status(500).json({
