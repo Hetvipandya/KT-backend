@@ -296,78 +296,134 @@ exports.getMyTeam = async (req, res) => {
 
     const teams = await Team.find()
       .populate({
-        path: "teamLead",
+        path: "teamLeadUser",
         select: "name email role uniqueID",
+      })
+      .populate({
+        path: "teamLeadEmployee",
+        select:
+          "firstName lastName email mobile employeeID designation department",
+        populate: {
+          path: "department",
+          select: "name",
+        },
       })
       .populate({
         path: "interns",
         select:
-          "name email role uniqueID employeeID firstName lastName",
+          "name email role uniqueID employeeID",
       });
 
 
     const data = teams.map((team) => {
 
+      const leadUser = team.teamLeadUser;
+
+      const leadEmployee = team.teamLeadEmployee;
+
+
       return {
+
         _id: team._id,
 
+
         teamLead: {
-          _id: team.teamLead?._id,
+
+          userId: leadUser?._id || null,
+
+          employeeId:
+            leadEmployee?._id || null,
+
 
           name:
-            team.teamLead?.name ||
-            `${team.teamLead?.firstName || ""} ${
-              team.teamLead?.lastName || ""
+            leadUser?.name ||
+            `${leadEmployee?.firstName || ""} ${
+              leadEmployee?.lastName || ""
             }`,
 
-          email: team.teamLead?.email,
 
-          role: team.teamLead?.role,
+          email:
+            leadUser?.email ||
+            leadEmployee?.email ||
+            "",
 
-          uniqueID: team.teamLead?.uniqueID,
+
+          role:
+            leadUser?.role ||
+            "team lead",
+
+
+          uniqueID:
+            leadUser?.uniqueID || "",
+
+
+          employeeID:
+            leadEmployee?.employeeID || "",
+
+
+          designation:
+            leadEmployee?.designation || "",
+
+
+          department:
+            leadEmployee?.department || null,
         },
 
 
-        interns: team.interns?.map((intern) => ({
+        interns: team.interns?.map((intern)=>({
+
           _id: intern._id,
 
           name:
-            intern.name ||
-            `${intern.firstName || ""} ${
-              intern.lastName || ""
-            }`,
+            intern.name || "",
 
-          email: intern.email,
+          email:
+            intern.email || "",
 
-          role: intern.role,
+          role:
+            intern.role,
 
-          employeeID: intern.employeeID,
+          uniqueID:
+            intern.uniqueID,
 
-          uniqueID: intern.uniqueID,
+          employeeID:
+            intern.employeeID || "",
+
         })) || [],
 
 
         totalInterns:
           team.interns?.length || 0,
 
+
         createdAt: team.createdAt,
         updatedAt: team.updatedAt,
+
       };
+
     });
+
 
 
     return res.status(200).json({
-      success: true,
-      total: data.length,
-      data,
+
+      success:true,
+
+      total:data.length,
+
+      data
+
     });
 
 
-  } catch (error) {
+  } catch(error){
 
     return res.status(500).json({
-      success: false,
-      message: error.message,
+
+      success:false,
+
+      message:error.message
+
     });
 
   }
