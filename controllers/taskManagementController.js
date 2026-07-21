@@ -1,6 +1,22 @@
 const TaskManagement =
   require("../models/TaskManagement");
 
+const getProgressForStatus = (status) => {
+  switch (status) {
+    case "Assigned":
+      return 5;
+    case "In Progress":
+      return 10;
+    case "Testing":
+      return 75;
+    case "Review":
+      return 90;
+    case "Completed":
+      return 100;
+    default:
+      return null;
+  }
+};
 
 // ================= CREATE TASK =================
 exports.createTask = async (req, res) => {
@@ -302,6 +318,11 @@ exports.createStatus = async (req, res) => {
 
     task.status = status;
 
+    const autoProgress = getProgressForStatus(status);
+    if (autoProgress !== null) {
+      task.progress = autoProgress;
+    }
+
     task.taskHistory.push({
       action: `Status created: ${status}`,
     });
@@ -371,32 +392,15 @@ exports.updateTaskStatus =
       task.status =
         status;
 
-      // Auto workflow progress
-      switch (status) {
-        case "Assigned":
-          task.progress = 10;
-          break;
+      const autoProgress = getProgressForStatus(status);
+      if (autoProgress !== null) {
+        task.progress = autoProgress;
+      }
 
-        case "In Progress":
-          task.progress = 50;
-          break;
-
-        case "Testing":
-          task.progress = 75;
-          break;
- 
-        case "Review":
-          task.progress = 90;
-          break;
-
-        case "Completed":
-          task.progress = 100;
-          task.completedAt =
-            new Date();
-          break;
-
-        default:
-          break;
+      if (status === "Completed") {
+        task.completedAt = new Date();
+      } else if (task.completedAt) {
+        task.completedAt = undefined;
       }
 
       // Add history
