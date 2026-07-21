@@ -177,7 +177,7 @@ exports.getDashboard =
     }
   };
 
-  exports.createOrUpdateTeam = async (req, res) => {
+exports.createOrUpdateTeam = async (req, res) => {
   try {
     const {
       teamLead,
@@ -194,20 +194,53 @@ exports.getDashboard =
       });
     }
 
-    const teamLeadUser = await User.findById(teamLead);
+    let teamLeadUser = null;
+    let teamLeadEmployee = null;
 
-    if (!teamLeadUser) {
+    // ===========================
+    // CHECK USER COLLECTION
+    // ===========================
+    const user = await User.findById(teamLead);
+
+    if (user) {
+      teamLeadUser = user._id;
+    }
+
+    // ===========================
+    // CHECK EMPLOYEE COLLECTION
+    // ===========================
+    const employee = await Employee.findById(teamLead);
+
+    if (employee && employee.isTeamLead) {
+      teamLeadEmployee = employee._id;
+    }
+
+    if (!teamLeadUser && !teamLeadEmployee) {
       return res.status(404).json({
         success: false,
         message: "Team Lead not found",
       });
     }
 
+    // ===========================
+    // FIND EXISTING TEAM
+    // ===========================
+
     let team = await Team.findOne({
-      teamLead,
+      $or: [
+        { teamLeadUser },
+        { teamLeadEmployee },
+      ],
     });
 
+    // ===========================
+    // UPDATE TEAM
+    // ===========================
+
     if (team) {
+      team.teamLeadUser = teamLeadUser;
+      team.teamLeadEmployee = teamLeadEmployee;
+
       team.developers = developers;
       team.interns = interns;
       team.designers = designers;
@@ -222,8 +255,13 @@ exports.getDashboard =
       });
     }
 
+    // ===========================
+    // CREATE TEAM
+    // ===========================
+
     team = await Team.create({
-      teamLead,
+      teamLeadUser,
+      teamLeadEmployee,
       developers,
       interns,
       designers,
@@ -236,6 +274,8 @@ exports.getDashboard =
       data: team,
     });
   } catch (error) {
+    console.log(error);
+
     return res.status(500).json({
       success: false,
       message: error.message,
