@@ -661,7 +661,7 @@ exports.getAllUsers =
         .status(500)
         .json({
           success:
-            false,
+            false,  
           message:
             error.message,
         });
