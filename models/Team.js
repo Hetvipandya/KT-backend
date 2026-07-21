@@ -1,23 +1,9 @@
 const mongoose =
   require("mongoose");
-
+ 
 const teamSchema =
   new mongoose.Schema(
    {
-      projectId: {
-        type:
-          mongoose.Schema.Types.ObjectId,
-        ref: "Project", 
-        required: true,
-      },
-
-      projectManager: {
-        type:
-          mongoose.Schema.Types.ObjectId,
-        ref: "User",
-        required: true,
-      },
-
       teamLead: {
         type:
           mongoose.Schema.Types.ObjectId,
