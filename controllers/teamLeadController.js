@@ -185,59 +185,81 @@ GET MY TEAM
 
 exports.getMyTeam = async (req, res) => {
   try {
-    // Logged in Team Lead
-    const loggedInUser = req.user;
+    // User collection માંથી Team Leads
+    const users = await User.find({
+      role: { $regex: /^team\s*lead$/i },
+    }).select("name email role uniqueID");
 
-    // Employee record of logged in Team Lead
-    const teamLeadEmployee = await Employee.findOne({
-      email: loggedInUser.email,
+    // Employee collection માંથી Team Leads
+    const employees = await Employee.find({
       isTeamLead: true,
+    }).populate("department");
+
+    // Merge by email
+    const merged = employees.map((emp) => {
+      const user = users.find(
+        (u) =>
+          u.email?.toLowerCase() ===
+          emp.email?.toLowerCase()
+      );
+
+      return {
+        _id: emp._id,
+        userId: user?._id || null,
+
+        firstName: emp.firstName,
+        lastName: emp.lastName,
+
+        name:
+          user?.name ||
+          `${emp.firstName} ${emp.lastName}`,
+
+        email: emp.email,
+        mobile: emp.mobile,
+
+        role: user?.role || "team lead",
+
+        designation: emp.designation,
+        department: emp.department,
+
+        employeeID: emp.employeeID,
+        isTeamLead: emp.isTeamLead,
+      };
     });
 
-    if (!teamLeadEmployee) {
-      return res.status(404).json({
-        success: false,
-        message: "Team Lead employee record not found",
-      });
-    }
+    // User માં છે પણ Employee માં નથી
+    const remainingUsers = users
+      .filter(
+        (user) =>
+          !employees.some(
+            (emp) =>
+              emp.email?.toLowerCase() ===
+              user.email?.toLowerCase()
+          )
+      )
+      .map((user) => ({
+        _id: user._id,
+        userId: user._id,
 
-    // All employees assigned to this Team Lead
-    const employees = await Employee.find({
-      teamLead: teamLeadEmployee._id,
-    })
-      .populate("department")
-      .populate("designation");
+        name: user.name,
+        email: user.email,
+        role: user.role,
 
-    // Get user details for every employee
-    const data = await Promise.all(
-      employees.map(async (emp) => {
-        const user = await User.findOne({
-          email: emp.email,
-        });
+        firstName: "",
+        lastName: "",
 
-        return {
-          employeeId: emp._id,
-          userId: user?._id,
+        mobile: "",
+        designation: "",
+        department: "",
 
-          firstName: emp.firstName,
-          lastName: emp.lastName,
-          email: emp.email,
-          mobile: emp.mobile,
-
-          role: user?.role || "employee",
-
-          department: emp.department,
-          designation: emp.designation,
-
-          isTeamLead: emp.isTeamLead,
-        };
-      })
-    );
+        employeeID: "",
+        isTeamLead: false,
+      }));
 
     return res.status(200).json({
       success: true,
-      total: data.length,
-      data,
+      total: merged.length + remainingUsers.length,
+      data: [...merged, ...remainingUsers],
     });
   } catch (error) {
     return res.status(500).json({
