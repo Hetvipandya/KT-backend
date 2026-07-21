@@ -4,13 +4,17 @@ const mongoose =
 const teamSchema =
   new mongoose.Schema(
    {
-      teamLead: {
-        type:
-          mongoose.Schema.Types.ObjectId,
+     teamLeadUser: {
+        type: mongoose.Schema.Types.ObjectId,
         ref: "User",
         default: null,
-      },
+    },
 
+    teamLeadEmployee: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Employee",
+        default: null,
+    },
       developers: [
         {
           type:
