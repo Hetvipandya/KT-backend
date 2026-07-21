@@ -293,87 +293,83 @@ GET MY TEAM
 
 exports.getMyTeam = async (req, res) => {
   try {
-    // User collection માંથી Team Leads
-    const users = await User.find({
-      role: { $regex: /^team\s*lead$/i },
-    }).select("name email role uniqueID");
 
-    // Employee collection માંથી Team Leads
-    const employees = await Employee.find({
-      isTeamLead: true,
-    }).populate("department");
+    const teams = await Team.find()
+      .populate({
+        path: "teamLead",
+        select: "name email role uniqueID",
+      })
+      .populate({
+        path: "interns",
+        select:
+          "name email role uniqueID employeeID firstName lastName",
+      });
 
-    // Merge by email
-    const merged = employees.map((emp) => {
-      const user = users.find(
-        (u) =>
-          u.email?.toLowerCase() ===
-          emp.email?.toLowerCase()
-      );
+
+    const data = teams.map((team) => {
 
       return {
-        _id: emp._id,
-        userId: user?._id || null,
+        _id: team._id,
 
-        firstName: emp.firstName,
-        lastName: emp.lastName,
+        teamLead: {
+          _id: team.teamLead?._id,
 
-        name:
-          user?.name ||
-          `${emp.firstName} ${emp.lastName}`,
+          name:
+            team.teamLead?.name ||
+            `${team.teamLead?.firstName || ""} ${
+              team.teamLead?.lastName || ""
+            }`,
 
-        email: emp.email,
-        mobile: emp.mobile,
+          email: team.teamLead?.email,
 
-        role: user?.role || "team lead",
+          role: team.teamLead?.role,
 
-        designation: emp.designation,
-        department: emp.department,
+          uniqueID: team.teamLead?.uniqueID,
+        },
 
-        employeeID: emp.employeeID,
-        isTeamLead: emp.isTeamLead,
+
+        interns: team.interns?.map((intern) => ({
+          _id: intern._id,
+
+          name:
+            intern.name ||
+            `${intern.firstName || ""} ${
+              intern.lastName || ""
+            }`,
+
+          email: intern.email,
+
+          role: intern.role,
+
+          employeeID: intern.employeeID,
+
+          uniqueID: intern.uniqueID,
+        })) || [],
+
+
+        totalInterns:
+          team.interns?.length || 0,
+
+        createdAt: team.createdAt,
+        updatedAt: team.updatedAt,
       };
     });
 
-    // User માં છે પણ Employee માં નથી
-    const remainingUsers = users
-      .filter(
-        (user) =>
-          !employees.some(
-            (emp) =>
-              emp.email?.toLowerCase() ===
-              user.email?.toLowerCase()
-          )
-      )
-      .map((user) => ({
-        _id: user._id,
-        userId: user._id,
-
-        name: user.name,
-        email: user.email,
-        role: user.role,
-
-        firstName: "",
-        lastName: "",
-
-        mobile: "",
-        designation: "",
-        department: "",
-
-        employeeID: "",
-        isTeamLead: false,
-      }));
 
     return res.status(200).json({
       success: true,
-      total: merged.length + remainingUsers.length,
-      data: [...merged, ...remainingUsers],
+      total: data.length,
+      data,
     });
+
+
   } catch (error) {
+
     return res.status(500).json({
       success: false,
       message: error.message,
     });
+
   }
 };
 
