@@ -16,6 +16,22 @@ const ProjectDocument =
     "../models/ProjectDocument"
   );
 
+const getProjectProgressForStatus = (status) => {
+  switch (status) {
+    case "Planning":
+      return 10;
+    case "In Progress":
+      return 40;
+    case "On Hold":
+      return 50;
+    case "Review":
+      return 75;
+    case "Completed":
+      return 100;
+    default:
+      return null;
+  }
+};
 
 // ======================
 // PROJECT CONTROLLERS
@@ -81,7 +97,7 @@ exports.createProject =
 exports.getProjects =
   async (req, res) => {
     try {
-      const projects =
+      const projects = 
         await Project.find({
           isDeleted: false,
         })
@@ -230,6 +246,11 @@ exports.updateProjectStatus =
 
       project.status =
         status;
+
+      const autoProgress = getProjectProgressForStatus(status);
+      if (autoProgress !== null) {
+        project.progress = autoProgress;
+      }
 
       await project.save();
 
