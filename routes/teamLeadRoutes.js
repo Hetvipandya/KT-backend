@@ -37,7 +37,7 @@ router.get(
   "/team",
   protect,
   authorizeRoles(
-    "teamlead",
+    "team lead",
     "admin"
   ),
   getMyTeam
