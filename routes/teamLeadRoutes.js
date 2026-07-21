@@ -6,6 +6,7 @@ const {
   getDashboard,
   getMyTeam,
   getReports,
+  createOrUpdateTeam,
 } = require("../controllers/teamLeadController");
 
 const {
@@ -24,6 +25,14 @@ router.get(
     "admin"
   ),
   getDashboard
+);
+
+
+router.post(
+  "/create-team",
+  protect,
+  authorizeRoles("admin"),
+  createOrUpdateTeam
 );
 
 router.get(

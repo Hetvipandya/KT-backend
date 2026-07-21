@@ -177,6 +177,72 @@ exports.getDashboard =
     }
   };
 
+  exports.createOrUpdateTeam = async (req, res) => {
+  try {
+    const {
+      teamLead,
+      developers = [],
+      interns = [],
+      designers = [],
+      testers = [],
+    } = req.body;
+
+    if (!teamLead) {
+      return res.status(400).json({
+        success: false,
+        message: "Team Lead is required",
+      });
+    }
+
+    const teamLeadUser = await User.findById(teamLead);
+
+    if (!teamLeadUser) {
+      return res.status(404).json({
+        success: false,
+        message: "Team Lead not found",
+      });
+    }
+
+    let team = await Team.findOne({
+      teamLead,
+    });
+
+    if (team) {
+      team.developers = developers;
+      team.interns = interns;
+      team.designers = designers;
+      team.testers = testers;
+
+      await team.save();
+
+      return res.status(200).json({
+        success: true,
+        message: "Team Updated Successfully",
+        data: team,
+      });
+    }
+
+    team = await Team.create({
+      teamLead,
+      developers,
+      interns,
+      designers,
+      testers,
+    });
+
+    return res.status(201).json({
+      success: true,
+      message: "Team Created Successfully",
+      data: team,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
 /*
 =========================
 GET MY TEAM
