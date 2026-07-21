@@ -1,34 +1,27 @@
-const express =
-  require("express");
+const express = require("express");
 
-const router =
-  express.Router();
+const router = express.Router();
 
 const {
-  getDashboard, 
+  getDashboard,
   getMyTeam,
   getReports,
-} = require(
-  "../controllers/teamLeadController"
-);
- 
+} = require("../controllers/teamLeadController");
+
 const {
   protect,
-} = require(
-  "../middleware/authMiddleware"
-);
+} = require("../middleware/authMiddleware");
 
 const {
   authorizeRoles,
-} = require(
-  "../middleware/roleMiddleware"
-);
+} = require("../middleware/roleMiddleware");
 
 router.get(
   "/dashboard",
   protect,
   authorizeRoles(
-    "teamlead"
+    "team lead",
+    "admin"
   ),
   getDashboard
 );
@@ -47,10 +40,10 @@ router.get(
   "/reports",
   protect,
   authorizeRoles(
-    "teamlead"
+    "team lead",
+    "admin"
   ),
   getReports
 );
 
-module.exports =
-  router;
+module.exports = router;
