@@ -37,7 +37,8 @@ router.get(
   "/team",
   protect,
   authorizeRoles(
-    "teamlead"
+    "teamlead",
+    "admin"
   ),
   getMyTeam
 );

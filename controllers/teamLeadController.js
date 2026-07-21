@@ -188,7 +188,7 @@ GET MY TEAM
 */
 
 exports.getMyTeam =
-  async (req, res) => {
+  async (req, res) => { 
     try {
       const teamIds =
         await getTeamIds(
