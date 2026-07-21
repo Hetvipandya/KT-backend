@@ -196,23 +196,38 @@ exports.createOrUpdateTeam = async (req, res) => {
 
     let teamLeadUser = null;
     let teamLeadEmployee = null;
+    let team = null;
 
     // ===========================
     // CHECK USER COLLECTION
     // ===========================
+
     const user = await User.findById(teamLead);
 
     if (user) {
       teamLeadUser = user._id;
+
+      // check only by user id
+      team = await Team.findOne({
+        teamLeadUser: teamLeadUser,
+      });
     }
 
     // ===========================
     // CHECK EMPLOYEE COLLECTION
     // ===========================
-    const employee = await Employee.findById(teamLead);
 
-    if (employee && employee.isTeamLead) {
-      teamLeadEmployee = employee._id;
+    if (!user) {
+      const employee = await Employee.findById(teamLead);
+
+      if (employee && employee.isTeamLead) {
+        teamLeadEmployee = employee._id;
+
+        // check only by employee id
+        team = await Team.findOne({
+          teamLeadEmployee: teamLeadEmployee,
+        });
+      }
     }
 
     if (!teamLeadUser && !teamLeadEmployee) {
@@ -223,24 +238,10 @@ exports.createOrUpdateTeam = async (req, res) => {
     }
 
     // ===========================
-    // FIND EXISTING TEAM
-    // ===========================
-
-    let team = await Team.findOne({
-      $or: [
-        { teamLeadUser },
-        { teamLeadEmployee },
-      ],
-    });
-
-    // ===========================
-    // UPDATE TEAM
+    // UPDATE EXISTING TEAM
     // ===========================
 
     if (team) {
-      team.teamLeadUser = teamLeadUser;
-      team.teamLeadEmployee = teamLeadEmployee;
-
       team.developers = developers;
       team.interns = interns;
       team.designers = designers;
@@ -256,10 +257,10 @@ exports.createOrUpdateTeam = async (req, res) => {
     }
 
     // ===========================
-    // CREATE TEAM
+    // CREATE NEW TEAM
     // ===========================
 
-    team = await Team.create({
+    const newTeam = await Team.create({
       teamLeadUser,
       teamLeadEmployee,
       developers,
@@ -271,8 +272,9 @@ exports.createOrUpdateTeam = async (req, res) => {
     return res.status(201).json({
       success: true,
       message: "Team Created Successfully",
-      data: team,
+      data: newTeam,
     });
+
   } catch (error) {
     console.log(error);
 
