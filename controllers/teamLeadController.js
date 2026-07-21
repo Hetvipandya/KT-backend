@@ -24,30 +24,24 @@ COMMON TEAM IDS
 =========================
 */
 
-const getTeamIds =
-  async (
-    teamLeadId
-  ) => {
-    const team =
-      await Team.findOne({
-        teamLead:
-          new mongoose.Types.ObjectId(
-            teamLeadId
-          ),
-      });
+const getTeamIds = async (teamLeadId) => {
+  console.log("Logged In Team Lead ID:", teamLeadId);
 
-    if (!team)
-      return null;
+  const team = await Team.findOne({
+    teamLead: new mongoose.Types.ObjectId(teamLeadId),
+  });
 
-    return [
-      ...team
-        .developers,
-      ...team.interns,
-      ...team
-        .designers,
-      ...team.testers,
-    ];
-  };
+  console.log("Team Found:", team);
+
+  if (!team) return null;
+
+  return [
+    ...team.developers,
+    ...team.interns,
+    ...team.designers,
+    ...team.testers,
+  ];
+};
 
 /*
 =========================
