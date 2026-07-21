@@ -6,12 +6,13 @@ const holidaySchema =
     {
       holidayName: {
         type: String,
-        required: true,
+        required: true, 
       },
 
       holidayDate: {
         type: Date,
         required: true,
+          unique: true,
       },
 
       isPublicHoliday: {

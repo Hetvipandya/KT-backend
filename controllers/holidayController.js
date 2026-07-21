@@ -21,7 +21,7 @@ exports.addHoliday =
             message:
               "Holiday name and date are required",
           });
-      }
+      } 
 
       const holiday =
         await Holiday.create({
@@ -45,24 +45,94 @@ exports.addHoliday =
   };
 
 // ================= GET ALL HOLIDAYS =================
-exports.getAllHolidays =
-  async (req, res) => {
-    try {
-      const holidays =
-        await Holiday.find();
+// ================= GET ALL HOLIDAYS =================
+exports.getAllHolidays = async (req, res) => {
+  try {
+    const year = Number(req.query.year) || new Date().getFullYear();
 
-      res.status(200).json({
-        success: true,
-        holidays,
-      });
-    } catch (error) {
-      res.status(500).json({
-        success: false,
-        message:
-          error.message,
-      });
+    // Custom Holidays from DB
+    const customHolidays = await Holiday.find({
+      holidayDate: {
+        $gte: new Date(`${year}-01-01`),
+        $lte: new Date(`${year}-12-31`),
+      },
+    });
+
+    const holidays = [];
+
+    // Generate Sundays + 2nd & 4th Saturdays
+    for (let month = 0; month < 12; month++) {
+      let saturdayCount = 0;
+
+      const lastDay = new Date(year, month + 1, 0).getDate();
+
+      for (let day = 1; day <= lastDay; day++) {
+        const date = new Date(year, month, day);
+        const weekDay = date.getDay();
+
+        // Sunday
+        if (weekDay === 0) {
+          holidays.push({
+            holidayName: "Sunday",
+            holidayDate: date,
+            isPublicHoliday: true,
+            isDefault: true,
+          });
+        }
+
+        // Saturday
+        if (weekDay === 6) {
+          saturdayCount++;
+
+          if (saturdayCount === 2 || saturdayCount === 4) {
+            holidays.push({
+              holidayName:
+                saturdayCount === 2
+                  ? "2nd Saturday"
+                  : "4th Saturday",
+              holidayDate: date,
+              isPublicHoliday: true,
+              isDefault: true,
+            });
+          }
+        }
+      }
     }
-  };
+
+    // Add DB Holidays (avoid duplicate dates)
+    customHolidays.forEach((holiday) => {
+      const exists = holidays.some(
+        (h) =>
+          new Date(h.holidayDate).toDateString() ===
+          new Date(holiday.holidayDate).toDateString()
+      );
+
+      if (!exists) {
+        holidays.push({
+          ...holiday.toObject(),
+          isDefault: false,
+        });
+      }
+    });
+
+    // Sort by Date
+    holidays.sort(
+      (a, b) =>
+        new Date(a.holidayDate) - new Date(b.holidayDate)
+    );
+
+    res.status(200).json({
+      success: true,
+      total: holidays.length,
+      holidays,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
 
 // ================= UPDATE HOLIDAY =================
 exports.updateHoliday =
