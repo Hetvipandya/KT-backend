@@ -33,6 +33,19 @@ const getProjectProgressForStatus = (status) => {
   }
 };
 
+const applyProgressFromStatus = (projectData) => {
+  if (!projectData || !projectData.status) {
+    return projectData;
+  }
+
+  const autoProgress = getProjectProgressForStatus(projectData.status);
+  if (autoProgress !== null) {
+    projectData.progress = autoProgress;
+  }
+
+  return projectData;
+};
+
 // ======================
 // PROJECT CONTROLLERS
 // ======================
@@ -69,12 +82,14 @@ exports.createProject =
           `PR${lastNumber + 1}`;
       }
 
+      const projectPayload = applyProgressFromStatus({
+        ...req.body,
+        projectCode,
+      });
+
       // Create Project
       const project =
-        await Project.create({
-          ...req.body,
-          projectCode,
-        });
+        await Project.create(projectPayload);
 
       res.status(201).json({
         success: true,
@@ -169,10 +184,12 @@ exports.getProjectDetails =
 exports.updateProject =
   async (req, res) => {
     try {
+      const updatePayload = applyProgressFromStatus({ ...req.body });
+
       const project =
         await Project.findByIdAndUpdate(
           req.params.id,
-          req.body,
+          updatePayload,
           { new: true }
         );
 

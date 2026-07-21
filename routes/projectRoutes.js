@@ -46,7 +46,7 @@ router.post(
 );
 
 // Get All Projects
-router.get(
+router.get( 
   "/project/all",
   getAllProjects
 );

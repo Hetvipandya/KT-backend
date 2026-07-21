@@ -18,6 +18,19 @@ const getProgressForStatus = (status) => {
   }
 };
 
+const applyProgressFromStatus = (taskData) => {
+  if (!taskData || !taskData.status) {
+    return taskData;
+  }
+
+  const autoProgress = getProgressForStatus(taskData.status);
+  if (autoProgress !== null) {
+    taskData.progress = autoProgress;
+  }
+
+  return taskData;
+};
+
 // ================= CREATE TASK =================
 exports.createTask = async (req, res) => {
   try {
@@ -125,7 +138,7 @@ exports.createTask = async (req, res) => {
       });
     }
 
-const createdTask = await TaskManagement.create({
+const taskPayload = applyProgressFromStatus({
   projectId,
   milestoneId: milestoneId || null,
   taskTitle,
@@ -144,6 +157,8 @@ const createdTask = await TaskManagement.create({
   comments,
   attachments,
 });
+
+const createdTask = await TaskManagement.create(taskPayload);
 
 const task = await TaskManagement.findById(createdTask._id)
   .populate("projectId", "projectName")
@@ -270,10 +285,12 @@ exports.getTaskById =
 exports.updateTask =
   async (req, res) => {
     try {
+      const updatePayload = applyProgressFromStatus({ ...req.body });
+
       const task =
         await TaskManagement.findByIdAndUpdate(
           req.params.id,
-          req.body,
+          updatePayload,
           {
             new: true,
           }
