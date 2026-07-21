@@ -66,7 +66,7 @@ router.post(
 // Get all reports
 router.get(
   "/list",
-  getAllDailyReports
+  getAllDailyReports 
 ); 
 
 // Get single report

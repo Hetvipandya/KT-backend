@@ -139,7 +139,7 @@ exports.getAllDailyReports = async (req, res) => {
     const reports = await DailyReport.find()
       .populate({
         path: "employeeId",
-        select: "role", // je fields joiye e
+        select: "name role", // je fields joiye e
       })
       .populate({
         path: "projectId",
