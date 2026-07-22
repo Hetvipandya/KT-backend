@@ -593,6 +593,32 @@ exports.createDirectAdjustment = async (req, res) => {
 
     // Get employee name from any source
     const employeeName = await getEmployeeName(employeeId);
+    
+    // Determine user type by checking which collection the employee belongs to
+    let userType = 'employee'; // default
+    
+    try {
+      // Check in Employee collection
+      let employee = await Employee.findById(employeeId).lean();
+      if (employee) {
+        userType = employee.role || 'employee';
+      } else {
+        // Check in User collection (for interns)
+        let user = await User.findById(employeeId).lean();
+        if (user) {
+          userType = user.role || 'intern';
+        } else {
+          // Check in TeamLead collection
+          let teamLead = await TeamLead.findById(employeeId).lean();
+          if (teamLead) {
+            userType = 'teamlead';
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error determining user type:', error);
+      // Keep default 'employee'
+    }
 
     // Find or create attendance record
     const attendanceDate = new Date(date);
@@ -604,9 +630,10 @@ exports.createDirectAdjustment = async (req, res) => {
     });
 
     if (!attendance) {
-      // Create new attendance record
+      // Create new attendance record with userType
       attendance = new Attendance({
         userId: employeeId,
+        userType: userType, // Add this required field
         date: attendanceDate,
         status: 'present',
         checkInTime: null,
@@ -616,6 +643,11 @@ exports.createDirectAdjustment = async (req, res) => {
         approvalStatus: 'approved',
         sessions: []
       });
+    } else {
+      // Update userType if it's missing or different
+      if (!attendance.userType) {
+        attendance.userType = userType;
+      }
     }
 
     // Update sessions with the new times
@@ -686,7 +718,6 @@ exports.createDirectAdjustment = async (req, res) => {
     });
   }
 };
-
 // ==========================================
 // Get Adjustment History - FIXED
 // ==========================================
