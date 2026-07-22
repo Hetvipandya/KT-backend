@@ -479,6 +479,7 @@
 //   }
 // };
 
+
 const Attendance = require("../models/Attendance");
 const Employee = require("../models/Employee");
 const User = require("../models/User");
@@ -492,27 +493,63 @@ const parseTimeToDate = (dateStr, timeStr) => {
   return new Date(Date.UTC(year, month - 1, day, hour - 5, minute - 30, 0));
 };
 
-// Helper to get employee name from different sources
+// Helper to get employee name from different sources - FIXED
 const getEmployeeName = async (employeeId) => {
-  // Check in Employee collection
-  let employee = await Employee.findById(employeeId);
-  if (employee) {
-    return employee.firstName + ' ' + employee.lastName || employee.name;
-  }
+  if (!employeeId) return 'Unknown Employee';
+  
+  try {
+    // 1. Check in Employee collection
+    let employee = await Employee.findById(employeeId).lean();
+    if (employee) {
+      const firstName = employee.firstName || '';
+      const lastName = employee.lastName || '';
+      const name = employee.name || '';
+      return [firstName, lastName].filter(Boolean).join(' ') || name || 'Unknown Employee';
+    }
 
-  // Check in User collection (for interns)
-  let user = await User.findById(employeeId);
-  if (user) {
-    return user.firstName + ' ' + user.lastName || user.name;
-  }
+    // 2. Check in User collection (for interns)
+    let user = await User.findById(employeeId).lean();
+    if (user) {
+      const firstName = user.firstName || '';
+      const lastName = user.lastName || '';
+      const name = user.name || '';
+      return [firstName, lastName].filter(Boolean).join(' ') || name || 'Unknown Employee';
+    }
 
-  // Check in TeamLead collection
-  let teamLead = await TeamLead.findById(employeeId);
-  if (teamLead) {
-    return teamLead.firstName + ' ' + teamLead.lastName || teamLead.name;
-  }
+    // 3. Check in TeamLead collection
+    let teamLead = await TeamLead.findById(employeeId).lean();
+    if (teamLead) {
+      const firstName = teamLead.firstName || '';
+      const lastName = teamLead.lastName || '';
+      const name = teamLead.name || '';
+      return [firstName, lastName].filter(Boolean).join(' ') || name || 'Unknown Employee';
+    }
 
-  return 'Unknown Employee';
+    // 4. If not found in any collection, try to find in any collection with different ID field
+    // Check Employee with employeeId field
+    let employeeByEmpId = await Employee.findOne({ employeeId: employeeId }).lean();
+    if (employeeByEmpId) {
+      const firstName = employeeByEmpId.firstName || '';
+      const lastName = employeeByEmpId.lastName || '';
+      const name = employeeByEmpId.name || '';
+      return [firstName, lastName].filter(Boolean).join(' ') || name || 'Unknown Employee';
+    }
+
+    // Check User with employeeId field
+    let userByEmpId = await User.findOne({ employeeId: employeeId }).lean();
+    if (userByEmpId) {
+      const firstName = userByEmpId.firstName || '';
+      const lastName = userByEmpId.lastName || '';
+      const name = userByEmpId.name || '';
+      return [firstName, lastName].filter(Boolean).join(' ') || name || 'Unknown Employee';
+    }
+
+    return 'Unknown Employee';
+    
+  } catch (error) {
+    console.error('Error getting employee name:', error);
+    return 'Unknown Employee';
+  }
 };
 
 // ==========================================
@@ -651,7 +688,7 @@ exports.createDirectAdjustment = async (req, res) => {
 };
 
 // ==========================================
-// Get Adjustment History
+// Get Adjustment History - FIXED
 // ==========================================
 
 exports.getAdjustmentHistory = async (req, res) => {
@@ -689,6 +726,27 @@ exports.getAdjustmentHistory = async (req, res) => {
     res.status(500).json({
       success: false,
       message: error.message,
+    });
+  }
+};
+
+// ==========================================
+// Test endpoint to debug employee name
+// ==========================================
+
+exports.testGetEmployeeName = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const name = await getEmployeeName(id);
+    res.json({
+      success: true,
+      employeeId: id,
+      employeeName: name
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message
     });
   }
 };
