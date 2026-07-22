@@ -1,83 +1,50 @@
-const mongoose = require("mongoose");
+const mongoose = require('mongoose');
 
-const adjustmentRequestSchema = new mongoose.Schema(
-  {
-    employeeId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Employee",
-      required: true, 
-    },
-
-    date: {
-      type: String,
-      required: true,
-    },
-
-    // Old compatibility field
-    requestedTime: {
-      type: String,
-      default: "",
-    },
-
-    // Multiple sessions
-  sessions: [
-  {
-    checkin: {
-      type: String,
-      default: "",
-    },
-
-    breakStart: {
-      type: String,
-      default: "",
-    },
-
-    breakEnd: {
-      type: String,
-      default: "",
-    },
-
-    checkout: {
-      type: String,
-      default: "",
-    },
+const attendanceSchema = new mongoose.Schema({
+  userId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: true
   },
-],
-
-    reason: {
-      type: String,
-      required: true,
-      trim: true,
-    },
-
-    status: {
-      type: String,
-      enum: ["pending", "approved", "rejected"],
-      default: "pending",
-    },
-
-    adminDecision: {
-      type: String,
-      enum: ["present", "half-day", "absent", null],
-      default: null,
-    },
-
-    adminNote: {
-      type: String,
-      default: "",
-    },
-
-    resolvedAt: {
-      type: Date,
-      default: null,
-    },
+  userType: {
+    type: String,
+    enum: ['employee', 'intern', 'tl', 'admin'],
+    default: 'employee' // Set default value to avoid validation errors
   },
-  {
-    timestamps: true,
-  }
-);
+  date: {
+    type: Date,
+    required: true
+  },
+  checkInTime: Date,
+  checkOutTime: Date,
+  approvedCheckInTime: Date,
+  totalBreakTime: {
+    type: Number,
+    default: 0
+  },
+  totalWorkTime: {
+    type: Number,
+    default: 0
+  },
+  status: {
+    type: String,
+    enum: ['present', 'absent', 'half-day', 'late'],
+    default: 'absent'
+  },
+  approvalStatus: {
+    type: String,
+    enum: ['pending', 'approved', 'rejected'],
+    default: 'pending'
+  },
+  sessions: [{
+    checkin: String,
+    breakStart: String,
+    breakEnd: String,
+    checkout: String
+  }],
+  // ... any other fields
+}, {
+  timestamps: true
+});
 
-module.exports = mongoose.model(
-  "AdjustmentRequest",
-  adjustmentRequestSchema
-);
+module.exports = mongoose.model('Attendance', attendanceSchema);
