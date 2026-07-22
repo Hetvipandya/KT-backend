@@ -1,66 +1,81 @@
+// const express = require("express");
+
+// const router = express.Router();
+
+// const {
+
+// createAdjustmentRequest,
+//  getPendingAdjustmentRequests,
+// getAllAdjustmentRequests,
+// getSingleAdjustmentRequest,
+// getEmployeeAdjustmentRequests, 
+// updateAdjustmentRequest,
+// deleteAdjustmentRequest,
+// updateAdjustmentStatus,
+
+// } = require("../controllers/adjustmentRequestController");
+
+
+
+// // Employee
+
+// router.post(
+// "/create",
+// createAdjustmentRequest
+// );
+// router.get(
+//   "/pending",
+//   getPendingAdjustmentRequests
+// );
+// router.get(
+// "/employee/:employeeId",
+// getEmployeeAdjustmentRequests
+// );
+
+// router.put(
+// "/update/:id",
+// updateAdjustmentRequest
+// );
+
+// router.delete(
+// "/delete/:id",
+// deleteAdjustmentRequest
+// );
+
+
+
+// // Admin
+
+// router.get(
+// "/all",
+// getAllAdjustmentRequests
+// );
+
+// router.get(
+// "/:id",
+// getSingleAdjustmentRequest
+// );
+
+// router.put(
+// "/status/:id",
+// updateAdjustmentStatus
+// );
+
+
+
+// module.exports = router;
+
 const express = require("express");
-
 const router = express.Router();
-
 const {
-
-createAdjustmentRequest,
- getPendingAdjustmentRequests,
-getAllAdjustmentRequests,
-getSingleAdjustmentRequest,
-getEmployeeAdjustmentRequests, 
-updateAdjustmentRequest,
-deleteAdjustmentRequest,
-updateAdjustmentStatus,
-
+  createDirectAdjustment,
+  getAdjustmentHistory
 } = require("../controllers/adjustmentRequestController");
 
+// Direct adjustment - immediately updates attendance
+router.post("/create", createDirectAdjustment);
 
-
-// Employee
-
-router.post(
-"/create",
-createAdjustmentRequest
-);
-router.get(
-  "/pending",
-  getPendingAdjustmentRequests
-);
-router.get(
-"/employee/:employeeId",
-getEmployeeAdjustmentRequests
-);
-
-router.put(
-"/update/:id",
-updateAdjustmentRequest
-);
-
-router.delete(
-"/delete/:id",
-deleteAdjustmentRequest
-);
-
-
-
-// Admin
-
-router.get(
-"/all",
-getAllAdjustmentRequests
-);
-
-router.get(
-"/:id",
-getSingleAdjustmentRequest
-);
-
-router.put(
-"/status/:id",
-updateAdjustmentStatus
-);
-
-
+// Get adjustment history
+router.get("/history", getAdjustmentHistory);
 
 module.exports = router;

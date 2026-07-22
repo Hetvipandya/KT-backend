@@ -1,97 +1,648 @@
-const AdjustmentRequest = require("../models/AdjustmentRequest");
-const Attendance = require("../models/Attendance");
+// const AdjustmentRequest = require("../models/AdjustmentRequest");
+// const Attendance = require("../models/Attendance");
 
-const parseISTDateTime = (dateString, timeString) => {
-  const [year, month, day] = dateString.split("-").map(Number);
-  const [hour, minute] = timeString.split(":").map(Number);
+// const parseISTDateTime = (dateString, timeString) => {
+//   const [year, month, day] = dateString.split("-").map(Number);
+//   const [hour, minute] = timeString.split(":").map(Number);
+//   return new Date(Date.UTC(year, month - 1, day, hour - 5, minute - 30, 0));
+// };
+
+// // ==========================================
+// // Create Request
+// // ==========================================
+
+// exports.createAdjustmentRequest =
+// async (req, res) => {
+
+// try { 
+
+// const {
+// employeeId,
+// date,
+// requestedTime,
+// sessions,
+// reason,
+// } = req.body;
+
+// if (
+// !employeeId ||
+// !date ||
+// !reason
+// ) {
+// return res.status(400).json({
+// success:false,
+// message:"Employee, Date and Reason are required.",
+// });
+// }
+
+// const existing =
+// await AdjustmentRequest.findOne({
+// employeeId,
+// date,
+// status:"pending",
+// });
+
+// if(existing){
+// return res.status(400).json({
+// success:false,
+// message:"Pending request already exists for this date.",
+// });
+// }
+
+// const request =
+// await AdjustmentRequest.create({
+// employeeId,
+// date,
+// requestedTime,
+// sessions,
+// reason,
+// });
+
+// res.status(201).json({
+// success:true,
+// message:"Adjustment Request Submitted.",
+// data:request,
+// });
+
+// } catch(error){
+
+// res.status(500).json({
+// success:false,
+// message:error.message,
+// });
+
+// }
+
+// };
+
+// exports.getPendingAdjustmentRequests = async (req, res) => {
+//   try {
+//     const requests = await AdjustmentRequest.find({
+//       status: "pending",
+//     })
+//       .populate({
+//         path: "employeeId",
+//         select: "name firstName lastName" // Make sure these fields exist
+//       })
+//       .sort({ createdAt: -1 });
+
+//     res.status(200).json({
+//       success: true,
+//       count: requests.length,
+//       data: requests,
+//     });
+//   } catch (error) {
+//     res.status(500).json({
+//       success: false,
+//       message: error.message,
+//     });
+//   }
+// };
+
+
+
+// // ==========================================
+// // Get All Requests
+// // ==========================================
+
+// exports.getAllAdjustmentRequests =
+// async(req,res)=>{
+
+// try{
+
+// const requests =
+// await AdjustmentRequest.find()
+// .populate("employeeId")
+// .sort({createdAt:-1});
+
+// res.json({
+// success:true,
+// count:requests.length,
+// data:requests,
+// });
+
+// }catch(error){
+
+// res.status(500).json({
+// success:false,
+// message:error.message,
+// });
+
+// }
+
+// };
+
+
+
+// // ==========================================
+// // Get Single Request
+// // ==========================================
+
+// exports.getSingleAdjustmentRequest =
+// async(req,res)=>{
+
+// try{
+
+// const request =
+// await AdjustmentRequest.findById(req.params.id)
+// .populate("employeeId");
+
+// if(!request){
+
+// return res.status(404).json({
+// success:false,
+// message:"Request not found.",
+// });
+
+// }
+
+// res.json({
+// success:true,
+// data:request,
+// });
+
+// }catch(error){
+
+// res.status(500).json({
+// success:false,
+// message:error.message,
+// });
+
+// }
+
+// };
+
+
+
+// // ==========================================
+// // Get Employee Requests
+// // ==========================================
+
+// exports.getEmployeeAdjustmentRequests =
+// async(req,res)=>{
+
+// try{
+
+// const requests =
+// await AdjustmentRequest.find({
+// employeeId:req.params.employeeId,
+// })
+// .populate("employeeId")
+// .sort({createdAt:-1});
+
+// res.json({
+// success:true,
+// count:requests.length,
+// data:requests,
+// });
+
+// }catch(error){
+
+// res.status(500).json({
+// success:false,
+// message:error.message,
+// });
+
+// }
+
+// };
+
+
+
+// // ==========================================
+// // Update Request
+// // ==========================================
+
+// exports.updateAdjustmentRequest =
+// async(req,res)=>{
+
+// try{
+
+// const request =
+// await AdjustmentRequest.findById(
+// req.params.id
+// );
+
+// if(!request){
+
+// return res.status(404).json({
+// success:false,
+// message:"Request not found.",
+// });
+
+// }
+
+// if(request.status!="pending"){
+
+// return res.status(400).json({
+// success:false,
+// message:"Only pending request can be updated.",
+// });
+
+// }
+
+// const {
+// employeeId,
+// date,
+// requestedTime,
+// sessions,
+// reason,
+// }=req.body;
+
+// if(employeeId)
+// request.employeeId=employeeId;
+
+// if(date)
+// request.date=date;
+
+// if(requestedTime!=undefined)
+// request.requestedTime=requestedTime;
+
+// if(sessions)
+// request.sessions=sessions;
+
+// if(reason)
+// request.reason=reason;
+
+// await request.save();
+
+// res.json({
+// success:true,
+// message:"Request updated successfully.",
+// data:request,
+// });
+
+// }catch(error){
+
+// res.status(500).json({
+// success:false,
+// message:error.message,
+// });
+
+// }
+
+// };
+
+
+
+
+// // ==========================================
+// // Delete Request
+// // ==========================================
+
+// exports.deleteAdjustmentRequest =
+// async(req,res)=>{
+
+// try{
+
+// const request =
+// await AdjustmentRequest.findById(
+// req.params.id
+// );
+
+// if(!request){
+
+// return res.status(404).json({
+// success:false,
+// message:"Request not found.",
+// });
+
+// }
+
+// if(request.status!="pending"){
+
+// return res.status(400).json({
+// success:false,
+// message:"Approved/Rejected request cannot be deleted.",
+// });
+
+// }
+
+// await request.deleteOne();
+
+// res.json({
+// success:true,
+// message:"Deleted Successfully.",
+// });
+
+// }catch(error){
+
+// res.status(500).json({
+// success:false,
+// message:error.message,
+// });
+
+// }
+
+// };
+
+
+
+
+// // ==========================================
+// // Admin Approve / Reject
+// // ==========================================
+
+// exports.updateAdjustmentStatus = async (req, res) => {
+//   try {
+
+//     const {
+//       status,
+//       adminDecision,
+//       adminNote
+//     } = req.body;
+
+//     const request =
+//       await AdjustmentRequest.findById(req.params.id);
+
+//     if (!request) {
+//       return res.status(404).json({
+//         success: false,
+//         message: "Adjustment request not found"
+//       });
+//     }
+
+//     request.status = status;
+//     request.adminDecision = adminDecision || null;
+//     request.adminNote = adminNote || "";
+//     request.resolvedAt = new Date();
+
+//     // ==========================
+//     // Update Attendance
+//     // ==========================
+
+//     if (status === "approved") {
+
+//       const attendance =
+//         await Attendance.findOne({
+//           userId: request.employeeId,
+//           date: request.date
+//         });
+
+//       if (!attendance) {
+//         return res.status(404).json({
+//           success: false,
+//           message: "Attendance not found."
+//         });
+//       }
+
+//       // First Session
+//       if (
+//         request.sessions &&
+//         request.sessions.length > 0
+//       ) {
+
+//         const first =
+//           request.sessions[0];
+
+//         const last =
+//           request.sessions[
+//           request.sessions.length - 1
+//           ];
+
+//         // Check In
+//         if (first.checkin) {
+
+//           const checkIn = parseISTDateTime(
+//             request.date,
+//             first.checkin
+//           );
+
+//           attendance.checkInTime = checkIn;
+//           attendance.approvedCheckInTime = checkIn;
+//         }
+
+//         // Check Out
+//         if (last.checkout) {
+
+//           const checkOut = parseISTDateTime(
+//             request.date,
+//             last.checkout
+//           );
+
+//           attendance.checkOutTime = checkOut;
+
+//           let totalMinutes =
+//             (checkOut -
+//               attendance.checkInTime) /
+//             (1000 * 60);
+
+//           totalMinutes -=
+//             Math.min(
+//               attendance.totalBreakTime,
+//               60
+//             );
+
+//           if (totalMinutes < 0)
+//             totalMinutes = 0;
+
+//           attendance.totalWorkTime =
+//             Number(
+//               (
+//                 totalMinutes / 60
+//               ).toFixed(2)
+//             );
+//         }
+
+//       }
+
+//       // Attendance Status
+
+//       if (adminDecision) {
+//         attendance.status =
+//           adminDecision;
+//       }
+
+//       attendance.approvalStatus =
+//         "approved";
+
+//       await attendance.save();
+
+//     }
+
+//     await request.save();
+
+//     res.json({
+//       success: true,
+//       message:
+//         "Adjustment processed successfully.",
+//       data: request
+//     });
+
+//   } catch (err) {
+
+//     res.status(500).json({
+//       success: false,
+//       message: err.message
+//     });
+
+//   }
+// };
+
+const Attendance = require("../models/Attendance");
+const Employee = require("../models/Employee");
+const User = require("../models/User");
+const TeamLead = require("../models/Team");
+
+// Helper function to parse time
+const parseTimeToDate = (dateStr, timeStr) => {
+  if (!timeStr) return null;
+  const [year, month, day] = dateStr.split("-").map(Number);
+  const [hour, minute] = timeStr.split(":").map(Number);
   return new Date(Date.UTC(year, month - 1, day, hour - 5, minute - 30, 0));
 };
 
-// ==========================================
-// Create Request
-// ==========================================
+// Helper to get employee name from different sources
+const getEmployeeName = async (employeeId) => {
+  // Check in Employee collection
+  let employee = await Employee.findById(employeeId);
+  if (employee) {
+    return employee.firstName + ' ' + employee.lastName || employee.name;
+  }
 
-exports.createAdjustmentRequest =
-async (req, res) => {
+  // Check in User collection (for interns)
+  let user = await User.findById(employeeId);
+  if (user) {
+    return user.firstName + ' ' + user.lastName || user.name;
+  }
 
-try { 
+  // Check in TeamLead collection
+  let teamLead = await TeamLead.findById(employeeId);
+  if (teamLead) {
+    return teamLead.firstName + ' ' + teamLead.lastName || teamLead.name;
+  }
 
-const {
-employeeId,
-date,
-requestedTime,
-sessions,
-reason,
-} = req.body;
-
-if (
-!employeeId ||
-!date ||
-!reason
-) {
-return res.status(400).json({
-success:false,
-message:"Employee, Date and Reason are required.",
-});
-}
-
-const existing =
-await AdjustmentRequest.findOne({
-employeeId,
-date,
-status:"pending",
-});
-
-if(existing){
-return res.status(400).json({
-success:false,
-message:"Pending request already exists for this date.",
-});
-}
-
-const request =
-await AdjustmentRequest.create({
-employeeId,
-date,
-requestedTime,
-sessions,
-reason,
-});
-
-res.status(201).json({
-success:true,
-message:"Adjustment Request Submitted.",
-data:request,
-});
-
-} catch(error){
-
-res.status(500).json({
-success:false,
-message:error.message,
-});
-
-}
-
+  return 'Unknown Employee';
 };
 
-exports.getPendingAdjustmentRequests = async (req, res) => {
+// ==========================================
+// Direct Adjustment - Immediate Attendance Update
+// ==========================================
+
+exports.createDirectAdjustment = async (req, res) => {
   try {
-    const requests = await AdjustmentRequest.find({
-      status: "pending",
-    })
-      .populate({
-        path: "employeeId",
-        select: "name firstName lastName" // Make sure these fields exist
-      })
-      .sort({ createdAt: -1 });
+    const {
+      employeeId,
+      date,
+      sessions,
+      reason,
+    } = req.body;
+
+    // Validate required fields
+    if (!employeeId || !date || !reason) {
+      return res.status(400).json({
+        success: false,
+        message: "Employee, Date and Reason are required.",
+      });
+    }
+
+    // Check if any session has data
+    let hasAnyTime = false;
+    if (sessions && sessions.length > 0) {
+      for (const session of sessions) {
+        if (session.checkin || session.breakStart || session.breakEnd || session.checkout) {
+          hasAnyTime = true;
+          break;
+        }
+      }
+    }
+
+    if (!hasAnyTime) {
+      return res.status(400).json({
+        success: false,
+        message: "At least one time field is required.",
+      });
+    }
+
+    // Get employee name from any source
+    const employeeName = await getEmployeeName(employeeId);
+
+    // Find or create attendance record
+    const attendanceDate = new Date(date);
+    attendanceDate.setHours(0, 0, 0, 0);
+
+    let attendance = await Attendance.findOne({
+      userId: employeeId,
+      date: attendanceDate
+    });
+
+    if (!attendance) {
+      // Create new attendance record
+      attendance = new Attendance({
+        userId: employeeId,
+        date: attendanceDate,
+        status: 'present',
+        checkInTime: null,
+        checkOutTime: null,
+        totalBreakTime: 0,
+        totalWorkTime: 0,
+        approvalStatus: 'approved',
+        sessions: []
+      });
+    }
+
+    // Update sessions with the new times
+    if (sessions && sessions.length > 0) {
+      const firstSession = sessions[0];
+      const lastSession = sessions[sessions.length - 1];
+
+      // Handle Check In
+      if (firstSession.checkin) {
+        const checkInTime = parseTimeToDate(date, firstSession.checkin);
+        if (checkInTime) {
+          attendance.checkInTime = checkInTime;
+          attendance.approvedCheckInTime = checkInTime;
+        }
+      }
+
+      // Handle Check Out
+      if (lastSession.checkout) {
+        const checkOutTime = parseTimeToDate(date, lastSession.checkout);
+        if (checkOutTime) {
+          attendance.checkOutTime = checkOutTime;
+        }
+      }
+
+      // Calculate break time
+      let totalBreakMinutes = 0;
+      for (const session of sessions) {
+        if (session.breakStart && session.breakEnd) {
+          const breakStart = parseTimeToDate(date, session.breakStart);
+          const breakEnd = parseTimeToDate(date, session.breakEnd);
+          if (breakStart && breakEnd) {
+            const breakMinutes = (breakEnd - breakStart) / (1000 * 60);
+            totalBreakMinutes += breakMinutes;
+          }
+        }
+      }
+      attendance.totalBreakTime = Math.min(totalBreakMinutes, 120);
+
+      // Calculate total work time
+      if (attendance.checkInTime && attendance.checkOutTime) {
+        let totalMinutes = (attendance.checkOutTime - attendance.checkInTime) / (1000 * 60);
+        totalMinutes -= attendance.totalBreakTime;
+        if (totalMinutes < 0) totalMinutes = 0;
+        attendance.totalWorkTime = Number((totalMinutes / 60).toFixed(2));
+      }
+
+      // Set approval status
+      attendance.approvalStatus = 'approved';
+    }
+
+    // Save attendance
+    await attendance.save();
 
     res.status(200).json({
       success: true,
-      count: requests.length,
-      data: requests,
+      message: "Attendance updated successfully.",
+      data: {
+        attendance,
+        employeeName
+      }
     });
+
   } catch (error) {
+    console.error('Error in direct adjustment:', error);
     res.status(500).json({
       success: false,
       message: error.message,
@@ -99,382 +650,45 @@ exports.getPendingAdjustmentRequests = async (req, res) => {
   }
 };
 
-
-
 // ==========================================
-// Get All Requests
+// Get Adjustment History
 // ==========================================
 
-exports.getAllAdjustmentRequests =
-async(req,res)=>{
-
-try{
-
-const requests =
-await AdjustmentRequest.find()
-.populate("employeeId")
-.sort({createdAt:-1});
-
-res.json({
-success:true,
-count:requests.length,
-data:requests,
-});
-
-}catch(error){
-
-res.status(500).json({
-success:false,
-message:error.message,
-});
-
-}
-
-};
-
-
-
-// ==========================================
-// Get Single Request
-// ==========================================
-
-exports.getSingleAdjustmentRequest =
-async(req,res)=>{
-
-try{
-
-const request =
-await AdjustmentRequest.findById(req.params.id)
-.populate("employeeId");
-
-if(!request){
-
-return res.status(404).json({
-success:false,
-message:"Request not found.",
-});
-
-}
-
-res.json({
-success:true,
-data:request,
-});
-
-}catch(error){
-
-res.status(500).json({
-success:false,
-message:error.message,
-});
-
-}
-
-};
-
-
-
-// ==========================================
-// Get Employee Requests
-// ==========================================
-
-exports.getEmployeeAdjustmentRequests =
-async(req,res)=>{
-
-try{
-
-const requests =
-await AdjustmentRequest.find({
-employeeId:req.params.employeeId,
-})
-.populate("employeeId")
-.sort({createdAt:-1});
-
-res.json({
-success:true,
-count:requests.length,
-data:requests,
-});
-
-}catch(error){
-
-res.status(500).json({
-success:false,
-message:error.message,
-});
-
-}
-
-};
-
-
-
-// ==========================================
-// Update Request
-// ==========================================
-
-exports.updateAdjustmentRequest =
-async(req,res)=>{
-
-try{
-
-const request =
-await AdjustmentRequest.findById(
-req.params.id
-);
-
-if(!request){
-
-return res.status(404).json({
-success:false,
-message:"Request not found.",
-});
-
-}
-
-if(request.status!="pending"){
-
-return res.status(400).json({
-success:false,
-message:"Only pending request can be updated.",
-});
-
-}
-
-const {
-employeeId,
-date,
-requestedTime,
-sessions,
-reason,
-}=req.body;
-
-if(employeeId)
-request.employeeId=employeeId;
-
-if(date)
-request.date=date;
-
-if(requestedTime!=undefined)
-request.requestedTime=requestedTime;
-
-if(sessions)
-request.sessions=sessions;
-
-if(reason)
-request.reason=reason;
-
-await request.save();
-
-res.json({
-success:true,
-message:"Request updated successfully.",
-data:request,
-});
-
-}catch(error){
-
-res.status(500).json({
-success:false,
-message:error.message,
-});
-
-}
-
-};
-
-
-
-
-// ==========================================
-// Delete Request
-// ==========================================
-
-exports.deleteAdjustmentRequest =
-async(req,res)=>{
-
-try{
-
-const request =
-await AdjustmentRequest.findById(
-req.params.id
-);
-
-if(!request){
-
-return res.status(404).json({
-success:false,
-message:"Request not found.",
-});
-
-}
-
-if(request.status!="pending"){
-
-return res.status(400).json({
-success:false,
-message:"Approved/Rejected request cannot be deleted.",
-});
-
-}
-
-await request.deleteOne();
-
-res.json({
-success:true,
-message:"Deleted Successfully.",
-});
-
-}catch(error){
-
-res.status(500).json({
-success:false,
-message:error.message,
-});
-
-}
-
-};
-
-
-
-
-// ==========================================
-// Admin Approve / Reject
-// ==========================================
-
-exports.updateAdjustmentStatus = async (req, res) => {
+exports.getAdjustmentHistory = async (req, res) => {
   try {
+    const { employeeId } = req.query;
+    const query = {};
+    if (employeeId) query.userId = employeeId;
 
-    const {
-      status,
-      adminDecision,
-      adminNote
-    } = req.body;
+    const attendances = await Attendance.find(query)
+      .sort({ date: -1 })
+      .limit(20);
 
-    const request =
-      await AdjustmentRequest.findById(req.params.id);
+    // Get employee names for each attendance
+    const adjustments = await Promise.all(attendances.map(async (att) => {
+      const name = await getEmployeeName(att.userId);
+      return {
+        _id: att._id,
+        employeeId: att.userId,
+        employeeName: name,
+        date: att.date,
+        checkInTime: att.checkInTime,
+        checkOutTime: att.checkOutTime,
+        totalBreakTime: att.totalBreakTime,
+        totalWorkTime: att.totalWorkTime,
+        status: att.status,
+      };
+    }));
 
-    if (!request) {
-      return res.status(404).json({
-        success: false,
-        message: "Adjustment request not found"
-      });
-    }
-
-    request.status = status;
-    request.adminDecision = adminDecision || null;
-    request.adminNote = adminNote || "";
-    request.resolvedAt = new Date();
-
-    // ==========================
-    // Update Attendance
-    // ==========================
-
-    if (status === "approved") {
-
-      const attendance =
-        await Attendance.findOne({
-          userId: request.employeeId,
-          date: request.date
-        });
-
-      if (!attendance) {
-        return res.status(404).json({
-          success: false,
-          message: "Attendance not found."
-        });
-      }
-
-      // First Session
-      if (
-        request.sessions &&
-        request.sessions.length > 0
-      ) {
-
-        const first =
-          request.sessions[0];
-
-        const last =
-          request.sessions[
-          request.sessions.length - 1
-          ];
-
-        // Check In
-        if (first.checkin) {
-
-          const checkIn = parseISTDateTime(
-            request.date,
-            first.checkin
-          );
-
-          attendance.checkInTime = checkIn;
-          attendance.approvedCheckInTime = checkIn;
-        }
-
-        // Check Out
-        if (last.checkout) {
-
-          const checkOut = parseISTDateTime(
-            request.date,
-            last.checkout
-          );
-
-          attendance.checkOutTime = checkOut;
-
-          let totalMinutes =
-            (checkOut -
-              attendance.checkInTime) /
-            (1000 * 60);
-
-          totalMinutes -=
-            Math.min(
-              attendance.totalBreakTime,
-              60
-            );
-
-          if (totalMinutes < 0)
-            totalMinutes = 0;
-
-          attendance.totalWorkTime =
-            Number(
-              (
-                totalMinutes / 60
-              ).toFixed(2)
-            );
-        }
-
-      }
-
-      // Attendance Status
-
-      if (adminDecision) {
-        attendance.status =
-          adminDecision;
-      }
-
-      attendance.approvalStatus =
-        "approved";
-
-      await attendance.save();
-
-    }
-
-    await request.save();
-
-    res.json({
+    res.status(200).json({
       success: true,
-      message:
-        "Adjustment processed successfully.",
-      data: request
+      data: adjustments
     });
-
-  } catch (err) {
-
+  } catch (error) {
+    console.error('Error fetching adjustment history:', error);
     res.status(500).json({
       success: false,
-      message: err.message
+      message: error.message,
     });
-
   }
 };
