@@ -5,7 +5,7 @@ const adjustmentRequestSchema = new mongoose.Schema(
     employeeId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Employee",
-      required: true,
+      required: true, 
     },
 
     date: {
@@ -20,19 +20,29 @@ const adjustmentRequestSchema = new mongoose.Schema(
     },
 
     // Multiple sessions
-    sessions: [
-      {
-        checkin: {
-          type: String,
-          default: "",
-        },
+  sessions: [
+  {
+    checkin: {
+      type: String,
+      default: "",
+    },
 
-        checkout: {
-          type: String,
-          default: "",
-        },
-      },
-    ],
+    breakStart: {
+      type: String,
+      default: "",
+    },
+
+    breakEnd: {
+      type: String,
+      default: "",
+    },
+
+    checkout: {
+      type: String,
+      default: "",
+    },
+  },
+],
 
     reason: {
       type: String,

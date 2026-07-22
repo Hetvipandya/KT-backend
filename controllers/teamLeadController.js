@@ -205,7 +205,7 @@ exports.createOrUpdateTeam = async (req, res) => {
     const user = await User.findById(teamLead);
 
     if (user) {
-      teamLeadUser = user._id;
+      teamLeadUser = user._id; 
 
       // check only by user id
       team = await Team.findOne({

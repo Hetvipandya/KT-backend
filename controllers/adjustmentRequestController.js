@@ -14,7 +14,7 @@ const parseISTDateTime = (dateString, timeString) => {
 exports.createAdjustmentRequest =
 async (req, res) => {
 
-try {
+try { 
 
 const {
 employeeId,

@@ -10,7 +10,7 @@ const getISTDateParts = (date = new Date()) => {
   const istDate = new Date(utc + istOffset);
 
   return {
-    year: istDate.getFullYear(),
+    year: istDate.getFullYear(), 
     month: pad(istDate.getMonth() + 1),
     day: pad(istDate.getDate()),
     hour: pad(istDate.getHours()),
@@ -256,7 +256,7 @@ exports.checkIn = async (req, res) => {
 
 exports.getAllAttendanceForAdmin = async (req, res) => {
   try {
-    const attendance = await Attendance.find()
+    const attendance = await Attendance.find() 
       .populate({
         path: "userId",
         select: "name uniqueID role email department",
