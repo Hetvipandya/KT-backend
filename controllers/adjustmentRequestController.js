@@ -77,11 +77,13 @@ message:error.message,
 
 exports.getPendingAdjustmentRequests = async (req, res) => {
   try {
-
     const requests = await AdjustmentRequest.find({
       status: "pending",
     })
-      .populate("employeeId")
+      .populate({
+        path: "employeeId",
+        select: "name firstName lastName" // Make sure these fields exist
+      })
       .sort({ createdAt: -1 });
 
     res.status(200).json({
@@ -89,14 +91,11 @@ exports.getPendingAdjustmentRequests = async (req, res) => {
       count: requests.length,
       data: requests,
     });
-
   } catch (error) {
-
     res.status(500).json({
       success: false,
       message: error.message,
     });
-
   }
 };
 
