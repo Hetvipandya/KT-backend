@@ -13,7 +13,7 @@ const {
   protect,
 } = require("../middleware/authMiddleware");
 
-const {
+const { 
   authorizeRoles,
 } = require("../middleware/roleMiddleware");
 

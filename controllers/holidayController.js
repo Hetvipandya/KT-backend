@@ -134,6 +134,39 @@ exports.getAllHolidays = async (req, res) => {
   }
 };
 
+// ================= GET CURRENT MONTH FESTIVAL HOLIDAYS =================
+exports.getCurrentMonthFestivalHolidays = async (req, res) => {
+  try {
+    const today = new Date();
+
+    const year = today.getFullYear();
+    const month = today.getMonth();
+
+    const startDate = new Date(year, month, 1);
+    const endDate = new Date(year, month + 1, 0, 23, 59, 59, 999);
+
+    const holidays = await Holiday.find({
+      holidayDate: {
+        $gte: startDate,
+        $lte: endDate,
+      },
+    }).sort({ holidayDate: 1 });
+
+    res.status(200).json({
+      success: true,
+      month: month + 1,
+      year,
+      total: holidays.length,
+      holidays,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
 // ================= UPDATE HOLIDAY =================
 exports.updateHoliday =
   async (req, res) => {
