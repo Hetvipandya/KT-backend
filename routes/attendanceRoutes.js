@@ -60,7 +60,7 @@ router.get(
   protect,
   getAllAttendanceForAdmin
 );
-
+ 
 // ================= ATTENDANCE REPORT =================
 router.get(
   "/:id",
