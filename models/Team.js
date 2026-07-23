@@ -27,7 +27,7 @@ const teamSchema = new mongoose.Schema(
     interns: [
       {
         type: mongoose.Schema.Types.ObjectId,
-        ref: "Employee",
+        ref: "User",
       },
     ],
   },
