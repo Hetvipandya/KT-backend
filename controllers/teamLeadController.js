@@ -202,8 +202,8 @@ exports.createOrUpdateTeam = async (req, res) => {
     const {
       teamLead,
       employees = [],
-      developers = [],
       interns = [],
+      developers = [],
       designers = [],
       testers = [],
     } = req.body;
@@ -226,9 +226,9 @@ exports.createOrUpdateTeam = async (req, res) => {
     const user = await User.findById(teamLead);
 
     if (user) {
-      teamLeadUser = user._id; 
+      teamLeadUser = user._id;
 
-      // check only by user id
+      // Check by user id
       team = await Team.findOne({
         teamLeadUser: teamLeadUser,
       });
@@ -244,7 +244,7 @@ exports.createOrUpdateTeam = async (req, res) => {
       if (employee && employee.isTeamLead) {
         teamLeadEmployee = employee._id;
 
-        // check only by employee id
+        // Check by employee id
         team = await Team.findOne({
           teamLeadEmployee: teamLeadEmployee,
         });
@@ -263,15 +263,34 @@ exports.createOrUpdateTeam = async (req, res) => {
     // ===========================
 
     if (team) {
-      // Save members into the schema's arrays. Prefer `employees` when provided.
-      if (employees && employees.length) team.employees = employees;
+      // Clear existing arrays and set new ones
+      // IMPORTANT: Use the fields that your frontend is sending
+      
+      // Update employees if provided
+      if (employees && employees.length > 0) {
+        team.employees = employees;
+      } else if (developers && developers.length > 0) {
+        // For backward compatibility
+        team.employees = developers;
+      } else if (req.body.employees !== undefined && req.body.employees.length === 0) {
+        // Allow clearing employees array
+        team.employees = [];
+      }
 
-      // Keep compatibility with legacy frontends submitting developer/designer/tester arrays
-      if (developers && developers.length) team.employees = developers;
+      // Update interns if provided
+      if (interns !== undefined) {
+        team.interns = interns;
+      }
 
-      team.interns = interns;
-      if (designers && designers.length) team.designers = designers;
-      if (testers && testers.length) team.testers = testers;
+      // Update designers if provided
+      if (designers !== undefined) {
+        team.designers = designers;
+      }
+
+      // Update testers if provided
+      if (testers !== undefined) {
+        team.testers = testers;
+      }
 
       await team.save();
 
@@ -289,10 +308,10 @@ exports.createOrUpdateTeam = async (req, res) => {
     const newTeam = await Team.create({
       teamLeadUser,
       teamLeadEmployee,
-      employees: employees && employees.length ? employees : developers,
-      interns,
-      designers,
-      testers,
+      employees: employees && employees.length > 0 ? employees : developers || [],
+      interns: interns || [],
+      designers: designers || [],
+      testers: testers || [],
     });
 
     return res.status(201).json({
