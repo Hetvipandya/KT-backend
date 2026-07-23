@@ -10,12 +10,14 @@ router.post("/create", notificationController.createNotification);
 
 router.get("/user/:userId", notificationController.getUserNotifications);
 
-router.put("/read/:id", notificationController.markAsRead);
+router.put("/read/:id", notificationController.markAsRead); 
 
 // ===============================
 // ANNOUNCEMENT ROUTES
 // ===============================
 router.post("/announcement/create", notificationController.createAnnouncement);
+router.put("/announcement/:id", notificationController.updateAnnouncement);
+router.delete("/announcement/:id", notificationController.deleteAnnouncement);
 
 router.get("/announcement/all", notificationController.getAnnouncements);
 

@@ -22,6 +22,71 @@ exports.createNotification = async (req, res) => {
   }
 };
 
+// ===============================
+// UPDATE ANNOUNCEMENT
+// ===============================
+exports.updateAnnouncement = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const announcement = await Announcement.findByIdAndUpdate(
+      id,
+      req.body,
+      {
+        new: true,
+        runValidators: true,
+      }
+    );
+
+    if (!announcement) {
+      return res.status(404).json({
+        success: false,
+        message: "Announcement not found",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Announcement updated successfully",
+      data: announcement,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+
+// ===============================
+// DELETE ANNOUNCEMENT
+// ===============================
+exports.deleteAnnouncement = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const announcement = await Announcement.findByIdAndDelete(id);
+
+    if (!announcement) {
+      return res.status(404).json({
+        success: false,
+        message: "Announcement not found",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Announcement deleted successfully",
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
 
 // ===============================
 // GET USER NOTIFICATIONS
