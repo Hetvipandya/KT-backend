@@ -4,7 +4,7 @@ const mongoose =
 const Attendance =
   require("../models/Attendance");
 
-const DailyReport =
+const DailyReport = 
   require("../models/DailyReport");
  
 const Task =
@@ -27,20 +27,40 @@ COMMON TEAM IDS
 const getTeamIds = async (teamLeadId) => {
   console.log("Logged In Team Lead ID:", teamLeadId);
 
-  const team = await Team.findOne({
-    teamLead: new mongoose.Types.ObjectId(teamLeadId),
-  });
+  // Find team either by linked User or Employee lead reference
+  const team =
+    (await Team.findOne({ teamLeadUser: new mongoose.Types.ObjectId(teamLeadId) })) ||
+    (await Team.findOne({ teamLeadEmployee: new mongoose.Types.ObjectId(teamLeadId) }));
 
   console.log("Team Found:", team);
 
   if (!team) return null;
 
-  return [
-    ...team.developers,
-    ...team.interns,
-    ...team.designers,
-    ...team.testers,
-  ];
+  // Collect member ids from known arrays. Support both legacy fields
+  // (developers/designers/testers) and current fields (employees/interns).
+  const members = [];
+
+  if (team.employees && team.employees.length) {
+    members.push(...team.employees);
+  }
+
+  if (team.interns && team.interns.length) {
+    members.push(...team.interns);
+  }
+
+  if (team.developers && team.developers.length) {
+    members.push(...team.developers);
+  }
+
+  if (team.designers && team.designers.length) {
+    members.push(...team.designers);
+  }
+
+  if (team.testers && team.testers.length) {
+    members.push(...team.testers);
+  }
+
+  return members;
 };
 
 /*
@@ -181,6 +201,7 @@ exports.createOrUpdateTeam = async (req, res) => {
   try {
     const {
       teamLead,
+      employees = [],
       developers = [],
       interns = [],
       designers = [],
@@ -242,10 +263,15 @@ exports.createOrUpdateTeam = async (req, res) => {
     // ===========================
 
     if (team) {
-      team.developers = developers;
+      // Save members into the schema's arrays. Prefer `employees` when provided.
+      if (employees && employees.length) team.employees = employees;
+
+      // Keep compatibility with legacy frontends submitting developer/designer/tester arrays
+      if (developers && developers.length) team.employees = developers;
+
       team.interns = interns;
-      team.designers = designers;
-      team.testers = testers;
+      if (designers && designers.length) team.designers = designers;
+      if (testers && testers.length) team.testers = testers;
 
       await team.save();
 
@@ -263,7 +289,7 @@ exports.createOrUpdateTeam = async (req, res) => {
     const newTeam = await Team.create({
       teamLeadUser,
       teamLeadEmployee,
-      developers,
+      employees: employees && employees.length ? employees : developers,
       interns,
       designers,
       testers,
@@ -313,6 +339,16 @@ exports.getMyTeam = async (req, res) => {
         select:
           "name email role uniqueID employeeID",
       });
+
+    // Also populate assigned employees
+    await Team.populate(teams, {
+      path: "employees",
+      select: "firstName lastName email employeeID designation department",
+      populate: {
+        path: "department",
+        select: "name",
+      },
+    });
 
 
     const data = teams.map((team) => {
@@ -391,9 +427,21 @@ exports.getMyTeam = async (req, res) => {
 
         })) || [],
 
+        employees: team.employees?.map((emp) => ({
+          _id: emp._id,
+          name:
+            emp.name || `${emp.firstName || ""} ${emp.lastName || ""}`.trim(),
+          email: emp.email || "",
+          designation: emp.designation || "",
+          employeeID: emp.employeeID || "",
+        })) || [],
+
 
         totalInterns:
           team.interns?.length || 0,
+
+        totalEmployees:
+          team.employees?.length || 0,
 
 
         createdAt: team.createdAt,

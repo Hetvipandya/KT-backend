@@ -9,7 +9,7 @@ const {
   createOrUpdateTeam,
 } = require("../controllers/teamLeadController");
 
-const {
+const { 
   protect,
 } = require("../middleware/authMiddleware");
 
