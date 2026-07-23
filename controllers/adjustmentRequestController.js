@@ -517,7 +517,19 @@ const getEmployeeName = async (employeeId) => {
     }
 
     // 3. Check in TeamLead collection
-    let teamLead = await TeamLead.findById(employeeId).lean();
+  // Team Lead
+const team = await TeamLead.findOne({
+    teamLeadUser: employeeId
+})
+.populate({
+    path: "teamLeadUser",
+    select: "name"
+})
+.lean();
+
+if (team && team.teamLeadUser) {
+    return team.teamLeadUser.name;
+}
     if (teamLead) {
       const firstName = teamLead.firstName || '';
       const lastName = teamLead.lastName || '';
@@ -595,30 +607,59 @@ exports.createDirectAdjustment = async (req, res) => {
     const employeeName = await getEmployeeName(employeeId);
     
     // Determine user type by checking which collection the employee belongs to
-    let userType = 'employee'; // default
-    
-    try {
-      // Check in Employee collection
-      let employee = await Employee.findById(employeeId).lean();
-      if (employee) {
-        userType = employee.role || 'employee';
-      } else {
-        // Check in User collection (for interns)
-        let user = await User.findById(employeeId).lean();
+// ======================================
+// Detect User Type
+// ======================================
+
+let userType = "employee";
+
+try {
+
+    // Employee collection
+    const employee = await Employee.findById(employeeId).lean();
+
+    if (employee) {
+
+        userType = "employee";
+
+    } else {
+
+        // User collection
+        const user = await User.findById(employeeId).lean();
+
         if (user) {
-          userType = user.role || 'intern';
-        } else {
-          // Check in TeamLead collection
-          let teamLead = await TeamLead.findById(employeeId).lean();
-          if (teamLead) {
-            userType = 'teamlead';
-          }
+
+            if (user.role === "intern") {
+                userType = "intern";
+            }
+
+            else if (user.role === "admin") {
+                userType = "admin";
+            }
+
+            else if (user.role === "hr") {
+                userType = "admin";     // અથવા Attendance enum માં hr add કર
+            }
+
+            else {
+
+                // Team Collection માં check કર
+                const team = await TeamLead.findOne({
+                    teamLeadUser: user._id
+                }).lean();
+
+                if (team) {
+                    userType = "team lead"; // Attendance schema પ્રમાણે રાખજે
+                }
+            }
         }
-      }
-    } catch (error) {
-      console.error('Error determining user type:', error);
-      // Keep default 'employee'
     }
+
+} catch (err) {
+
+    console.error("User type error :", err);
+
+}
 
     // Find or create attendance record
     const attendanceDate = new Date(date);
