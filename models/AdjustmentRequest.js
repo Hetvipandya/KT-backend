@@ -8,7 +8,7 @@ const attendanceSchema = new mongoose.Schema({
   },
   userType: {
     type: String,
-    enum: ['employee', 'intern', 'tl', 'admin'],
+    enum: ['employee', 'intern', 'team lead', 'admin'],
     default: 'employee' // Set default value to avoid validation errors
   },
   date: {
