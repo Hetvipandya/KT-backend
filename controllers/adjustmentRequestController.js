@@ -2,6 +2,7 @@ const Attendance = require("../models/Attendance");
 const Employee = require("../models/Employee");
 const User = require("../models/User");
 const TeamLead = require("../models/Team");
+const AdjustmentRequest = require("../models/AdjustmentRequest");
 
 // Helper function to parse time
 const parseTimeToDate = (dateStr, timeStr) => {
