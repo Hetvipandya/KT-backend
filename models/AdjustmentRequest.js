@@ -1,6 +1,6 @@
 const mongoose = require('mongoose');
 
-const attendanceSchema = new mongoose.Schema({
+const adjustmentRequestSchema = new mongoose.Schema({
   userId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
@@ -47,4 +47,4 @@ const attendanceSchema = new mongoose.Schema({
   timestamps: true
 });
 
-module.exports = mongoose.model('Attendance', attendanceSchema);
+module.exports = mongoose.model('AdjustmentRequest', adjustmentRequestSchema);

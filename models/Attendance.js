@@ -8,7 +8,7 @@ const breakSchema = new mongoose.Schema(
     },
 
     endTime: {
-      type: Date,
+      type: Date, 
       default: null,
     },
 
