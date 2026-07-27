@@ -25,7 +25,7 @@ router.post(
   protect,
   authorizeRoles(
     "intern",
-    "employee",
+    "employee", 
     "hr",
     "admin",
     "team lead"

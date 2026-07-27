@@ -11,6 +11,8 @@ const Holiday =
     "../models/Holiday"
   );
 
+  const User = require("../models/User");
+
 // ================= APPLY LEAVE =================
 exports.applyLeave = async (req, res) => {
   try {
