@@ -212,6 +212,75 @@ let attendance = await Attendance.findOne({
 
     // Update sessions with the new times
     if (sessions && sessions.length > 0) {
+      // Save all sessions
+attendance.sessions = sessions.map((session) => ({
+  checkin: session.checkin || "",
+  breakStart: session.breakStart || "",
+  breakEnd: session.breakEnd || "",
+  checkout: session.checkout || "",
+}));
+
+const firstSession = attendance.sessions[0];
+const lastSession = attendance.sessions[attendance.sessions.length - 1];
+
+// Check In
+if (firstSession.checkin) {
+  const checkInTime = parseTimeToDate(date, firstSession.checkin);
+  if (checkInTime) {
+    attendance.checkInTime = checkInTime;
+    attendance.approvedCheckInTime = checkInTime;
+  }
+}
+
+// Check Out
+if (lastSession.checkout) {
+  const checkOutTime = parseTimeToDate(date, lastSession.checkout);
+  if (checkOutTime) {
+    attendance.checkOutTime = checkOutTime;
+  }
+}
+
+// Calculate Break Time
+let totalBreakMinutes = 0;
+
+attendance.sessions.forEach((session) => {
+  if (session.breakStart && session.breakEnd) {
+    const breakStart = parseTimeToDate(date, session.breakStart);
+    const breakEnd = parseTimeToDate(date, session.breakEnd);
+
+    if (breakStart && breakEnd) {
+      totalBreakMinutes +=
+        (breakEnd.getTime() - breakStart.getTime()) / 60000;
+    }
+  }
+});
+
+attendance.totalBreakTime = Math.min(totalBreakMinutes, 120);
+
+// Calculate Work Time
+if (attendance.checkInTime && attendance.checkOutTime) {
+  let totalMinutes =
+    (attendance.checkOutTime.getTime() -
+      attendance.checkInTime.getTime()) /
+    60000;
+
+  totalMinutes -= attendance.totalBreakTime;
+
+  if (totalMinutes < 0) totalMinutes = 0;
+
+  attendance.totalWorkTime = Number(
+    (totalMinutes / 60).toFixed(2)
+  );
+}
+
+attendance.status =
+  attendance.totalWorkTime >= 8
+    ? "present"
+    : attendance.totalWorkTime >= 4
+    ? "half-day"
+    : "absent";
+
+attendance.approvalStatus = "approved";
       const firstSession = sessions[0];
       const lastSession = sessions[sessions.length - 1];
 
@@ -298,20 +367,27 @@ exports.getAdjustmentHistory = async (req, res) => {
       .sort({ date: -1 })
       .limit(20);
 
-    const adjustments = attendances.map((att) => ({
-      _id: att._id,
-      employeeId: att.userId?._id,
-      employeeName:
-        att.userId?.name ||
-        `${att.userId?.firstName || ""} ${att.userId?.lastName || ""}`.trim() ||
-        "Unknown Employee",
-      date: att.date,
-      checkInTime: att.checkInTime,
-      checkOutTime: att.checkOutTime,
-      totalBreakTime: att.totalBreakTime,
-      totalWorkTime: att.totalWorkTime,
-      status: att.status,
-    }));
+ const adjustments = attendances.map((att) => ({
+  _id: att._id,
+  employeeId: att.userId?._id,
+  employeeName:
+    att.userId?.name ||
+    `${att.userId?.firstName || ""} ${att.userId?.lastName || ""}`.trim() ||
+    "Unknown Employee",
+
+  date: att.date,
+  checkInTime: att.checkInTime,
+  checkOutTime: att.checkOutTime,
+
+  breakStart: att.sessions?.[0]?.breakStart || "",
+  breakEnd: att.sessions?.[0]?.breakEnd || "",
+
+  sessions: att.sessions,
+
+  totalBreakTime: att.totalBreakTime,
+  totalWorkTime: att.totalWorkTime,
+  status: att.status,
+}));
 
     res.status(200).json({
       success: true,
