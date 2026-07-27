@@ -180,107 +180,94 @@ try {
 }
 
     // Find or create attendance record
- const startOfDay = new Date(date);
-startOfDay.setHours(0, 0, 0, 0);
+    const attendanceDate = date;
 
-const endOfDay = new Date(date);
-endOfDay.setHours(23, 59, 59, 999);
+    let attendance = await Attendance.findOne({
+      userId: employeeId,
+      date: attendanceDate,
+    });
 
-let attendance = await Attendance.findOne({
-  userId: employeeId,
-  date: {
-    $gte: startOfDay,
-    $lte: endOfDay,
-  },
-});
-
- if (!attendance) {
-  attendance = new Attendance({
-    userId: employeeId,
-    userType,
-    date: startOfDay,
-    status: "present",
-    approvalStatus: "approved",
-    sessions: [],
-  });
-} else {
-      // Update userType if it's missing or different
+    if (!attendance) {
+      attendance = new Attendance({
+        userId: employeeId,
+        userType,
+        date: attendanceDate,
+        status: "present",
+        approvalStatus: "approved",
+        breaks: [],
+      });
+    } else {
       if (!attendance.userType) {
         attendance.userType = userType;
       }
     }
 
-    // Update sessions with the new times
     if (sessions && sessions.length > 0) {
-      // Save all sessions
-attendance.sessions = sessions.map((session) => ({
-  checkin: session.checkin || "",
-  breakStart: session.breakStart || "",
-  breakEnd: session.breakEnd || "",
-  checkout: session.checkout || "",
-}));
+      const firstSession = sessions[0];
+      const lastSession = sessions[sessions.length - 1];
 
-const firstSession = attendance.sessions[0];
-const lastSession = attendance.sessions[attendance.sessions.length - 1];
+      if (firstSession.checkin) {
+        const checkInTime = parseTimeToDate(date, firstSession.checkin);
+        if (checkInTime) {
+          attendance.checkInTime = checkInTime;
+          attendance.approvedCheckInTime = checkInTime;
+        }
+      }
 
-// Check In
-if (firstSession.checkin) {
-  const checkInTime = parseTimeToDate(date, firstSession.checkin);
-  if (checkInTime) {
-    attendance.checkInTime = checkInTime;
-    attendance.approvedCheckInTime = checkInTime;
-  }
-}
+      if (lastSession.checkout) {
+        const checkOutTime = parseTimeToDate(date, lastSession.checkout);
+        if (checkOutTime) {
+          attendance.checkOutTime = checkOutTime;
+        }
+      }
 
-// Check Out
-if (lastSession.checkout) {
-  const checkOutTime = parseTimeToDate(date, lastSession.checkout);
-  if (checkOutTime) {
-    attendance.checkOutTime = checkOutTime;
-  }
-}
+      attendance.breaks = [];
+      let totalBreakMinutes = 0;
 
-// Calculate Break Time
-let totalBreakMinutes = 0;
+      for (const session of sessions) {
+        if (session.breakStart && session.breakEnd) {
+          const breakStart = parseTimeToDate(date, session.breakStart);
+          const breakEnd = parseTimeToDate(date, session.breakEnd);
 
-attendance.sessions.forEach((session) => {
-  if (session.breakStart && session.breakEnd) {
-    const breakStart = parseTimeToDate(date, session.breakStart);
-    const breakEnd = parseTimeToDate(date, session.breakEnd);
+          if (breakStart && breakEnd) {
+            const duration = Number(
+              ((breakEnd.getTime() - breakStart.getTime()) / 60000).toFixed(2)
+            );
+            attendance.breaks.push({
+              startTime: breakStart,
+              endTime: breakEnd,
+              duration,
+            });
+            totalBreakMinutes += duration;
+          }
+        }
+      }
 
-    if (breakStart && breakEnd) {
-      totalBreakMinutes +=
-        (breakEnd.getTime() - breakStart.getTime()) / 60000;
-    }
-  }
-});
+      attendance.totalBreakTime = Math.min(totalBreakMinutes, 120);
 
-attendance.totalBreakTime = Math.min(totalBreakMinutes, 120);
+      if (attendance.checkInTime && attendance.checkOutTime) {
+        let totalMinutes =
+          (attendance.checkOutTime.getTime() -
+            attendance.checkInTime.getTime()) /
+          60000;
 
-// Calculate Work Time
-if (attendance.checkInTime && attendance.checkOutTime) {
-  let totalMinutes =
-    (attendance.checkOutTime.getTime() -
-      attendance.checkInTime.getTime()) /
-    60000;
+        totalMinutes -= attendance.totalBreakTime;
 
-  totalMinutes -= attendance.totalBreakTime;
+        if (totalMinutes < 0) totalMinutes = 0;
 
-  if (totalMinutes < 0) totalMinutes = 0;
+        attendance.totalWorkTime = Number(
+          (totalMinutes / 60).toFixed(2)
+        );
+      }
 
-  attendance.totalWorkTime = Number(
-    (totalMinutes / 60).toFixed(2)
-  );
-}
+      attendance.status =
+        attendance.totalWorkTime >= 8
+          ? "present"
+          : attendance.totalWorkTime >= 4
+          ? "half-day"
+          : "absent";
 
-attendance.status =
-  attendance.totalWorkTime >= 8
-    ? "present"
-    : attendance.totalWorkTime >= 4
-    ? "half-day"
-    : "absent";
-
-attendance.approvalStatus = "approved";
+      attendance.approvalStatus = "approved";
     }
 
     // Save attendance
@@ -335,10 +322,10 @@ exports.getAdjustmentHistory = async (req, res) => {
   checkInTime: att.checkInTime,
   checkOutTime: att.checkOutTime,
 
-  breakStart: att.sessions?.[0]?.breakStart || "",
-  breakEnd: att.sessions?.[0]?.breakEnd || "",
+  breakStart: att.breaks?.[0]?.startTime || "",
+  breakEnd: att.breaks?.[0]?.endTime || "",
 
-  sessions: att.sessions,
+  breaks: att.breaks,
 
   totalBreakTime: att.totalBreakTime,
   totalWorkTime: att.totalWorkTime,
