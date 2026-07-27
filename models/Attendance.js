@@ -30,7 +30,7 @@ const attendanceSchema = new mongoose.Schema(
 
     userType: {
       type: String,
-      enum: ["employee", "intern", "team lead", "admin"],
+      enum: ["employee", "intern", "team lead", "hr", "admin"],
       required: true,
     }, 
 
