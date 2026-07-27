@@ -52,12 +52,6 @@ const leaveSchema = new mongoose.Schema(
       default: "pending",
     },
 
-    adminStatus: {
-      type: String,
-      enum: ["pending", "approved", "rejected"],
-      default: "pending",
-    },
-
     remark: {
       type: String,
       default: "",

@@ -256,22 +256,29 @@ exports.hrApproval = async (req, res) => {
     leave.hrStatus = status;
     leave.remark = remark || leave.remark;
 
-    if (status === "approved") {
-      leave.status = "pending_admin";
-    } else {
-      leave.status = "rejected";
-    }
+if (status === "approved") {
+  leave.hrStatus = "approved";
+  leave.status = "approved";
 
-    await leave.save();
+  // Employee/Intern અને Team Lead બંને માટે balance update
+  await updateLeaveBalance(leave);
+} else {
+  leave.hrStatus = "rejected";
+  leave.status = "rejected";
+}
 
-    res.status(200).json({
-      success: true,
-      message:
-        status === "approved"
-          ? "Leave approved by HR and forwarded to admin"
-          : "Leave rejected by HR",
-      data: leave,
-    });
+leave.remark = remark || leave.remark;
+
+await leave.save();
+
+return res.status(200).json({
+  success: true,
+  message:
+    status === "approved"
+      ? "Leave approved successfully"
+      : "Leave rejected successfully",
+  data: leave,
+});
   } catch (error) {
     res.status(500).json({
       success: false,
@@ -280,75 +287,6 @@ exports.hrApproval = async (req, res) => {
   }
 };
 
-// ================= ADMIN APPROVAL =================
-exports.adminApproval = async (req, res) => {
-  try {
-    const { leaveId, status, remark } = req.body;
-
-    if (!leaveId) {
-      return res.status(400).json({
-        success: false,
-        message: "Leave ID is required",
-      });
-    }
-
-    if (!["approved", "rejected"].includes(status)) {
-      return res.status(400).json({
-        success: false,
-        message: "Status must be approved or rejected",
-      });
-    }
-
-    const leave = await Leave.findById(leaveId);
-
-    if (!leave) {
-      return res.status(404).json({
-        success: false,
-        message: "Leave not found",
-      });
-    }
-
-    if (leave.hrStatus !== "approved") {
-      return res.status(400).json({
-        success: false,
-        message: "Leave must be approved by HR first",
-      });
-    }
-
-    if (leave.status === "approved" || leave.adminStatus !== "pending") {
-      return res.status(400).json({
-        success: false,
-        message: "Leave already processed by admin",
-      });
-    }
-
-    leave.adminStatus = status;
-    leave.remark = remark || leave.remark;
-
-    if (status === "approved") {
-      leave.status = "approved";
-      await updateLeaveBalance(leave);
-    } else {
-      leave.status = "rejected";
-    }
-
-    await leave.save();
- 
-    res.status(200).json({
-      success: true,
-      message:
-        status === "approved"
-          ? "Leave approved by admin"
-          : "Leave rejected by admin",
-      data: leave,
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: error.message,
-    });
-  }
-};
 
 // ================= GET USER LEAVES =================
 exports.getMyLeaves =
