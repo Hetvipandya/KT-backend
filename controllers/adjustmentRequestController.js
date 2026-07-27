@@ -180,29 +180,30 @@ try {
 }
 
     // Find or create attendance record
-    const attendanceDate = new Date(date);
-    attendanceDate.setHours(0, 0, 0, 0);
+ const startOfDay = new Date(date);
+startOfDay.setHours(0, 0, 0, 0);
 
-    let attendance = await Attendance.findOne({
-      userId: employeeId,
-      date: attendanceDate
-    });
+const endOfDay = new Date(date);
+endOfDay.setHours(23, 59, 59, 999);
 
-    if (!attendance) {
-      // Create new attendance record with userType
-      attendance = new Attendance({
-        userId: employeeId,
-        userType: userType, // Add this required field
-        date: attendanceDate,
-        status: 'present',
-        checkInTime: null,
-        checkOutTime: null,
-        totalBreakTime: 0,
-        totalWorkTime: 0,
-        approvalStatus: 'approved',
-        sessions: []
-      });
-    } else {
+let attendance = await Attendance.findOne({
+  userId: employeeId,
+  date: {
+    $gte: startOfDay,
+    $lte: endOfDay,
+  },
+});
+
+ if (!attendance) {
+  attendance = new Attendance({
+    userId: employeeId,
+    userType,
+    date: startOfDay,
+    status: "present",
+    approvalStatus: "approved",
+    sessions: [],
+  });
+} else {
       // Update userType if it's missing or different
       if (!attendance.userType) {
         attendance.userType = userType;
