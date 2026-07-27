@@ -195,7 +195,7 @@ const OFFICE_START_TIME = "10:10";
 // ================= CHECK IN =================
 exports.checkIn = async (req, res) => {
   try {
-    const { userId, userType } = req.body;
+    const { userId } = req.body;
 
     if (!userId) {
       return res.status(400).json({
@@ -204,53 +204,84 @@ exports.checkIn = async (req, res) => {
       });
     }
 
+    // Find User
+    const user = await User.findById(userId);
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    // Normalize role
+    const userType = user.role.trim().toLowerCase();
+
+    console.log("User Role :", user.role);
+    console.log("Attendance UserType :", userType);
+    console.log(
+      "Attendance Enum :",
+      Attendance.schema.path("userType").enumValues
+    );
+
     const date = getToday();
 
-    // Check if already checked in today
-    const existing = await Attendance.findOne({
+    // Check today's attendance
+    const existingAttendance = await Attendance.findOne({
       userId,
       date,
     });
 
-    if (existing) {
+    if (existingAttendance) {
       let message = "You have already checked in today.";
-      if (existing.approvalStatus === "pending") {
-        message = "Your check-in request is already pending admin approval.";
-      } else if (existing.approvalStatus === "approved") {
+
+      if (existingAttendance.approvalStatus === "pending") {
+        message =
+          "Your check-in request is already pending admin approval.";
+      } else if (
+        existingAttendance.approvalStatus === "approved"
+      ) {
         message = "You have already checked in today.";
       }
+
       return res.status(400).json({
         success: false,
         message,
       });
     }
 
-    // Create attendance request
-    const attendance = await Attendance.create({
+    const attendanceData = {
       userId,
-      userType: userType || "employee",
+      userType,
       date,
       checkInTime: null,
+      checkOutTime: null,
+      breaks: [],
+      totalBreakTime: 0,
+      totalWorkTime: 0,
       isLate: false,
       status: "absent",
       approvalStatus: "pending",
-      totalBreakTime: 0,
-      totalWorkTime: 0,
-      breaks: [],
-    });
+    };
+
+    console.log("Attendance Data :", attendanceData);
+
+    const attendance = await Attendance.create(attendanceData);
 
     return res.status(201).json({
       success: true,
-      message: "Check-in request has been sent to the admin. Please wait for approval.",
-      data: formatAttendanceDocument(attendance),
+      message:
+        "Check-in request has been sent to the admin. Please wait for approval.",
+      data: attendance,
     });
-
   } catch (err) {
     console.error("CheckIn Error:", err);
+
     return res.status(500).json({
       success: false,
       message: err.message,
-    }); 
+      error: err,
+    });
   }
 };
 

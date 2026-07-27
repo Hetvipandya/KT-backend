@@ -19,7 +19,7 @@ const breakSchema = new mongoose.Schema(
   },
   { _id: false }
 );
-
+ 
 const attendanceSchema = new mongoose.Schema(
   {
     userId: {
@@ -30,7 +30,7 @@ const attendanceSchema = new mongoose.Schema(
 
     userType: {
       type: String,
-      enum: ["employee", "intern"],
+      enum: ["employee", "intern", "team lead", "admin"],
       required: true,
     }, 
 

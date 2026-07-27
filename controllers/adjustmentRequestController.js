@@ -12,6 +12,35 @@ const parseTimeToDate = (dateStr, timeStr) => {
   return new Date(Date.UTC(year, month - 1, day, hour - 5, minute - 30, 0));
 };
 
+const normalizeAttendanceDate = (value) => {
+  if (!value) return null;
+
+  if (value instanceof Date) {
+    const year = value.getUTCFullYear();
+    const month = String(value.getUTCMonth() + 1).padStart(2, "0");
+    const day = String(value.getUTCDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  }
+
+  if (typeof value === "string") {
+    const trimmedValue = value.trim();
+
+    if (/^\d{4}-\d{2}-\d{2}$/.test(trimmedValue)) {
+      return trimmedValue;
+    }
+
+    const parsedDate = new Date(trimmedValue);
+    if (!Number.isNaN(parsedDate.getTime())) {
+      const year = parsedDate.getUTCFullYear();
+      const month = String(parsedDate.getUTCMonth() + 1).padStart(2, "0");
+      const day = String(parsedDate.getUTCDate()).padStart(2, "0");
+      return `${year}-${month}-${day}`;
+    }
+  }
+
+  return String(value);
+};
+
 // Helper to get employee name from different sources - FIXED
 const getEmployeeName = async (employeeId) => {
   if (!employeeId) return 'Unknown Employee';
@@ -36,24 +65,17 @@ const getEmployeeName = async (employeeId) => {
     }
 
     // 3. Check in TeamLead collection
-  // Team Lead
-const team = await TeamLead.findOne({
-    teamLeadUser: employeeId
-})
-.populate({
-    path: "teamLeadUser",
-    select: "name"
-})
-.lean();
+    const team = await TeamLead.findOne({
+      teamLeadUser: employeeId,
+    })
+      .populate({
+        path: "teamLeadUser",
+        select: "name",
+      })
+      .lean();
 
-if (team && team.teamLeadUser) {
-    return team.teamLeadUser.name;
-}
-    if (teamLead) {
-      const firstName = teamLead.firstName || '';
-      const lastName = teamLead.lastName || '';
-      const name = teamLead.name || '';
-      return [firstName, lastName].filter(Boolean).join(' ') || name || 'Unknown Employee';
+    if (team?.teamLeadUser?.name) {
+      return team.teamLeadUser.name;
     }
 
     // 4. If not found in any collection, try to find in any collection with different ID field
@@ -181,7 +203,14 @@ try {
 }
 
     // Find or create attendance record
-    const attendanceDate = date;
+    const attendanceDate = normalizeAttendanceDate(date);
+
+    if (!attendanceDate) {
+      return res.status(400).json({
+        success: false,
+        message: "Valid date is required.",
+      });
+    }
 
     let attendance = await Attendance.findOne({
       userId: employeeId,
@@ -197,10 +226,8 @@ try {
         approvalStatus: "approved",
         breaks: [],
       });
-    } else {
-      if (!attendance.userType) {
-        attendance.userType = userType;
-      }
+    } else if (!attendance.userType) {
+      attendance.userType = userType;
     }
 
     if (sessions && sessions.length > 0) {
@@ -208,7 +235,7 @@ try {
       const lastSession = sessions[sessions.length - 1];
 
       if (firstSession.checkin) {
-        const checkInTime = parseTimeToDate(date, firstSession.checkin);
+        const checkInTime = parseTimeToDate(attendanceDate, firstSession.checkin);
         if (checkInTime) {
           attendance.checkInTime = checkInTime;
           attendance.approvedCheckInTime = checkInTime;
@@ -216,7 +243,7 @@ try {
       }
 
       if (lastSession.checkout) {
-        const checkOutTime = parseTimeToDate(date, lastSession.checkout);
+        const checkOutTime = parseTimeToDate(attendanceDate, lastSession.checkout);
         if (checkOutTime) {
           attendance.checkOutTime = checkOutTime;
         }
@@ -227,8 +254,8 @@ try {
 
       for (const session of sessions) {
         if (session.breakStart && session.breakEnd) {
-          const breakStart = parseTimeToDate(date, session.breakStart);
-          const breakEnd = parseTimeToDate(date, session.breakEnd);
+          const breakStart = parseTimeToDate(attendanceDate, session.breakStart);
+          const breakEnd = parseTimeToDate(attendanceDate, session.breakEnd);
 
           if (breakStart && breakEnd) {
             const duration = Number(
@@ -248,17 +275,14 @@ try {
 
       if (attendance.checkInTime && attendance.checkOutTime) {
         let totalMinutes =
-          (attendance.checkOutTime.getTime() -
-            attendance.checkInTime.getTime()) /
+          (attendance.checkOutTime.getTime() - attendance.checkInTime.getTime()) /
           60000;
 
         totalMinutes -= attendance.totalBreakTime;
 
         if (totalMinutes < 0) totalMinutes = 0;
 
-        attendance.totalWorkTime = Number(
-          (totalMinutes / 60).toFixed(2)
-        );
+        attendance.totalWorkTime = Number((totalMinutes / 60).toFixed(2));
       }
 
       attendance.status =
@@ -274,12 +298,30 @@ try {
     // Save attendance
     await attendance.save();
 
+    const adjustmentRequest = new AdjustmentRequest({
+      userId: employeeId,
+      userType,
+      date: new Date(`${attendanceDate}T00:00:00.000Z`),
+      checkInTime: attendance.checkInTime || null,
+      checkOutTime: attendance.checkOutTime || null,
+      approvedCheckInTime: attendance.approvedCheckInTime || attendance.checkInTime || null,
+      totalBreakTime: attendance.totalBreakTime || 0,
+      totalWorkTime: attendance.totalWorkTime || 0,
+      status: attendance.status,
+      approvalStatus: "approved",
+      reason,
+      sessions: sessions || [],
+    });
+
+    await adjustmentRequest.save();
+
     res.status(200).json({
       success: true,
-      message: "Attendance updated successfully.",
+      message: "Attendance updated successfully and adjustment request created.",
       data: {
         attendance,
-        employeeName
+        adjustmentRequest,
+        employeeName,
       }
     });
 
@@ -303,35 +345,33 @@ exports.getAdjustmentHistory = async (req, res) => {
       query.userId = employeeId;
     }
 
-    const attendances = await Attendance.find(query)
+    const adjustmentRequests = await AdjustmentRequest.find(query)
       .populate({
         path: "userId",
         select: "name firstName lastName uniqueID role",
       })
-      .sort({ date: -1 })
+      .sort({ date: -1, createdAt: -1 })
       .limit(20);
 
- const adjustments = attendances.map((att) => ({
-  _id: att._id,
-  employeeId: att.userId?._id,
-  employeeName:
-    att.userId?.name ||
-    `${att.userId?.firstName || ""} ${att.userId?.lastName || ""}`.trim() ||
-    "Unknown Employee",
-
-  date: att.date,
-  checkInTime: att.checkInTime,
-  checkOutTime: att.checkOutTime,
-
-  breakStart: att.breaks?.[0]?.startTime || "",
-  breakEnd: att.breaks?.[0]?.endTime || "",
-
-  breaks: att.breaks,
-
-  totalBreakTime: att.totalBreakTime,
-  totalWorkTime: att.totalWorkTime,
-  status: att.status,
-}));
+    const adjustments = adjustmentRequests.map((request) => ({
+      _id: request._id,
+      employeeId: request.userId?._id,
+      employeeName:
+        request.userId?.name ||
+        `${request.userId?.firstName || ""} ${request.userId?.lastName || ""}`.trim() ||
+        "Unknown Employee",
+      date: request.date,
+      checkInTime: request.checkInTime,
+      checkOutTime: request.checkOutTime,
+      breakStart: request.sessions?.[0]?.breakStart || "",
+      breakEnd: request.sessions?.[0]?.breakEnd || "",
+      sessions: request.sessions || [],
+      totalBreakTime: request.totalBreakTime,
+      totalWorkTime: request.totalWorkTime,
+      status: request.status,
+      approvalStatus: request.approvalStatus,
+      reason: request.reason,
+    }));
 
     res.status(200).json({
       success: true,

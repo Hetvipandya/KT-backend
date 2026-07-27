@@ -26,6 +26,11 @@ const adjustmentRequestSchema = new mongoose.Schema({
     type: Number,
     default: 0
   },
+  reason: {
+    type: String,
+    trim: true,
+    default: ''
+  },
   status: {
     type: String,
     enum: ['present', 'absent', 'half-day', 'late'],
