@@ -12,52 +12,51 @@ const Holiday =
   );
 
 // ================= APPLY LEAVE =================
-exports.applyLeave =
-  async (req, res) => {
-    try {
-      const {
-        userId,
-        leaveType,
-        startDate,
-        endDate,
-        reason, 
-      } = req.body;
+exports.applyLeave = async (req, res) => {
+  try {
+    const {
+      userId,
+      leaveType,
+      startDate,
+      endDate,
+      reason,
+    } = req.body;
 
-      if (!userId) {
-        return res
-          .status(400)
-          .json({
-            success: false,
-            message:
-              "User ID is required",
-          });
-      }
+    const user = await User.findById(userId);
 
-      const totalDays =
-        Math.ceil(
-          (
-            new Date(endDate) -
-            new Date(startDate)
-          ) /
-            (
-              1000 *
-              60 *
-              60 *
-              24
-            )
-        ) + 1;
- 
-      const leave =
-        await Leave.create({
-          employeeId: 
-            userId,
-          leaveType,
-          startDate,
-          endDate,
-          totalDays,
-          reason,
-        });
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
 
+    const totalDays =
+      Math.ceil(
+        (new Date(endDate) - new Date(startDate)) /
+          (1000 * 60 * 60 * 24)
+      ) + 1;
+
+    const leave = await Leave.create({
+      employeeId: userId,
+      applicantRole: user.role, // <-- NEW FIELD
+      leaveType,
+      startDate,
+      endDate,
+      totalDays,
+      reason,
+
+      // Team Lead leave goes directly to HR
+      status:
+        user.role === "teamlead"
+          ? "pending_hr"
+          : "pending",
+
+      teamLeadStatus:
+        user.role === "teamlead"
+          ? "skipped"
+          : "pending",
+    });
       // Auto create leave balance if not exists
       const existingBalance =
         await LeaveBalance.findOne(
@@ -332,7 +331,7 @@ exports.adminApproval = async (req, res) => {
     }
 
     await leave.save();
-
+ 
     res.status(200).json({
       success: true,
       message:
