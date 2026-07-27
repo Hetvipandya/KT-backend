@@ -281,50 +281,6 @@ attendance.status =
     : "absent";
 
 attendance.approvalStatus = "approved";
-      const firstSession = sessions[0];
-      const lastSession = sessions[sessions.length - 1];
-
-      // Handle Check In
-      if (firstSession.checkin) {
-        const checkInTime = parseTimeToDate(date, firstSession.checkin);
-        if (checkInTime) {
-          attendance.checkInTime = checkInTime;
-          attendance.approvedCheckInTime = checkInTime;
-        }
-      }
-
-      // Handle Check Out
-      if (lastSession.checkout) {
-        const checkOutTime = parseTimeToDate(date, lastSession.checkout);
-        if (checkOutTime) {
-          attendance.checkOutTime = checkOutTime;
-        }
-      }
-
-      // Calculate break time
-      let totalBreakMinutes = 0;
-      for (const session of sessions) {
-        if (session.breakStart && session.breakEnd) {
-          const breakStart = parseTimeToDate(date, session.breakStart);
-          const breakEnd = parseTimeToDate(date, session.breakEnd);
-          if (breakStart && breakEnd) {
-            const breakMinutes = (breakEnd - breakStart) / (1000 * 60);
-            totalBreakMinutes += breakMinutes;
-          }
-        }
-      }
-      attendance.totalBreakTime = Math.min(totalBreakMinutes, 120);
-
-      // Calculate total work time
-      if (attendance.checkInTime && attendance.checkOutTime) {
-        let totalMinutes = (attendance.checkOutTime - attendance.checkInTime) / (1000 * 60);
-        totalMinutes -= attendance.totalBreakTime;
-        if (totalMinutes < 0) totalMinutes = 0;
-        attendance.totalWorkTime = Number((totalMinutes / 60).toFixed(2));
-      }
-
-      // Set approval status
-      attendance.approvalStatus = 'approved';
     }
 
     // Save attendance
