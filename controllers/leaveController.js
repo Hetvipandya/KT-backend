@@ -40,8 +40,8 @@ exports.applyLeave = async (req, res) => {
       totalDays,
       reason,
       // Team Lead leave goes directly to HR
-      status: user.role === "teamlead" ? "pending_hr" : "pending",
-      teamLeadStatus: user.role === "teamlead" ? "skipped" : "pending",
+      status: user.role === "team lead" ? "pending_hr" : "pending",
+      teamLeadStatus: user.role === "team lead" ? "skipped" : "pending",
       hrStatus: "pending",
     });
 
@@ -82,7 +82,7 @@ exports.getAllLeaves = async (req, res) => {
     let filter = {};
     
     // ROLE-BASED FILTERING
-    if (role === "teamlead") {
+    if (role === "team lead") {
       // Team Lead can only see Employee and Intern leaves (not other Team Leads)
       filter = {
         $and: [
@@ -138,7 +138,7 @@ exports.getTeamLeadPendingLeaves = async (req, res) => {
     const userId = req.user._id;
     const user = await User.findById(userId);
 
-    if (!user || user.role !== "teamlead") {
+    if (!user || user.role !== "team lead") {
       return res.status(403).json({
         success: false,
         message: "Access denied. Only Team Leads can view pending leaves.",
