@@ -24,13 +24,68 @@ COMMON TEAM IDS
 =========================
 */
 
+const resolveTeamLeadReference = async (teamLeadId) => {
+  if (!teamLeadId) {
+    return {
+      teamLeadUser: null,
+      teamLeadEmployee: null,
+    };
+  }
+
+  const result = {
+    teamLeadUser: null,
+    teamLeadEmployee: null,
+  };
+
+  const user = await User.findById(teamLeadId);
+
+  if (user) {
+    result.teamLeadUser = user._id;
+  }
+
+  const employee = await Employee.findById(teamLeadId);
+
+  if (employee) {
+    result.teamLeadEmployee = employee._id;
+  }
+
+  if (!employee && user) {
+    const linkedEmployee = await Employee.findOne({ userID: user._id });
+
+    if (linkedEmployee) {
+      result.teamLeadEmployee = linkedEmployee._id;
+    }
+  }
+
+  if (!user && employee?.userID) {
+    const linkedUser = await User.findById(employee.userID);
+
+    if (linkedUser) {
+      result.teamLeadUser = linkedUser._id;
+    }
+  }
+
+  return result;
+};
+
 const getTeamIds = async (teamLeadId) => {
   console.log("Logged In Team Lead ID:", teamLeadId);
 
-  // Find team either by linked User or Employee lead reference
+  const leadReference = await resolveTeamLeadReference(teamLeadId);
+
   const team =
-    (await Team.findOne({ teamLeadUser: new mongoose.Types.ObjectId(teamLeadId) })) ||
-    (await Team.findOne({ teamLeadEmployee: new mongoose.Types.ObjectId(teamLeadId) }));
+    (await Team.findOne({
+      $or: [
+        { teamLeadUser: leadReference.teamLeadUser },
+        { teamLeadEmployee: leadReference.teamLeadEmployee },
+      ],
+    })) ||
+    (await Team.findOne({
+      $or: [
+        { teamLeadUser: teamLeadId },
+        { teamLeadEmployee: teamLeadId },
+      ],
+    }));
 
   console.log("Team Found:", team);
 
@@ -219,36 +274,44 @@ exports.createOrUpdateTeam = async (req, res) => {
     let teamLeadEmployee = null;
     let team = null;
 
-    // ===========================
-    // CHECK USER COLLECTION
-    // ===========================
-
     const user = await User.findById(teamLead);
+    const employee = await Employee.findById(teamLead);
 
     if (user) {
       teamLeadUser = user._id;
-
-      // Check by user id
-      team = await Team.findOne({
-        teamLeadUser: teamLeadUser,
-      });
     }
 
-    // ===========================
-    // CHECK EMPLOYEE COLLECTION
-    // ===========================
+    if (employee) {
+      teamLeadEmployee = employee._id;
+    }
 
-    if (!user) {
-      const employee = await Employee.findById(teamLead);
+    if (!user && employee?.userID) {
+      const linkedUser = await User.findById(employee.userID);
 
-      if (employee && employee.isTeamLead) {
-        teamLeadEmployee = employee._id;
-
-        // Check by employee id
-        team = await Team.findOne({
-          teamLeadEmployee: teamLeadEmployee,
-        });
+      if (linkedUser) {
+        teamLeadUser = linkedUser._id;
       }
+    }
+
+    if (!employee) {
+      const linkedEmployee = await Employee.findOne({ userID: teamLead });
+
+      if (linkedEmployee) {
+        teamLeadEmployee = linkedEmployee._id;
+      }
+    }
+
+    if (user?.role === "team lead" || user?.role === "teamlead") {
+      teamLeadUser = user._id;
+    }
+
+    if (employee?.isTeamLead || user?.role === "team lead" || user?.role === "teamlead") {
+      team = await Team.findOne({
+        $or: [
+          { teamLeadUser: teamLeadUser },
+          { teamLeadEmployee: teamLeadEmployee },
+        ],
+      });
     }
 
     if (!teamLeadUser && !teamLeadEmployee) {
