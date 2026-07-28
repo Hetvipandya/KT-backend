@@ -1,430 +1,3 @@
-// const Leave =
-//   require("../models/Leave");
-
-// const LeaveBalance =
-//   require(
-//     "../models/LeaveBalance"
-//   );
-
-// const Holiday =
-//   require(
-//     "../models/Holiday"
-//   );
-
-//   const User = require("../models/User");
-
-// // ================= APPLY LEAVE =================
-// exports.applyLeave = async (req, res) => {
-//   try {
-//     const {
-//       userId,
-//       leaveType,
-//       startDate,
-//       endDate,
-//       reason,
-//     } = req.body;
-
-//     const user = await User.findById(userId);
-
-//     if (!user) {
-//       return res.status(404).json({
-//         success: false,
-//         message: "User not found",
-//       });
-//     }
-
-//     const totalDays =
-//       Math.ceil(
-//         (new Date(endDate) - new Date(startDate)) /
-//           (1000 * 60 * 60 * 24)
-//       ) + 1;
-
-//     const leave = await Leave.create({
-//       employeeId: userId,
-//       applicantRole: user.role, // <-- NEW FIELD
-//       leaveType,
-//       startDate,
-//       endDate,
-//       totalDays,
-//       reason,
-
-//       // Team Lead leave goes directly to HR
-//       status:
-//         user.role === "teamlead"
-//           ? "pending_hr"
-//           : "pending",
-
-//       teamLeadStatus:
-//         user.role === "teamlead"
-//           ? "skipped"
-//           : "pending",
-//     });
-//       // Auto create leave balance if not exists
-//       const existingBalance =
-//         await LeaveBalance.findOne(
-//           {
-//             employeeId:
-//               userId,
-//           }
-//         );
-
-//       if (
-//         !existingBalance
-//       ) {
-//         await LeaveBalance.create(
-//           {
-//             employeeId:
-//               userId,
-//             totalLeaves: 20,
-//             usedLeaves: 0,
-//             remainingLeaves: 20,
-//           }
-//         );
-//       }
-
-//       res.status(201).json({
-//         success: true,
-//         message:
-//           "Leave request sent successfully",
-//         data: leave,
-//       });
-//     } catch (error) {
-//       res.status(500).json({
-//         success: false,
-//         message:
-//           error.message,
-//       });
-//     }
-//   };
-
-// exports.getAllLeaves = async (req, res) => {
-//   console.log("=== getAllLeaves function STARTED ===");
-//   console.log("User from token:", req.user ? req.user._id : "No user");
-  
-//   try {
-//     console.log("Attempting to find leaves...");
-//     const leaves = await Leave.find({})
-//       .populate({
-//         path: "employeeId",
-//         select: "name email role uniqueID",
-//       })
-//       .sort({ createdAt: -1 });
-    
-//     console.log(`Found ${leaves.length} leaves`);
-    
-//     return res.status(200).json({
-//       success: true,
-//       total: leaves.length,
-//       data: leaves,
-//     });
-//   } catch (error) {
-//     console.log("GET ALL LEAVES ERROR:", error);
-//     console.log("Error stack:", error.stack);
-    
-//     return res.status(500).json({
-//       success: false,
-//       message: error.message,
-//       stack: process.env.NODE_ENV === "development" ? error.stack : undefined,
-//     });
-//   }
-// };
-
-// const updateLeaveBalance = async (leave) => {
-//   let balance = await LeaveBalance.findOne({
-//     employeeId: leave.employeeId,
-//   });
-
-//   if (!balance) {
-//     balance = await LeaveBalance.create({
-//       employeeId: leave.employeeId,
-//       totalLeaves: 20,
-//       usedLeaves: 0,
-//       remainingLeaves: 20,
-//     });
-//   }
-
-//   balance.usedLeaves += leave.totalDays;
-//   balance.remainingLeaves -= leave.totalDays;
-
-//   await balance.save();
-// };
-
-// // ================= TEAM LEAD APPROVAL =================
-// exports.teamLeadApproval = async (req, res) => {
-//   try {
-//     const { leaveId, status, remark } = req.body;
-
-//     if (!leaveId) {
-//       return res.status(400).json({
-//         success: false,
-//         message: "Leave ID is required",
-//       });
-//     }
-
-//     if (!["approved", "rejected"].includes(status)) {
-//       return res.status(400).json({
-//         success: false,
-//         message: "Status must be approved or rejected",
-//       });
-//     }
-
-//     const leave = await Leave.findById(leaveId);
-
-//     if (!leave) {
-//       return res.status(404).json({
-//         success: false,
-//         message: "Leave not found",
-//       });
-//     }
-
-//     if (["approved", "rejected"].includes(leave.status)) {
-//       return res.status(400).json({
-//         success: false,
-//         message: "Leave already processed",
-//       });
-//     }
-
-//     leave.teamLeadStatus = status;
-//     leave.remark = remark || leave.remark;
-
-//     if (status === "approved") {
-//       leave.status = "pending_hr";
-//     } else {
-//       leave.status = "rejected";
-//     }
-
-//     await leave.save();
-
-//     res.status(200).json({
-//       success: true,
-//       message:
-//         status === "approved"
-//           ? "Leave approved by team lead and forwarded to HR"
-//           : "Leave rejected by team lead",
-//       data: leave,
-//     });
-//   } catch (error) {
-//     res.status(500).json({
-//       success: false,
-//       message: error.message,
-//     });
-//   } 
-// };
-
-// // ================= HR APPROVAL =================
-// exports.hrApproval = async (req, res) => {
-//   try {
-//     const { leaveId, status, remark } = req.body;
-
-//     if (!leaveId) {
-//       return res.status(400).json({
-//         success: false,
-//         message: "Leave ID is required",
-//       });
-//     }
-
-//     if (!["approved", "rejected"].includes(status)) {
-//       return res.status(400).json({
-//         success: false,
-//         message: "Status must be approved or rejected",
-//       });
-//     }
-
-//     const leave = await Leave.findById(leaveId);
-
-//     if (!leave) {
-//       return res.status(404).json({
-//         success: false,
-//         message: "Leave not found",
-//       });
-//     }
-
-//     if (leave.teamLeadStatus !== "approved") {
-//       return res.status(400).json({
-//         success: false,
-//         message: "Leave must be approved by team lead first",
-//       });
-//     }
-
-//     if (["approved", "rejected"].includes(leave.status) && leave.hrStatus !== "pending") {
-//       return res.status(400).json({
-//         success: false,
-//         message: "Leave already processed by HR",
-//       });
-//     }
-
-//     leave.hrStatus = status;
-//     leave.remark = remark || leave.remark;
-
-// if (status === "approved") {
-//   leave.hrStatus = "approved";
-//   leave.status = "approved";
-
-//   // Employee/Intern અને Team Lead બંને માટે balance update
-//   await updateLeaveBalance(leave);
-// } else {
-//   leave.hrStatus = "rejected";
-//   leave.status = "rejected";
-// }
-
-// leave.remark = remark || leave.remark;
-
-// await leave.save();
-
-// return res.status(200).json({
-//   success: true,
-//   message:
-//     status === "approved"
-//       ? "Leave approved successfully"
-//       : "Leave rejected successfully",
-//   data: leave,
-// });
-//   } catch (error) {
-//     res.status(500).json({
-//       success: false,
-//       message: error.message,
-//     });
-//   }
-// };
-
-
-// // ================= GET USER LEAVES =================
-// exports.getMyLeaves =
-//   async (req, res) => {
-//     try {
-//       const {
-//         userId,
-//       } = req.params;
-
-//       const leaves =
-//         await Leave.find({
-//           employeeId:
-//             userId,
-//         })
-//           .populate(
-//             "employeeId",
-//             "name email role"
-//           )
-//           .sort({
-//             createdAt: -1,
-//           });
-
-//       res.status(200).json({
-//         success: true,
-//         total:
-//           leaves.length,
-//         data: leaves,
-//       });
-//     } catch (error) {
-//       res.status(500).json({
-//         success: false,
-//         message:
-//           error.message,
-//       });
-//     }
-//   };
-
-// // ================= GET LEAVE BALANCE =================
-// exports.getLeaveBalance =
-//   async (req, res) => {
-//     try {
-//       const {
-//         userId,
-//       } = req.params;
-
-//       let balance =
-//         await LeaveBalance.findOne(
-//           {
-//             employeeId:
-//               userId,
-//           }
-//         );
-
-//       // Auto create if not exists
-//       if (!balance) {
-//         balance =
-//           await LeaveBalance.create(
-//             {
-//               employeeId:
-//                 userId,
-//               totalLeaves: 20,
-//               usedLeaves: 0,
-//               remainingLeaves: 20,
-//             }
-//           );
-//       }
-
-//       res.status(200).json({
-//         success: true,
-//         data: balance,
-//       });
-//     } catch (error) {
-//       res.status(500).json({
-//         success: false,
-//         message:
-//           error.message,
-//       });
-//     }
-//   };
-
-// // ================= CREATE HOLIDAY =================
-// exports.createHoliday =
-//   async (req, res) => {
-//     try {
-//       const {
-//         holidayName,
-//         holidayDate,
-//         isPublicHoliday,
-//       } = req.body;
-
-//       const holiday =
-//         await Holiday.create({
-//           holidayName,
-//           holidayDate,
-//           isPublicHoliday,
-//         });
-
-//       res.status(201).json({
-//         success: true,
-//         message:
-//           "Holiday created successfully",
-//         data: holiday,
-//       });
-//     } catch (error) {
-//       res.status(500).json({
-//         success: false,
-//         message:
-//           error.message,
-//       });
-//     }
-//   };
-
-// // ================= GET ALL HOLIDAYS =================
-// exports.getAllHolidays =
-//   async (req, res) => {
-//     try {
-//       const holidays =
-//         await Holiday.find().sort(
-//           {
-//             holidayDate: 1,
-//           }
-//         );
-
-//       res.status(200).json({
-//         success: true,
-//         total:
-//           holidays.length,
-//         data: holidays,
-//       });
-//     } catch (error) {
-//       res.status(500).json({
-//         success: false,
-//         message:
-//           error.message,
-//       });
-//     }
-//   };
-
 const Leave = require("../models/Leave");
 const LeaveBalance = require("../models/LeaveBalance");
 const Holiday = require("../models/Holiday");
@@ -728,6 +301,7 @@ exports.teamLeadApproval = async (req, res) => {
 };
 
 // ================= HR APPROVAL =================
+// ================= HR APPROVAL (FIXED) =================
 exports.hrApproval = async (req, res) => {
   try {
     const { leaveId, status, remark } = req.body;
@@ -755,8 +329,18 @@ exports.hrApproval = async (req, res) => {
       });
     }
 
+    console.log("=== HR APPROVAL DEBUG ===");
+    console.log("Applicant Role:", leave.applicantRole);
+    console.log("Current Status:", leave.status);
+    console.log("Team Lead Status:", leave.teamLeadStatus);
+    console.log("HR Status:", leave.hrStatus);
+
+    // FIX: Check if it's a Team Lead leave (case insensitive and trim)
+    const isTeamLead = leave.applicantRole?.toLowerCase().trim() === "teamlead";
+    
     // For team lead leaves, skip team lead approval check
-    if (leave.applicantRole === "teamlead") {
+    if (isTeamLead) {
+      console.log("✅ Team Lead leave - skipping TL approval check");
       if (leave.status !== "pending_hr") {
         return res.status(400).json({
           success: false,
@@ -764,11 +348,19 @@ exports.hrApproval = async (req, res) => {
         });
       }
     } else {
+      console.log("❌ Employee/Intern leave - checking TL approval");
       // For employee/intern, check if team lead approved
       if (leave.teamLeadStatus !== "approved") {
         return res.status(400).json({
           success: false,
           message: "Leave must be approved by team lead first",
+        });
+      }
+      
+      if (leave.status !== "pending") {
+        return res.status(400).json({
+          success: false,
+          message: "Leave not in pending state",
         });
       }
     }
@@ -803,6 +395,7 @@ exports.hrApproval = async (req, res) => {
       data: leave,
     });
   } catch (error) {
+    console.error("HR Approval Error:", error);
     res.status(500).json({
       success: false,
       message: error.message,
