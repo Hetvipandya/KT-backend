@@ -10,6 +10,7 @@ const {
   createHoliday,
   getAllHolidays,
   getAllLeaves,
+  adminApproval,
 } = require("../controllers/leaveController");
 
 const { protect } = require("../middleware/authMiddleware");
@@ -30,6 +31,13 @@ router.post(
     "team lead"
   ),
   applyLeave
+);
+
+router.put(
+  "/admin/approve",
+  protect,
+  authorizeRoles("admin"),
+  adminApproval
 );
 
 // ================= TEAM LEAD APPROVAL =================
