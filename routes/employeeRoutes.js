@@ -10,11 +10,15 @@ const {
   addEmployee,
   getEmployeeList,
   getEmployeeProfile, 
-  updateEmployee,
+  updateEmployee, 
   removeEmployee,
   getAllEmployeeHistory,
   getAllEmployeeDocuments,
   getEmployeeDocuments,
+  getEmployeePerformance,
+  createEmployeePerformance,
+  upsertEmployeePerformance,
+  deleteEmployeePerformance,
 } = require("../controllers/employeeController");
 
 // ================= FILE FIELDS =================
@@ -80,6 +84,27 @@ router.get(
 router.get(
   "/documents/:employeeId",
   getEmployeeDocuments
+);
+
+// ================= EMPLOYEE PERFORMANCE =================
+router.post(
+  "/performance/:employeeId",
+  createEmployeePerformance
+);
+
+router.get(
+  "/performance/:employeeId",
+  getEmployeePerformance
+);
+
+router.put(
+  "/performance/:employeeId",
+  upsertEmployeePerformance
+);
+
+router.delete(
+  "/performance/:employeeId",
+  deleteEmployeePerformance
 );
 
 // ================= EMPLOYEE PROFILE =================

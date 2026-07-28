@@ -10,9 +10,9 @@ const EmployeeHistory =
   require(
     "../models/EmployeeHistory"
   );
-  
 
-
+const EmployeePerformance = require("../models/EmployeePerformance");
+const { buildPerformanceSummary } = require("../utils/performance");
 
 // ================= GENERATE EMPLOYEE ID =================
 const generateEmployeeID =
@@ -296,6 +296,121 @@ exports.addEmployee =
       success: true,
       count: history.length,
       data: history,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+exports.getEmployeePerformance = async (req, res) => {
+  try {
+    const { employeeId } = req.params;
+
+    const performance = await EmployeePerformance.findOne({ employeeID: employeeId });
+
+    if (!performance) {
+      return res.status(404).json({
+        success: false,
+        message: "Employee performance not found",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      performance,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+exports.createEmployeePerformance = async (req, res) => {
+  try {
+    const { employeeId } = req.params;
+    const payload = req.body || {};
+
+    const existing = await EmployeePerformance.findOne({ employeeID: employeeId });
+
+    if (existing) {
+      return res.status(409).json({
+        success: false,
+        message: "Employee performance already exists",
+      });
+    }
+
+    const summary = buildPerformanceSummary(payload);
+
+    const performance = await EmployeePerformance.create({
+      employeeID: employeeId,
+      ...payload,
+      ...summary,
+    });
+
+    res.status(201).json({
+      success: true,
+      message: "Employee performance created successfully",
+      performance,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+exports.upsertEmployeePerformance = async (req, res) => {
+  try {
+    const { employeeId } = req.params;
+    const payload = req.body || {};
+
+    const summary = buildPerformanceSummary(payload);
+
+    const performance = await EmployeePerformance.findOneAndUpdate(
+      { employeeID: employeeId },
+      {
+        ...payload,
+        ...summary,
+        employeeID: employeeId,
+      },
+      { new: true, upsert: true, setDefaultsOnInsert: true }
+    );
+
+    res.status(200).json({
+      success: true,
+      message: "Employee performance updated successfully",
+      performance,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+exports.deleteEmployeePerformance = async (req, res) => {
+  try {
+    const { employeeId } = req.params;
+
+    const performance = await EmployeePerformance.findOneAndDelete({ employeeID: employeeId });
+
+    if (!performance) {
+      return res.status(404).json({
+        success: false,
+        message: "Employee performance not found",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Employee performance deleted successfully",
     });
   } catch (error) {
     res.status(500).json({
