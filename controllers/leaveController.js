@@ -301,7 +301,6 @@ exports.teamLeadApproval = async (req, res) => {
 };
 
 // ================= HR APPROVAL =================
-// ================= HR APPROVAL (FIXED) =================
 exports.hrApproval = async (req, res) => {
   try {
     const { leaveId, status, remark } = req.body;
@@ -320,6 +319,7 @@ exports.hrApproval = async (req, res) => {
       });
     }
 
+    // Populate employee data
     const leave = await Leave.findById(leaveId).populate("employeeId");
 
     if (!leave) {
@@ -329,54 +329,58 @@ exports.hrApproval = async (req, res) => {
       });
     }
 
-    console.log("=== HR APPROVAL DEBUG ===");
-    console.log("Applicant Role:", leave.applicantRole);
-    console.log("Current Status:", leave.status);
-    console.log("Team Lead Status:", leave.teamLeadStatus);
+    console.log("========== HR APPROVAL ==========");
+    console.log("Applicant Role (Leave):", leave.applicantRole);
+    console.log("Current User Role:", leave.employeeId?.role);
+    console.log("Leave Status:", leave.status);
+    console.log("TL Status:", leave.teamLeadStatus);
     console.log("HR Status:", leave.hrStatus);
 
-    // FIX: Check if it's a Team Lead leave (case insensitive and trim)
-    const isTeamLead = leave.applicantRole?.toLowerCase().trim() === "teamlead";
-    
-    // For team lead leaves, skip team lead approval check
-    if (isTeamLead) {
-      console.log("✅ Team Lead leave - skipping TL approval check");
-      if (leave.status !== "pending_hr") {
+    // Current role from User collection
+    const currentRole = leave.employeeId?.role?.toLowerCase().trim();
+
+    // ==========================
+    // TEAM LEAD FLOW
+    // ==========================
+    if (currentRole === "teamlead") {
+      console.log("✅ Team Lead Leave -> Direct HR Approval");
+
+      if (leave.hrStatus !== "pending") {
         return res.status(400).json({
           success: false,
-          message: "Leave not in pending HR state",
+          message: "Leave already processed by HR",
         });
       }
-    } else {
-      console.log("❌ Employee/Intern leave - checking TL approval");
-      // For employee/intern, check if team lead approved
+    }
+
+    // ==========================
+    // EMPLOYEE / INTERN FLOW
+    // ==========================
+    else {
+      console.log("👤 Employee/Intern Leave");
+
       if (leave.teamLeadStatus !== "approved") {
         return res.status(400).json({
           success: false,
-          message: "Leave must be approved by team lead first",
+          message: "Leave must be approved by Team Lead first",
         });
       }
-      
-      if (leave.status !== "pending") {
+
+      if (leave.hrStatus !== "pending") {
         return res.status(400).json({
           success: false,
-          message: "Leave not in pending state",
+          message: "Leave already processed by HR",
         });
       }
     }
 
-    if (leave.hrStatus !== "pending") {
-      return res.status(400).json({
-        success: false,
-        message: "Leave already processed by HR",
-      });
-    }
-
+    // ==========================
+    // HR DECISION
+    // ==========================
     if (status === "approved") {
       leave.hrStatus = "approved";
       leave.status = "approved";
-      
-      // Update leave balance for all approved leaves
+
       await updateLeaveBalance(leave);
     } else {
       leave.hrStatus = "rejected";
@@ -384,6 +388,7 @@ exports.hrApproval = async (req, res) => {
     }
 
     leave.remark = remark || leave.remark;
+
     await leave.save();
 
     return res.status(200).json({
@@ -396,7 +401,8 @@ exports.hrApproval = async (req, res) => {
     });
   } catch (error) {
     console.error("HR Approval Error:", error);
-    res.status(500).json({
+
+    return res.status(500).json({
       success: false,
       message: error.message,
     });
