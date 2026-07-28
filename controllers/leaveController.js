@@ -430,8 +430,6 @@ const LeaveBalance = require("../models/LeaveBalance");
 const Holiday = require("../models/Holiday");
 const User = require("../models/User");
 
-const normalizeRole = (role = "") => (role || "").toLowerCase().replace(/\s+/g, "");
-
 // ================= APPLY LEAVE =================
 exports.applyLeave = async (req, res) => {
   try {
@@ -446,8 +444,6 @@ exports.applyLeave = async (req, res) => {
       });
     }
 
-    const normalizedRole = normalizeRole(user.role);
-    const isTeamLead = normalizedRole === "teamlead";
     const totalDays =
       Math.ceil(
         (new Date(endDate) - new Date(startDate)) / (1000 * 60 * 60 * 24)
@@ -464,16 +460,16 @@ exports.applyLeave = async (req, res) => {
 
     const leave = await Leave.create({
       employeeId: userId,
-      applicantRole: normalizedRole,
+      applicantRole: user.role,
       leaveType,
       startDate,
       endDate,
       totalDays,
       reason,
-      // Team lead's own leave goes directly to HR
-      status: isTeamLead ? "pending_hr" : "pending",
-      teamLeadStatus: isTeamLead ? "skipped" : "pending",
-      hrStatus: isTeamLead ? "pending" : "pending",
+      // Team Lead leave goes directly to HR
+      status: user.role === "teamlead" ? "pending_hr" : "pending",
+      teamLeadStatus: user.role === "teamlead" ? "skipped" : "pending",
+      hrStatus: "pending",
     });
 
     // Auto create leave balance if not exists
@@ -508,31 +504,30 @@ exports.getAllLeaves = async (req, res) => {
   console.log("User role:", req.user ? req.user.role : "No role");
 
   try {
-    const { role, _id } = req.user;
-    const normalizedRole = normalizeRole(role);
+    const { role, _id } = req.user; // Assuming req.user is set by auth middleware
 
     let filter = {};
-
-    // ROLE-BASED FILTERING - IMPROVED
-    if (normalizedRole === "teamlead") {
-      // Team Lead: બધી એમ્પ્લોયી અને ઇન્ટર્નની રજાઓ (પછી ભલે એ પેન્ડિંગ, અપ્રુવ્ડ કે રિજેક્ટેડ હોય)
+    
+    // ROLE-BASED FILTERING
+    if (role === "teamlead") {
+      // Team Lead can only see Employee and Intern leaves (not other Team Leads)
       filter = {
-        applicantRole: { $in: ["employee", "intern"] }
+        $and: [
+          { applicantRole: { $in: ["employee", "intern"] } },
+          { teamLeadStatus: "pending" },
+        ],
       };
-      // TeamLead પોતાની રજાઓ પણ જોઈ શકે
-      // filter = {
-      //   $or: [
-      //     { applicantRole: { $in: ["employee", "intern"] } },
-      //     { employeeId: _id }
-      //   ]
-      // };
-      
-    } else if (normalizedRole === "hr") {
-      // HR: બધી રજાઓ (કોઈ ફિલ્ટર નથી)
-      filter = {};
-      
-    } else if (normalizedRole === "employee" || normalizedRole === "intern") {
-      // Employee/Intern: માત્ર પોતાની રજાઓ
+    } else if (role === "hr") {
+      // HR can see all leaves that are pending_hr or approved/rejected
+      filter = {
+        $or: [
+          { status: "pending_hr" },
+          { status: "approved" },
+          { status: "rejected" },
+        ],
+      };
+    } else if (role === "employee" || role === "intern") {
+      // Employees/Interns can only see their own leaves
       filter = { employeeId: _id };
     }
 
@@ -543,13 +538,9 @@ exports.getAllLeaves = async (req, res) => {
         path: "employeeId",
         select: "name email role uniqueID",
       })
-      .populate({
-        path: "teamLeadId",
-        select: "name email",
-      })
       .sort({ createdAt: -1 });
 
-    console.log(`Found ${leaves.length} leaves for role: ${normalizedRole}`);
+    console.log(`Found ${leaves.length} leaves for role: ${role}`);
 
     return res.status(200).json({
       success: true,
@@ -574,7 +565,7 @@ exports.getTeamLeadPendingLeaves = async (req, res) => {
     const userId = req.user._id;
     const user = await User.findById(userId);
 
-    if (!user || normalizeRole(user.role) !== "teamlead") {
+    if (!user || user.role !== "teamlead") {
       return res.status(403).json({
         success: false,
         message: "Access denied. Only Team Leads can view pending leaves.",
@@ -613,7 +604,7 @@ exports.getHRPendingLeaves = async (req, res) => {
     const userId = req.user._id;
     const user = await User.findById(userId);
 
-    if (!user || normalizeRole(user.role) !== "hr") {
+    if (!user || user.role !== "hr") {
       return res.status(403).json({
         success: false,
         message: "Access denied. Only HR can view pending leaves.",
@@ -692,10 +683,8 @@ exports.teamLeadApproval = async (req, res) => {
       });
     }
 
-    const normalizedApplicantRole = normalizeRole(leave.applicantRole);
-
     // Check if this is an employee/intern leave
-    if (!["employee", "intern"].includes(normalizedApplicantRole)) {
+    if (!["employee", "intern"].includes(leave.applicantRole)) {
       return res.status(400).json({
         success: false,
         message: "Team Lead can only approve employee/intern leaves",
@@ -766,10 +755,8 @@ exports.hrApproval = async (req, res) => {
       });
     }
 
-    const normalizedApplicantRole = normalizeRole(leave.applicantRole);
-
     // For team lead leaves, skip team lead approval check
-    if (normalizedApplicantRole === "teamlead") {
+    if (leave.applicantRole === "teamlead") {
       if (leave.status !== "pending_hr") {
         return res.status(400).json({
           success: false,
