@@ -6,12 +6,22 @@ const DailyUpdate = require("../models/dailyUpdateModel");
 
 // ====================================================== 
 // PROJECT CONTROLLER
-// ======================================================
+// ====================================================== 
 
 // Create Project
 exports.createProject = async (req, res) => {
   try {
-    const project = await Project.create(req.body);
+    const uploadedFiles = req.files
+      ? req.files.map((file) => ({
+          fileName: file.originalname,
+          fileUrl: file.path, // Cloudinary URL
+        }))
+      : [];
+
+    const project = await Project.create({
+      ...req.body,
+      files: uploadedFiles,
+    });
 
     const populatedProject = await Project.findById(project._id)
       .populate("teamLead", "name email")
@@ -20,13 +30,13 @@ exports.createProject = async (req, res) => {
 
     res.status(201).json({
       success: true,
-      data: populatedProject
-    }); 
+      data: populatedProject,
+    });
   } catch (error) {
     console.log(error);
     res.status(500).json({
       success: false,
-      message: error.message
+      message: error.message,
     });
   }
 };
