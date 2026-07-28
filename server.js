@@ -231,8 +231,17 @@ const projectManagementRoutes =
  require(
   "./routes/adjustmentRequestRoutes"
  )
+
+ const performanceRoutes = require(
+  "./routes/performanceRoutes"
+);
+
  
 // ================= API PREFIX =================
+app.use(
+  "/api/performance",
+  performanceRoutes
+);
 
 app.use(
   "/api/adjustment",
