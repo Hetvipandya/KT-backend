@@ -24,6 +24,16 @@ COMMON TEAM IDS
 =========================
 */
 
+const normalizeRole = (role) => {
+  if (!role) return "";
+  return String(role).trim().toLowerCase().replace(/[_\s]+/g, "");
+};
+
+const isTeamLeadRole = (role) => {
+  const normalized = normalizeRole(role);
+  return normalized === "teamlead" || normalized === "teamleader";
+};
+
 const resolveTeamLeadReference = async (teamLeadId) => {
   if (!teamLeadId) {
     return {
@@ -284,7 +294,7 @@ exports.createOrUpdateTeam = async (req, res) => {
     let teamLeadEmployee = null;
 
     // Check if user is team lead
-    if (user && (user.role === "team lead" || user.role === "teamlead")) {
+    if (user && isTeamLeadRole(user.role)) {
       teamLeadUser = user._id;
       
       // Find or create employee record for this user
@@ -314,7 +324,7 @@ exports.createOrUpdateTeam = async (req, res) => {
       // Find or create user record for this employee
       if (employee.userID) {
         let usr = await User.findById(employee.userID);
-        if (usr && usr.role !== "team lead" && usr.role !== "teamlead") {
+        if (usr && !isTeamLeadRole(usr.role)) {
           usr.role = "team lead";
           await usr.save();
           console.log("✅ Updated user role to team lead");
