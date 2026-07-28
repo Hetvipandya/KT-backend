@@ -10,7 +10,7 @@ const leaveSchema = new mongoose.Schema(
 
     applicantRole: {
       type: String,
-      enum: ["employee", "intern", "teamlead", "hr", "admin"],
+      enum: ["employee", "intern", "team lead", "hr", "admin"],
       required: true,
     },
 
