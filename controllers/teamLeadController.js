@@ -520,8 +520,15 @@ GET MY TEAM
 
 exports.getMyTeam = async (req, res) => {
   try {
+    const currentLeadId = req.user._id;
+    const leadReference = await resolveTeamLeadReference(currentLeadId);
 
-    const teams = await Team.find()
+    const teams = await Team.find({
+      $or: [
+        { teamLeadUser: leadReference.teamLeadUser },
+        { teamLeadEmployee: leadReference.teamLeadEmployee },
+      ],
+    })
       .populate({
         path: "teamLeadUser",
         select: "name email role uniqueID",
