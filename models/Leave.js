@@ -48,7 +48,7 @@ const leaveSchema = new mongoose.Schema(
 
     teamLeadStatus: {
       type: String,
-      enum: ["pending", "approved", "rejected"],
+      enum: ["pending", "approved", "rejected", "skipped"],
       default: "pending",
     },
 
