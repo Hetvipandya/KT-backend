@@ -43,7 +43,7 @@ router.put(
 // ================= HR APPROVAL =================
 router.put(
   "/hr-approval",
-  protect,
+  protect, 
   authorizeRoles("hr"),
   hrApproval
 );

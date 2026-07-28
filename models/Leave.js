@@ -6,7 +6,13 @@ const leaveSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       required: true,
-    },  
+    },
+
+    applicantRole: {
+      type: String,
+      enum: ["employee", "intern", "teamlead", "hr", "admin"],
+      required: true,
+    },
 
     leaveType: {
       type: String,
