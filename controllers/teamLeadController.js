@@ -78,6 +78,54 @@ const resolveTeamLeadReference = async (teamLeadId) => {
   return result;
 };
 
+const findTeamByLead = async (teamLeadId) => {
+  const leadReference = await resolveTeamLeadReference(teamLeadId);
+
+  return await Team.findOne({
+    $or: [
+      { teamLeadUser: leadReference.teamLeadUser },
+      { teamLeadEmployee: leadReference.teamLeadEmployee },
+      { teamLeadUser: teamLeadId },
+      { teamLeadEmployee: teamLeadId },
+    ],
+  });
+};
+
+const createTeamForLead = async (teamLeadId) => {
+  const user = await User.findById(teamLeadId);
+  const employee = await Employee.findById(teamLeadId);
+
+  let teamLeadUser = null;
+  let teamLeadEmployee = null;
+
+  if (user) {
+    teamLeadUser = user._id;
+  }
+
+  if (employee) {
+    teamLeadEmployee = employee._id;
+  }
+
+  if (!teamLeadEmployee && user) {
+    const linkedEmployee = await Employee.findOne({ userID: user._id });
+    if (linkedEmployee) {
+      teamLeadEmployee = linkedEmployee._id;
+    }
+  }
+
+  if (!teamLeadUser && employee?.userID) {
+    teamLeadUser = employee.userID;
+  }
+
+  return await Team.create({
+    name: "",
+    teamLeadUser,
+    teamLeadEmployee,
+    employees: [],
+    interns: [],
+  });
+};
+
 const getTeamIds = async (teamLeadId) => {
   console.log("Logged In Team Lead ID:", teamLeadId);
 
@@ -520,15 +568,7 @@ GET MY TEAM
 
 exports.getMyTeam = async (req, res) => {
   try {
-    const currentLeadId = req.user._id;
-    const leadReference = await resolveTeamLeadReference(currentLeadId);
-
-    const teams = await Team.find({
-      $or: [
-        { teamLeadUser: leadReference.teamLeadUser },
-        { teamLeadEmployee: leadReference.teamLeadEmployee },
-      ],
-    })
+    let teams = await Team.find()
       .populate({
         path: "teamLeadUser",
         select: "name email role uniqueID",
@@ -558,6 +598,10 @@ exports.getMyTeam = async (req, res) => {
       },
     });
 
+    if (!teams.length) {
+      const newTeam = await createTeamForLead(req.user._id);
+      teams = [newTeam];
+    }
 
     const data = teams.map((team) => {
 
