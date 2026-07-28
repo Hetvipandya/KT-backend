@@ -366,7 +366,10 @@ exports.hrApproval = async (req, res) => {
     if (isTeamLead) {
       console.log("✅ Team Lead Leave -> Direct HR Approval");
 
-      // Skip TL approval
+      // Team lead applications skip the team lead approval step and go directly to HR.
+      if (leave.teamLeadStatus !== "skipped") {
+        leave.teamLeadStatus = "skipped";
+      }
     }
 
     // ==========================
