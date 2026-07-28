@@ -72,6 +72,6 @@ const dailyReportSchema =
   );
 
 module.exports = mongoose.model(
-  "DailyReport",
+  "DailyReport", 
   dailyReportSchema
 );
