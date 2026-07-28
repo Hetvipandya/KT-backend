@@ -345,7 +345,7 @@ exports.hrApproval = async (req, res) => {
       .toLowerCase()
       .replace(/\s+/g, "");
 
-    const isTeamLead = currentRole === "team lead";
+    const isTeamLead = currentRole === "teamlead" || currentRole === "team lead";
 
     // Save applicantRole if missing
     if (!leave.applicantRole && leave.employeeId?.role) {
