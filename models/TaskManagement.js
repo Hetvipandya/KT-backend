@@ -66,12 +66,6 @@ const taskManagementSchema =
       // Priority
       priority: {
         type: String,
-        enum: [
-          "Low",
-          "Medium",
-          "High",
-          "Critical",
-        ],
       },
 
       // Status
