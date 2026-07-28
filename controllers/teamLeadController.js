@@ -263,6 +263,8 @@ exports.createOrUpdateTeam = async (req, res) => {
       testers = [],
     } = req.body;
 
+    console.log("📝 Creating/Updating Team:", { teamLead, employeesCount: employees.length, internsCount: interns.length });
+
     if (!teamLead) {
       return res.status(400).json({
         success: false,
@@ -270,189 +272,169 @@ exports.createOrUpdateTeam = async (req, res) => {
       });
     }
 
-    let teamLeadUser = null;
-    let teamLeadEmployee = null;
-    let team = null;
-
     // ===========================
-    // STEP 1: Find the user and employee
+    // STEP 1: Find the team lead (User or Employee)
     // ===========================
     
-    // Try to find as User first
     const user = await User.findById(teamLead);
-    
-    // Try to find as Employee
     const employee = await Employee.findById(teamLead);
     
-    // If not found by ID directly, try to find by userID (if teamLead is a user ID)
-    let linkedEmployee = null;
-    if (user) {
-      linkedEmployee = await Employee.findOne({ userID: user._id });
-    }
-    
-    // If not found by user, try to find employee with this userID
-    let linkedUser = null;
-    if (employee && employee.userID) {
-      linkedUser = await User.findById(employee.userID);
-    }
+    let teamLeadUser = null;
+    let teamLeadEmployee = null;
 
-    // ===========================
-    // STEP 2: Determine team lead user reference
-    // ===========================
-    
-    // Check if the provided ID is a User with team lead role
-    if (user) {
-      // Check if user has role "team lead" or "teamlead"
-      if (user.role === "team lead" || user.role === "teamlead") {
-        teamLeadUser = user._id;
-      }
-    }
-    
-    // If user wasn't found or doesn't have team lead role, check employee
-    if (!teamLeadUser && employee) {
-      // Check if employee is marked as team lead
-      if (employee.isTeamLead === true) {
-        teamLeadEmployee = employee._id;
-        // Also try to find associated user
-        if (employee.userID) {
-          const assocUser = await User.findById(employee.userID);
-          if (assocUser) {
-            teamLeadUser = assocUser._id;
-          }
-        }
-      }
-    }
-    
-    // If still no team lead, check if the provided ID is actually a user ID 
-    // and there's an employee linked to it with isTeamLead: true
-    if (!teamLeadUser && !teamLeadEmployee && user) {
-      if (linkedEmployee && linkedEmployee.isTeamLead === true) {
-        teamLeadUser = user._id;
-        teamLeadEmployee = linkedEmployee._id;
-      }
-    }
-    
-    // If still no team lead, check if the provided ID is an employee ID
-    // with isTeamLead: true but we might have missed it
-    if (!teamLeadUser && !teamLeadEmployee) {
-      // Try to find employee directly with this ID and isTeamLead: true
-      const directEmployee = await Employee.findOne({
-        _id: teamLead,
-        isTeamLead: true
-      });
+    // Check if user is team lead
+    if (user && (user.role === "team lead" || user.role === "teamlead")) {
+      teamLeadUser = user._id;
       
-      if (directEmployee) {
-        teamLeadEmployee = directEmployee._id;
-        if (directEmployee.userID) {
-          const assocUser = await User.findById(directEmployee.userID);
-          if (assocUser) {
-            teamLeadUser = assocUser._id;
-          }
-        }
-      }
-    }
-    
-    // If still no team lead, try to find any employee with isTeamLead: true
-    // and userID matching the provided ID
-    if (!teamLeadUser && !teamLeadEmployee) {
-      const employeeByUserID = await Employee.findOne({
-        userID: teamLead,
-        isTeamLead: true
-      });
-      
-      if (employeeByUserID) {
-        teamLeadEmployee = employeeByUserID._id;
-        if (employeeByUserID.userID) {
-          const assocUser = await User.findById(employeeByUserID.userID);
-          if (assocUser) {
-            teamLeadUser = assocUser._id;
-          }
-        }
-      }
-    }
-
-    // If we have a user but no employee, and the user has team lead role,
-    // try to find or create an employee record for them
-    if (teamLeadUser && !teamLeadEmployee) {
-      // Check if user already has an employee record
-      const existingEmployee = await Employee.findOne({ userID: teamLeadUser });
-      
-      if (existingEmployee) {
-        // Update the existing employee to be team lead
-        existingEmployee.isTeamLead = true;
-        await existingEmployee.save();
-        teamLeadEmployee = existingEmployee._id;
-      } else {
-        // Create a new employee record for this user
-        const newEmployee = await Employee.create({
-          userID: teamLeadUser,
-          firstName: user.name ? user.name.split(' ')[0] : 'Team',
-          lastName: user.name ? user.name.split(' ').slice(1).join(' ') : 'Lead',
+      // Find or create employee record for this user
+      let emp = await Employee.findOne({ userID: user._id });
+      if (!emp) {
+        emp = await Employee.create({
+          userID: user._id,
+          firstName: user.name?.split(' ')[0] || 'Team',
+          lastName: user.name?.split(' ').slice(1).join(' ') || 'Lead',
           email: user.email,
           isTeamLead: true,
           role: "team lead"
         });
-        teamLeadEmployee = newEmployee._id;
+        console.log("✅ Created new employee record for team lead user");
+      } else if (!emp.isTeamLead) {
+        emp.isTeamLead = true;
+        await emp.save();
+        console.log("✅ Updated employee to be team lead");
+      }
+      teamLeadEmployee = emp._id;
+    }
+    
+    // Check if employee is team lead
+    if (employee && employee.isTeamLead === true) {
+      teamLeadEmployee = employee._id;
+      
+      // Find or create user record for this employee
+      if (employee.userID) {
+        let usr = await User.findById(employee.userID);
+        if (usr && usr.role !== "team lead" && usr.role !== "teamlead") {
+          usr.role = "team lead";
+          await usr.save();
+          console.log("✅ Updated user role to team lead");
+        }
+        if (usr) teamLeadUser = usr._id;
       }
     }
 
-    // ===========================
-    // STEP 3: Find existing team
-    // ===========================
-    
-    if (teamLeadUser || teamLeadEmployee) {
-      team = await Team.findOne({
-        $or: [
-          { teamLeadUser: teamLeadUser },
-          { teamLeadEmployee: teamLeadEmployee },
-        ],
+    // If teamLead is a User ID but user wasn't found in User model
+    if (!teamLeadUser && !teamLeadEmployee) {
+      // Check if there's an employee with this userID that is team lead
+      const empByUserID = await Employee.findOne({ 
+        userID: teamLead, 
+        isTeamLead: true 
+      });
+      if (empByUserID) {
+        teamLeadEmployee = empByUserID._id;
+        const usr = await User.findById(empByUserID.userID);
+        if (usr) teamLeadUser = usr._id;
+        console.log("✅ Found team lead by userID in Employee model");
+      }
+    }
+
+    // If still no team lead found
+    if (!teamLeadUser && !teamLeadEmployee) {
+      console.log("❌ No team lead found");
+      return res.status(404).json({
+        success: false,
+        message: "Team Lead not found. Please ensure the user has role 'team lead' or employee has isTeamLead: true",
       });
     }
 
-    // If still no team lead found, return error
-    if (!teamLeadUser && !teamLeadEmployee) {
-      return res.status(404).json({
-        success: false,
-        message: "Team Lead not found or not marked as team lead. Please ensure the user has role 'team lead' or employee has isTeamLead: true",
-      });
+    console.log(`👤 Team Lead: User=${teamLeadUser}, Employee=${teamLeadEmployee}`);
+
+    // ===========================
+    // STEP 2: Find existing team
+    // ===========================
+    
+    let team = await Team.findOne({
+      $or: [
+        { teamLeadUser: teamLeadUser },
+        { teamLeadEmployee: teamLeadEmployee },
+      ],
+    });
+
+    // ===========================
+    // STEP 3: Prepare team members
+    // ===========================
+    
+    // IMPORTANT: 
+    // - employees: array of Employee IDs (from Employee model)
+    // - interns: array of User IDs (from User model)
+    // - developers/designers/testers: legacy fields (User IDs)
+    
+    let employeeIds = [];
+    let internIds = [];
+
+    // Process employees (Employee model IDs)
+    if (employees && employees.length > 0) {
+      employeeIds = employees.map(id => String(id));
+    } else if (developers && developers.length > 0) {
+      // For backward compatibility - developers are User IDs, not Employee IDs
+      // Convert to Employee IDs if needed
+      for (const userId of developers) {
+        const emp = await Employee.findOne({ userID: userId });
+        if (emp) {
+          employeeIds.push(String(emp._id));
+        } else {
+          // If no employee record exists, create one
+          const usr = await User.findById(userId);
+          if (usr) {
+            const newEmp = await Employee.create({
+              userID: usr._id,
+              firstName: usr.name?.split(' ')[0] || 'User',
+              lastName: usr.name?.split(' ').slice(1).join(' ') || '',
+              email: usr.email,
+              role: usr.role || 'employee'
+            });
+            employeeIds.push(String(newEmp._id));
+            console.log(`✅ Created employee record for user ${usr.name}`);
+          }
+        }
+      }
     }
+
+    // Process interns (User model IDs)
+    if (interns && interns.length > 0) {
+      internIds = interns.map(id => String(id));
+    }
+
+    console.log(`📊 Team Members: ${employeeIds.length} employees, ${internIds.length} interns`);
 
     // ===========================
     // STEP 4: Create or Update Team
     // ===========================
 
     if (team) {
-      // Clear existing arrays and set new ones
-      if (employees && employees.length > 0) {
-        team.employees = employees;
-      } else if (developers && developers.length > 0) {
-        team.employees = developers;
-      } else if (req.body.employees !== undefined && req.body.employees.length === 0) {
-        team.employees = [];
-      }
-
-      if (interns !== undefined) {
-        team.interns = interns;
-      }
-
-      if (designers !== undefined) {
-        team.designers = designers;
-      }
-
-      if (testers !== undefined) {
-        team.testers = testers;
-      }
-
-      // Ensure teamLead fields are set
-      if (teamLeadUser) team.teamLeadUser = teamLeadUser;
-      if (teamLeadEmployee) team.teamLeadEmployee = teamLeadEmployee;
+      // Update existing team
+      team.teamLeadUser = teamLeadUser || team.teamLeadUser;
+      team.teamLeadEmployee = teamLeadEmployee || team.teamLeadEmployee;
+      team.employees = employeeIds;
+      team.interns = internIds;
+      
+      // Update legacy fields if provided
+      if (designers !== undefined) team.designers = designers;
+      if (testers !== undefined) team.testers = testers;
 
       await team.save();
+      console.log("✅ Team updated successfully:", team._id);
+
+      // Populate for response
+      const populatedTeam = await Team.findById(team._id)
+        .populate('teamLeadUser', 'name email role')
+        .populate('teamLeadEmployee', 'firstName lastName email employeeID')
+        .populate('employees', 'firstName lastName email employeeID designation')
+        .populate('interns', 'name email role uniqueID');
 
       return res.status(200).json({
         success: true,
         message: "Team Updated Successfully",
-        data: team,
+        data: populatedTeam,
       });
     }
 
@@ -460,20 +442,29 @@ exports.createOrUpdateTeam = async (req, res) => {
     const newTeam = await Team.create({
       teamLeadUser,
       teamLeadEmployee,
-      employees: employees && employees.length > 0 ? employees : developers || [],
-      interns: interns || [],
+      employees: employeeIds,
+      interns: internIds,
       designers: designers || [],
       testers: testers || [],
     });
 
+    console.log("✅ Team created successfully:", newTeam._id);
+
+    // Populate for response
+    const populatedTeam = await Team.findById(newTeam._id)
+      .populate('teamLeadUser', 'name email role')
+      .populate('teamLeadEmployee', 'firstName lastName email employeeID')
+      .populate('employees', 'firstName lastName email employeeID designation')
+      .populate('interns', 'name email role uniqueID');
+
     return res.status(201).json({
       success: true,
       message: "Team Created Successfully",
-      data: newTeam,
+      data: populatedTeam,
     });
 
   } catch (error) {
-    console.log("Error in createOrUpdateTeam:", error);
+    console.error("❌ Error in createOrUpdateTeam:", error);
     
     return res.status(500).json({
       success: false,
