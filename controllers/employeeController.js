@@ -12,6 +12,7 @@ const EmployeeHistory =
   );
 
   const User = require("../models/User");
+const { syncEmployeeToUser } = require("../utils/userEmployeeSync");
 
 
 // ================= GENERATE EMPLOYEE ID =================
@@ -49,6 +50,17 @@ exports.assignTeamLead = async (req, res) => {
       role: "team lead",
     });
 
+    await syncEmployeeToUser({
+      employee: {
+        ...employee.toObject(),
+        isTeamLead: true,
+      },
+      role: "team lead",
+      userData: {
+        role: "team lead",
+      },
+    });
+
     res.status(200).json({
       success: true,
       message: "Assigned as Team Lead successfully",
@@ -83,6 +95,17 @@ exports.removeTeamLead = async (req, res) => {
 
     await User.findByIdAndUpdate(employee.userID, {
       role: "employee",
+    });
+
+    await syncEmployeeToUser({
+      employee: {
+        ...employee.toObject(),
+        isTeamLead: false,
+      },
+      role: "employee",
+      userData: {
+        role: "employee",
+      },
     });
 
     res.status(200).json({

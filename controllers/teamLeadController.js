@@ -1,7 +1,7 @@
 const mongoose =
   require("mongoose");
 
-const Attendance =
+const Attendance = 
   require("../models/Attendance");
 
 const DailyReport = 

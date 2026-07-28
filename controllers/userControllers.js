@@ -10,7 +10,9 @@ const jwt =
   require("jsonwebtoken");
 
 const nodemailer =
-  require("nodemailer");
+  require("nodemailer"); 
+
+const { syncEmployeeToUser } = require("../utils/userEmployeeSync");
  
 // ================= EMAIL CONFIG =================
 const transporter =
@@ -462,7 +464,7 @@ const uniqueID =
           }
         );
         // ================= CREATE EMPLOYEE =================
-if (role === "employee") {
+if (role === "employee" || role === "team lead") {
   // Generate Employee ID
   const lastEmployee = await Employee.findOne().sort({
     createdAt: -1,
@@ -482,7 +484,7 @@ if (role === "employee") {
 
   const employeeID = `EMP${nextEmployeeNumber}`;
 
-  await Employee.create({
+  const employee = await Employee.create({
     employeeID,
     userID: user._id,
 
@@ -498,13 +500,31 @@ if (role === "employee") {
     currentAddress: address,
     permanentAddress: address,
 
-    designation: "Employee",
+    designation: role === "team lead" ? "Team Lead" : "Employee",
 
     department,
 
     joiningDate: new Date(),
 
     employeeStatus: "Active",
+    isTeamLead: role === "team lead",
+  });
+
+  await syncEmployeeToUser({
+    employee,
+    role,
+    userData: {
+      name,
+      email,
+      phoneNumber,
+      dob,
+      address,
+      department,
+      bloodGroup,
+      role,
+      isApproved: false,
+      isFirstLogin: true,
+    },
   });
 }
 
