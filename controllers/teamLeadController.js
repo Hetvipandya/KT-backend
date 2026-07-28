@@ -293,11 +293,17 @@ exports.createOrUpdateTeam = async (req, res) => {
     let teamLeadUser = null;
     let teamLeadEmployee = null;
 
-    // Check if user is team lead
-    if (user && isTeamLeadRole(user.role)) {
+    if (user) {
       teamLeadUser = user._id;
-      
-      // Find or create employee record for this user
+
+      // Make this user a team lead if they are being used as one
+      if (!isTeamLeadRole(user.role)) {
+        user.role = "team lead";
+        await user.save();
+        console.log("✅ Updated user role to team lead");
+      }
+
+      // Link or create an employee record for this user
       let emp = await Employee.findOne({ userID: user._id });
       if (!emp) {
         emp = await Employee.create({
@@ -306,7 +312,12 @@ exports.createOrUpdateTeam = async (req, res) => {
           lastName: user.name?.split(' ').slice(1).join(' ') || 'Lead',
           email: user.email,
           isTeamLead: true,
-          role: "team lead"
+          role: "team lead",
+          department: user.department || null,
+          mobile: user.phoneNumber || "",
+          currentAddress: user.address || "",
+          permanentAddress: user.address || "",
+          designation: "Team Lead",
         });
         console.log("✅ Created new employee record for team lead user");
       } else if (!emp.isTeamLead) {
@@ -316,44 +327,59 @@ exports.createOrUpdateTeam = async (req, res) => {
       }
       teamLeadEmployee = emp._id;
     }
-    
-    // Check if employee is team lead
-    if (employee && employee.isTeamLead === true) {
+
+    if (employee) {
       teamLeadEmployee = employee._id;
-      
-      // Find or create user record for this employee
+
+      if (!employee.isTeamLead) {
+        employee.isTeamLead = true;
+        await employee.save();
+        console.log("✅ Marked employee as team lead");
+      }
+
       if (employee.userID) {
-        let usr = await User.findById(employee.userID);
-        if (usr && !isTeamLeadRole(usr.role)) {
-          usr.role = "team lead";
-          await usr.save();
-          console.log("✅ Updated user role to team lead");
+        const usr = await User.findById(employee.userID);
+        if (usr) {
+          teamLeadUser = usr._id;
+          if (!isTeamLeadRole(usr.role)) {
+            usr.role = "team lead";
+            await usr.save();
+            console.log("✅ Updated linked user role to team lead");
+          }
         }
-        if (usr) teamLeadUser = usr._id;
       }
     }
 
-    // If teamLead is a User ID but user wasn't found in User model
+    // If teamLead is a User ID but user wasn't found in User model,
+    // lookup by employee record using that ID.
     if (!teamLeadUser && !teamLeadEmployee) {
-      // Check if there's an employee with this userID that is team lead
-      const empByUserID = await Employee.findOne({ 
-        userID: teamLead, 
-        isTeamLead: true 
-      });
+      const empByUserID = await Employee.findOne({ userID: teamLead });
       if (empByUserID) {
         teamLeadEmployee = empByUserID._id;
-        const usr = await User.findById(empByUserID.userID);
-        if (usr) teamLeadUser = usr._id;
-        console.log("✅ Found team lead by userID in Employee model");
+        if (!empByUserID.isTeamLead) {
+          empByUserID.isTeamLead = true;
+          await empByUserID.save();
+          console.log("✅ Marked employee as team lead by userID lookup");
+        }
+        if (empByUserID.userID) {
+          const usr = await User.findById(empByUserID.userID);
+          if (usr) {
+            teamLeadUser = usr._id;
+            if (!isTeamLeadRole(usr.role)) {
+              usr.role = "team lead";
+              await usr.save();
+              console.log("✅ Updated linked user role to team lead by userID lookup");
+            }
+          }
+        }
       }
     }
 
-    // If still no team lead found
     if (!teamLeadUser && !teamLeadEmployee) {
       console.log("❌ No team lead found");
       return res.status(404).json({
         success: false,
-        message: "Team Lead not found. Please ensure the user has role 'team lead' or employee has isTeamLead: true",
+        message: "Team Lead not found. Please provide a valid User or Employee ID",
       });
     }
 
