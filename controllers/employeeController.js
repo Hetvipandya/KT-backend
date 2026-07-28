@@ -45,14 +45,11 @@ exports.assignTeamLead = async (req, res) => {
       });
     }
 
-    // Update User Role
-    await User.findByIdAndUpdate(employee.userID, {
-      role: "team lead",
-    });
+    const employeeData = employee.toObject();
 
-    await syncEmployeeToUser({
+    const syncedUser = await syncEmployeeToUser({
       employee: {
-        ...employee.toObject(),
+        ...employeeData,
         isTeamLead: true,
       },
       role: "team lead",
@@ -60,6 +57,11 @@ exports.assignTeamLead = async (req, res) => {
         role: "team lead",
       },
     });
+
+    if (!employee.userID && syncedUser?._id) {
+      employee.userID = syncedUser._id;
+      await employee.save();
+    }
 
     res.status(200).json({
       success: true,
@@ -93,13 +95,11 @@ exports.removeTeamLead = async (req, res) => {
       });
     }
 
-    await User.findByIdAndUpdate(employee.userID, {
-      role: "employee",
-    });
+    const employeeData = employee.toObject();
 
-    await syncEmployeeToUser({
+    const syncedUser = await syncEmployeeToUser({
       employee: {
-        ...employee.toObject(),
+        ...employeeData,
         isTeamLead: false,
       },
       role: "employee",
@@ -107,6 +107,11 @@ exports.removeTeamLead = async (req, res) => {
         role: "employee",
       },
     });
+
+    if (!employee.userID && syncedUser?._id) {
+      employee.userID = syncedUser._id;
+      await employee.save();
+    }
 
     res.status(200).json({
       success: true,
@@ -231,12 +236,37 @@ exports.addEmployee =
         await generateEmployeeID();
 
       // CREATE EMPLOYEE
+      const employeeRole =
+        req.body.role ||
+        (req.body.isTeamLead ? "team lead" : "employee");
+
       const employee =
         await Employee.create({
           ...req.body,
           employeeID,
-           currentAction: "created",
+          currentAction: "created",
+          isTeamLead:
+            Boolean(req.body.isTeamLead) ||
+            employeeRole === "team lead",
         });
+
+      if (employeeRole === "employee" || employeeRole === "team lead") {
+        await syncEmployeeToUser({
+          employee,
+          role: employeeRole,
+          userData: {
+            name: `${firstName} ${lastName}`.trim(),
+            email,
+            phoneNumber: mobile,
+            address: req.body.currentAddress || req.body.permanentAddress || req.body.address || "",
+            department: req.body.department,
+            bloodGroup: req.body.bloodGroup,
+            role: employeeRole,
+            isApproved: true,
+            isFirstLogin: false,
+          },
+        });
+      }
 
       // FILES
       const files =
@@ -440,6 +470,29 @@ exports.updateEmployee = async (req, res) => {
         updateData,
         { new: true }
       );
+
+    const roleValue =
+      req.body.role ||
+      (req.body.isTeamLead ? "team lead" : null);
+
+    if (roleValue) {
+      await syncEmployeeToUser({
+        employee: {
+          ...employee.toObject(),
+          isTeamLead: roleValue === "team lead",
+        },
+        role: roleValue,
+        userData: {
+          role: roleValue,
+          name: `${employee.firstName} ${employee.lastName}`.trim(),
+          email: employee.email,
+          phoneNumber: employee.mobile,
+          address: employee.currentAddress || employee.permanentAddress || "",
+          department: employee.department,
+          bloodGroup: employee.bloodGroup,
+        },
+      });
+    }
 
     if (!employee) {
       return res.status(404).json({

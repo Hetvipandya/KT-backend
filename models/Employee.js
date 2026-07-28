@@ -144,12 +144,6 @@ isTeamLead: {
   default: false
 },
 
-      // DEPARTMENT
-      // department: {
-      //   type:
-      //     mongoose.Schema.Types.ObjectId,
-      //   ref: "Department",
-      // },
 
       department: {
   type: mongoose.Schema.Types.ObjectId,
