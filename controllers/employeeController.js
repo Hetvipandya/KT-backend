@@ -11,6 +11,8 @@ const EmployeeHistory =
     "../models/EmployeeHistory"
   );
 
+  const User = require("../models/User");
+
 
 // ================= GENERATE EMPLOYEE ID =================
 const generateEmployeeID =
@@ -30,7 +32,7 @@ exports.assignTeamLead = async (req, res) => {
     const employee = await Employee.findByIdAndUpdate(
       id,
       {
-        isTeamLead: true
+        isTeamLead: true,
       },
       { new: true }
     );
@@ -38,19 +40,24 @@ exports.assignTeamLead = async (req, res) => {
     if (!employee) {
       return res.status(404).json({
         success: false,
-        message: "Employee not found"
+        message: "Employee not found",
       });
     }
 
+    // Update User Role
+    await User.findByIdAndUpdate(employee.userID, {
+      role: "team lead",
+    });
+
     res.status(200).json({
       success: true,
-      message: "Assigned as TL",
-      employee
+      message: "Assigned as Team Lead successfully",
+      employee,
     });
   } catch (error) {
     res.status(500).json({
       success: false,
-      message: error.message
+      message: error.message,
     });
   }
 };
@@ -74,9 +81,13 @@ exports.removeTeamLead = async (req, res) => {
       });
     }
 
+    await User.findByIdAndUpdate(employee.userID, {
+      role: "employee",
+    });
+
     res.status(200).json({
       success: true,
-      message: "Removed as TL",
+      message: "Team Lead removed successfully",
       employee,
     });
   } catch (error) {
@@ -86,7 +97,6 @@ exports.removeTeamLead = async (req, res) => {
     });
   }
 };
-
 // ================= GET ALL EMPLOYEE DOCUMENTS =================
 exports.getAllEmployeeDocuments = async (req, res) => {
   try {
