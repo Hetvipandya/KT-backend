@@ -342,7 +342,7 @@ exports.hrApproval = async (req, res) => {
     // ==========================
     // TEAM LEAD FLOW
     // ==========================
-    if (currentRole === "teamlead") {
+    if (currentRole === "team lead") {
       console.log("✅ Team Lead Leave -> Direct HR Approval");
 
       if (leave.hrStatus !== "pending") {
