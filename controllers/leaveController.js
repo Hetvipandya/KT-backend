@@ -319,7 +319,7 @@ exports.hrApproval = async (req, res) => {
       });
     }
 
-    // Populate employee data
+    // Get Leave with Employee Details
     const leave = await Leave.findById(leaveId).populate("employeeId");
 
     if (!leave) {
@@ -330,46 +330,55 @@ exports.hrApproval = async (req, res) => {
     }
 
     console.log("========== HR APPROVAL ==========");
-    console.log("Applicant Role (Leave):", leave.applicantRole);
-    console.log("Current User Role:", leave.employeeId?.role);
+    console.log("Applicant Role:", leave.applicantRole);
+    console.log("Employee Role:", leave.employeeId?.role);
     console.log("Leave Status:", leave.status);
     console.log("TL Status:", leave.teamLeadStatus);
     console.log("HR Status:", leave.hrStatus);
 
-    // Current role from User collection
-    const currentRole = leave.employeeId?.role?.toLowerCase().trim();
+    // Get Current Applicant Role
+    const currentRole = (
+      leave.employeeId?.role ||
+      leave.applicantRole ||
+      ""
+    )
+      .toLowerCase()
+      .replace(/\s+/g, "");
 
-    // ==========================
-    // TEAM LEAD FLOW
-    // ==========================
-    if (currentRole === "team lead") {
-      console.log("✅ Team Lead Leave -> Direct HR Approval");
+    const isTeamLead = currentRole === "team lead";
 
-      if (leave.hrStatus !== "pending") {
-        return res.status(400).json({
-          success: false,
-          message: "Leave already processed by HR",
-        });
-      }
+    // Save applicantRole if missing
+    if (!leave.applicantRole && leave.employeeId?.role) {
+      leave.applicantRole = leave.employeeId.role;
+    }
+
+    // Already processed by HR
+    if (leave.hrStatus !== "pending") {
+      return res.status(400).json({
+        success: false,
+        message: "Leave already processed by HR",
+      });
     }
 
     // ==========================
-    // EMPLOYEE / INTERN FLOW
+    // TEAM LEAD
+    // ==========================
+    if (isTeamLead) {
+      console.log("✅ Team Lead Leave -> Direct HR Approval");
+
+      // Skip TL approval
+    }
+
+    // ==========================
+    // EMPLOYEE / INTERN
     // ==========================
     else {
-      console.log("👤 Employee/Intern Leave");
+      console.log("👤 Employee / Intern Leave");
 
       if (leave.teamLeadStatus !== "approved") {
         return res.status(400).json({
           success: false,
           message: "Leave must be approved by Team Lead first",
-        });
-      }
-
-      if (leave.hrStatus !== "pending") {
-        return res.status(400).json({
-          success: false,
-          message: "Leave already processed by HR",
         });
       }
     }
@@ -387,7 +396,9 @@ exports.hrApproval = async (req, res) => {
       leave.status = "rejected";
     }
 
-    leave.remark = remark || leave.remark;
+    if (remark) {
+      leave.remark = remark;
+    }
 
     await leave.save();
 
