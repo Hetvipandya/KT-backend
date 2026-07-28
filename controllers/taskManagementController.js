@@ -18,6 +18,33 @@ const getProgressForStatus = (status) => {
   }
 };
 
+const isCompletedStatus = (status) => status === "Completed";
+
+const isTaskOverdue = (dueDate) => {
+  if (!dueDate) {
+    return false;
+  }
+
+  const due = new Date(dueDate);
+  if (Number.isNaN(due.getTime())) {
+    return false;
+  }
+
+  return due < new Date();
+};
+
+const applyDelayedStatus = (taskData) => {
+  if (!taskData || !taskData.dueDate || isCompletedStatus(taskData.status)) {
+    return taskData;
+  }
+
+  if (isTaskOverdue(taskData.dueDate) && taskData.status !== "Delayed") {
+    taskData.status = "Delayed";
+  }
+
+  return taskData;
+};
+
 const applyProgressFromStatus = (taskData) => {
   if (!taskData || !taskData.status) {
     return taskData;
@@ -29,6 +56,19 @@ const applyProgressFromStatus = (taskData) => {
   }
 
   return taskData;
+};
+
+const ensureDelayedStatusForDocument = async (task) => {
+  if (!task || !task.dueDate || isCompletedStatus(task.status) || task.status === "Delayed") {
+    return task;
+  }
+
+  if (isTaskOverdue(task.dueDate)) {
+    task.status = "Delayed";
+    await task.save();
+  }
+
+  return task;
 };
 
 // ================= CREATE TASK =================
@@ -138,25 +178,27 @@ exports.createTask = async (req, res) => {
       });
     }
 
-const taskPayload = applyProgressFromStatus({
-  projectId,
-  milestoneId: milestoneId || null,
-  taskTitle,
-  taskDescription,
-  assignedEmployee,
-  assignedIntern: assignedIntern || null,
-  assignedBy,
-  dueDate,
-  estimatedHours,
-  priority,
-  status,
-  progress,
-  taskDependencies,
-  subTasks,
-  checklist,
-  comments,
-  attachments,
-});
+const taskPayload = applyDelayedStatus(
+  applyProgressFromStatus({
+    projectId,
+    milestoneId: milestoneId || null,
+    taskTitle,
+    taskDescription,
+    assignedEmployee,
+    assignedIntern: assignedIntern || null,
+    assignedBy,
+    dueDate,
+    estimatedHours,
+    priority,
+    status,
+    progress,
+    taskDependencies,
+    subTasks,
+    checklist,
+    comments,
+    attachments,
+  })
+);
 
 const createdTask = await TaskManagement.create(taskPayload);
 
@@ -196,6 +238,14 @@ const task = await TaskManagement.findById(createdTask._id)
 exports.getAllTasks =
   async (req, res) => {
     try {
+      await TaskManagement.updateMany(
+        {
+          dueDate: { $lt: new Date() },
+          status: { $nin: ["Completed", "Delayed"] },
+        },
+        { status: "Delayed" }
+      );
+
       const tasks =
         await TaskManagement
           .find()
@@ -241,7 +291,7 @@ exports.getAllTasks =
 exports.getTaskById =
   async (req, res) => {
     try {
-      const task =
+      let task =
         await TaskManagement
           .findById(
             req.params.id
@@ -267,6 +317,8 @@ exports.getTaskById =
           });
       }
 
+      task = await ensureDelayedStatusForDocument(task);
+
       res.status(200).json({
         success: true,
         data: task,
@@ -285,7 +337,9 @@ exports.getTaskById =
 exports.updateTask =
   async (req, res) => {
     try {
-      const updatePayload = applyProgressFromStatus({ ...req.body });
+      const updatePayload = applyDelayedStatus(
+        applyProgressFromStatus({ ...req.body })
+      );
 
       const task =
         await TaskManagement.findByIdAndUpdate(
@@ -296,11 +350,20 @@ exports.updateTask =
           }
         );
 
+      if (!task) {
+        return res.status(404).json({
+          success: false,
+          message: "Task not found",
+        });
+      }
+
+      const ensuredTask = await ensureDelayedStatusForDocument(task);
+
       res.status(200).json({
         success: true,
         message:
           "Task updated successfully",
-        data: task,
+        data: ensuredTask,
       });
     } catch (error) {
       res.status(500).json({
@@ -409,12 +472,16 @@ exports.updateTaskStatus =
       task.status =
         status;
 
-      const autoProgress = getProgressForStatus(status);
+      if (!isCompletedStatus(status) && isTaskOverdue(task.dueDate)) {
+        task.status = "Delayed";
+      }
+
+      const autoProgress = getProgressForStatus(task.status);
       if (autoProgress !== null) {
         task.progress = autoProgress;
       }
 
-      if (status === "Completed") {
+      if (task.status === "Completed") {
         task.completedAt = new Date();
       } else if (task.completedAt) {
         task.completedAt = undefined;
@@ -423,7 +490,7 @@ exports.updateTaskStatus =
       // Add history
       task.taskHistory.push({
         action:
-          `Status changed to ${status}`,
+          `Status changed to ${task.status}`,
       });
 
       await task.save();
@@ -523,6 +590,15 @@ exports.getTasksByEmployeeId = async (req, res) => {
         message: "Employee ID is required",
       });
     }
+
+    await TaskManagement.updateMany(
+      {
+        assignedEmployee: employeeId,
+        dueDate: { $lt: new Date() },
+        status: { $nin: ["Completed", "Delayed"] },
+      },
+      { status: "Delayed" }
+    );
 
     const tasks = await TaskManagement
       .find({ assignedEmployee: employeeId })
