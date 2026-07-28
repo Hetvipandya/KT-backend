@@ -256,6 +256,7 @@ exports.createOrUpdateTeam = async (req, res) => {
   try {
     const {
       teamLead,
+      name,
       employees = [],
       interns = [],
       developers = [],
@@ -412,6 +413,7 @@ exports.createOrUpdateTeam = async (req, res) => {
 
     if (team) {
       // Update existing team
+      team.name = name || team.name || "";
       team.teamLeadUser = teamLeadUser || team.teamLeadUser;
       team.teamLeadEmployee = teamLeadEmployee || team.teamLeadEmployee;
       team.employees = employeeIds;
@@ -440,6 +442,7 @@ exports.createOrUpdateTeam = async (req, res) => {
 
     // Create new team
     const newTeam = await Team.create({
+      name: name || "",
       teamLeadUser,
       teamLeadEmployee,
       employees: employeeIds,
@@ -524,6 +527,7 @@ exports.getMyTeam = async (req, res) => {
 
         _id: team._id,
 
+        name: team.name || "",
 
         teamLead: {
 

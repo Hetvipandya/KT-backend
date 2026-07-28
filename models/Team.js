@@ -2,6 +2,12 @@ const mongoose = require("mongoose");
 
 const teamSchema = new mongoose.Schema(
   {
+    name: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+
     // Team Lead
     teamLeadUser: {
       type: mongoose.Schema.Types.ObjectId,
