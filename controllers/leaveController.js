@@ -508,31 +508,31 @@ exports.getAllLeaves = async (req, res) => {
   console.log("User role:", req.user ? req.user.role : "No role");
 
   try {
-    const { role, _id } = req.user; // Assuming req.user is set by auth middleware
+    const { role, _id } = req.user;
     const normalizedRole = normalizeRole(role);
 
     let filter = {};
 
-    // ROLE-BASED FILTERING
+    // ROLE-BASED FILTERING - IMPROVED
     if (normalizedRole === "teamlead") {
-      // Team Lead can only see Employee and Intern leaves (not other Team Leads)
+      // Team Lead: બધી એમ્પ્લોયી અને ઇન્ટર્નની રજાઓ (પછી ભલે એ પેન્ડિંગ, અપ્રુવ્ડ કે રિજેક્ટેડ હોય)
       filter = {
-        $and: [
-          { applicantRole: { $in: ["employee", "intern"] } },
-          { teamLeadStatus: "pending" },
-        ],
+        applicantRole: { $in: ["employee", "intern"] }
       };
+      // TeamLead પોતાની રજાઓ પણ જોઈ શકે
+      // filter = {
+      //   $or: [
+      //     { applicantRole: { $in: ["employee", "intern"] } },
+      //     { employeeId: _id }
+      //   ]
+      // };
+      
     } else if (normalizedRole === "hr") {
-      // HR can see all leaves that are pending_hr or approved/rejected
-      filter = {
-        $or: [
-          { status: "pending_hr" },
-          { status: "approved" },
-          { status: "rejected" },
-        ],
-      };
+      // HR: બધી રજાઓ (કોઈ ફિલ્ટર નથી)
+      filter = {};
+      
     } else if (normalizedRole === "employee" || normalizedRole === "intern") {
-      // Employees/Interns can only see their own leaves
+      // Employee/Intern: માત્ર પોતાની રજાઓ
       filter = { employeeId: _id };
     }
 
@@ -542,6 +542,10 @@ exports.getAllLeaves = async (req, res) => {
       .populate({
         path: "employeeId",
         select: "name email role uniqueID",
+      })
+      .populate({
+        path: "teamLeadId",
+        select: "name email",
       })
       .sort({ createdAt: -1 });
 
