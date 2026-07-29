@@ -238,73 +238,48 @@ exports.updateProjectStatus =
 
 // Delete Project
 exports.deleteProject = async (req, res) => {
-  const session = await mongoose.startSession();
-
   try {
-    session.startTransaction();
-
     const { id } = req.params;
 
-    // Check project exists
-    const project = await Project.findById(id).session(session);
+    // Check Project
+    const project = await Project.findById(id);
 
     if (!project) {
-      await session.abortTransaction();
-      session.endSession();
-
       return res.status(404).json({
         success: false,
         message: "Project not found",
       });
     }
 
-    // Get milestone ids
-    const milestones = await Milestone.find({ projectId: id })
-      .select("_id")
-      .session(session);
-
-    const milestoneIds = milestones.map((m) => m._id);
-
-    // Get task ids
-    const tasks = await Task.find({
-      milestoneId: { $in: milestoneIds },
-    })
-      .select("_id")
-      .session(session);
-
-    const taskIds = tasks.map((t) => t._id);
+    // Get all task ids of this project
+    const tasks = await Task.find({ projectId: id }).select("_id");
+    const taskIds = tasks.map(task => task._id);
 
     // Delete Daily Updates
     await DailyUpdate.deleteMany({
       taskId: { $in: taskIds },
-    }).session(session);
+    });
 
     // Delete Tasks
     await Task.deleteMany({
-      milestoneId: { $in: milestoneIds },
-    }).session(session);
+      projectId: id,
+    });
 
     // Delete Milestones
     await Milestone.deleteMany({
       projectId: id,
-    }).session(session);
+    });
 
-    // Delete Project
-    await Project.findByIdAndDelete(id).session(session);
-
-    await session.commitTransaction();
-    session.endSession();
+    // Finally Delete Project
+    await Project.findByIdAndDelete(id);
 
     return res.status(200).json({
       success: true,
       message: "Project and all related data deleted successfully",
     });
+
   } catch (error) {
-    await session.abortTransaction();
-    session.endSession();
-
-    console.error(error);
-
+    console.log(error);
     return res.status(500).json({
       success: false,
       message: error.message,
