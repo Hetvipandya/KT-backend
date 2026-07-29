@@ -36,8 +36,8 @@ router.post(
 router.put(
   "/admin/approve",
   protect,
-  authorizeRoles("admin"),
-  adminApproval
+  authorizeRoles("admin", "hr"),
+  adminApproval 
 );
 
 // ================= TEAM LEAD APPROVAL =================
