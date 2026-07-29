@@ -9,7 +9,7 @@ const {
   getProjects,
   getProjectDetails,
   updateProject,
-  deleteProject,
+  deleteProject, 
   updateProjectStatus,
 
   createMilestone,
