@@ -64,7 +64,8 @@ router.get(
     "intern",
     "employee",
     "hr",
-    "admin"
+    "admin",
+    "team lead"
   ),
   getMyLeaves 
 );
