@@ -7,7 +7,7 @@ const projectSchema =
         type: String,
         required: true,
         trim: true,
-      },
+      }, 
 
       projectDescription: {
         type: String,  
@@ -71,7 +71,7 @@ const projectSchema =
         {
           type:
             mongoose.Schema.Types.ObjectId,
-          ref: "Employee",
+          ref: "User",
         },
       ],
 

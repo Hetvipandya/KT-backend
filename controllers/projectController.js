@@ -11,7 +11,7 @@ const DailyUpdate = require("../models/dailyUpdateModel");
 // Create Project
 exports.createProject = async (req, res) => {
   try {
-    const uploadedFiles = req.files
+    const uploadedFiles = req.files 
       ? req.files.map((file) => ({
           fileName: file.originalname,
           fileUrl: file.path, // Cloudinary URL
