@@ -71,6 +71,7 @@ exports.applyLeave = async (req, res) => {
 };
 
 // ================= GET ALL LEAVES (Role-Based) =================
+// ================= GET ALL LEAVES (Role-Based) =================
 exports.getAllLeaves = async (req, res) => {
   console.log("=== getAllLeaves function STARTED ===");
   console.log("User from token:", req.user ? req.user._id : "No user");
@@ -83,13 +84,21 @@ exports.getAllLeaves = async (req, res) => {
     
     // ROLE-BASED FILTERING
     if (role === "team lead") {
-      // Team Lead can only see Employee and Intern leaves (not other Team Leads)
+      // Team Lead can see ALL Employee and Intern leaves (including pending, approved, rejected)
       filter = {
-        $and: [
-          { applicantRole: { $in: ["employee", "intern"] } },
-          { teamLeadStatus: "pending" },
-        ],
+        applicantRole: { $in: ["employee", "intern"] }
       };
+      
+      // Optional: Team Lead can also see only their team members
+      // If you have a team mapping system, you can add:
+      // const teamMemberIds = await getTeamMembers(_id);
+      // filter = {
+      //   $and: [
+      //     { applicantRole: { $in: ["employee", "intern"] } },
+      //     { employeeId: { $in: teamMemberIds } }
+      //   ]
+      // };
+      
     } else if (role === "hr") {
       // HR can see all leaves that are pending_hr or approved/rejected
       filter = {
@@ -101,7 +110,10 @@ exports.getAllLeaves = async (req, res) => {
       };
     } else if (role === "employee" || role === "intern") {
       // Employees/Interns can only see their own leaves
-      filter = { employeeId: _id };
+      filter = { employeeId: _id }; 
+    } else if (role === "admin") {
+      // Admin can see ALL leaves
+      filter = {}; // No filter - get all leaves
     }
 
     console.log("Applied filter:", filter);
