@@ -11,7 +11,7 @@ const {
   generatePayslip, 
   getPayroll,
   getPayslips,
-  markSalaryPaid,
+  markSalaryPaid, 
 } = require(
   "../controllers/payrollController"
 );

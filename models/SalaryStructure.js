@@ -5,7 +5,7 @@ const salaryStructureSchema =
     {
       userId: {
         type: mongoose.Schema.Types.ObjectId,
-        ref: "Employee",
+        ref: "User",
         required: true,
       },
 
