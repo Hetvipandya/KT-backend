@@ -68,12 +68,8 @@ exports.createSalaryStructure =
 exports.getSalaryStructure =
   async (req, res) => {
     try { 
-      const salary =
-        await SalaryStructure.find()
-          .populate(
-  "userId",
-  "firstName lastName"
-);
+    const salary = await SalaryStructure.find()
+  .populate("userId", "name email role");
 
       res.status(200).json({
         success: true,
