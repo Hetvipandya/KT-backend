@@ -237,25 +237,75 @@ exports.updateProjectStatus =
   };
 
 // Delete Project
-// In projectController.js
 exports.deleteProject = async (req, res) => {
+  const session = await mongoose.startSession();
+
   try {
-    const project = await Project.findOneAndDelete({ _id: req.params.id });
-    
+    session.startTransaction();
+
+    const { id } = req.params;
+
+    // Check project exists
+    const project = await Project.findById(id).session(session);
+
     if (!project) {
+      await session.abortTransaction();
+      session.endSession();
+
       return res.status(404).json({
         success: false,
         message: "Project not found",
       });
     }
 
-    res.status(200).json({
+    // Get milestone ids
+    const milestones = await Milestone.find({ projectId: id })
+      .select("_id")
+      .session(session);
+
+    const milestoneIds = milestones.map((m) => m._id);
+
+    // Get task ids
+    const tasks = await Task.find({
+      milestoneId: { $in: milestoneIds },
+    })
+      .select("_id")
+      .session(session);
+
+    const taskIds = tasks.map((t) => t._id);
+
+    // Delete Daily Updates
+    await DailyUpdate.deleteMany({
+      taskId: { $in: taskIds },
+    }).session(session);
+
+    // Delete Tasks
+    await Task.deleteMany({
+      milestoneId: { $in: milestoneIds },
+    }).session(session);
+
+    // Delete Milestones
+    await Milestone.deleteMany({
+      projectId: id,
+    }).session(session);
+
+    // Delete Project
+    await Project.findByIdAndDelete(id).session(session);
+
+    await session.commitTransaction();
+    session.endSession();
+
+    return res.status(200).json({
       success: true,
       message: "Project and all related data deleted successfully",
     });
   } catch (error) {
-    console.log(error);
-    res.status(500).json({
+    await session.abortTransaction();
+    session.endSession();
+
+    console.error(error);
+
+    return res.status(500).json({
       success: false,
       message: error.message,
     });
