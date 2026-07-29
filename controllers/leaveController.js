@@ -77,33 +77,17 @@ exports.getAllLeaves = async (req, res) => {
 
     let filter = {};
 
-    if (role === "team lead") {
-      // Get all Employee + Intern user ids
-      const users = await User.find({
-        role: { $in: ["employee", "intern"] },
-      }).select("_id");
-
-      const userIds = users.map((u) => u._id);
-
-      filter = {
-        $or: [
-          {
-            employeeId: { $in: userIds }, // All employee & intern leaves
-          },
-          {
-            employeeId: _id, // Team Lead's own leaves
-          },
-        ],
-      };
+    // Employee & Intern → Only own leaves
+    if (role === "employee" || role === "intern") {
+      filter = { employeeId: _id };
     }
 
-    else if (role === "employee" || role === "intern") {
-      filter = {
-        employeeId: _id,
-      };
-    }
-
-    else if (role === "hr" || role === "admin") {
+    // Team Lead, HR, Admin → All leaves
+    else if (
+      role === "team lead" ||
+      role === "hr" ||
+      role === "admin"
+    ) {
       filter = {};
     }
 
@@ -119,7 +103,6 @@ exports.getAllLeaves = async (req, res) => {
       total: leaves.length,
       data: leaves,
     });
-
   } catch (error) {
     console.error("GET ALL LEAVES ERROR:", error);
 
