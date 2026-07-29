@@ -452,16 +452,11 @@ exports.adminApproval = async (req, res) => {
       });
     }
 
-    // Check if user is admin
-    const adminUser = await User.findById(req.user._id);
-    if (!adminUser || adminUser.role !== "admin") {
-      return res.status(403).json({
-        success: false,
-        message: "Access denied. Only Admin can perform this action.",
-      });
-    }
+    // Route middleware already verifies admin role
+    console.log("========== ADMIN APPROVAL ==========");
+    console.log("Logged In User:", req.user);
 
-    // Get Leave with Employee Details
+    // Get Leave
     const leave = await Leave.findById(leaveId).populate("employeeId");
 
     if (!leave) {
@@ -471,17 +466,14 @@ exports.adminApproval = async (req, res) => {
       });
     }
 
-    console.log("========== ADMIN APPROVAL ==========");
-    console.log("Leave ID:", leaveId);
+    console.log("Leave ID:", leave._id);
     console.log("Applicant Role:", leave.applicantRole);
     console.log("Current Status:", leave.status);
-    console.log("TL Status:", leave.teamLeadStatus);
+    console.log("Team Lead Status:", leave.teamLeadStatus);
     console.log("HR Status:", leave.hrStatus);
-    console.log("Action:", status);
+    console.log("Admin Action:", status);
 
-    // Admin can approve ANY leave regardless of current status
-    // But only if it's not already fully approved/rejected
-
+    // Already processed
     if (leave.status === "approved") {
       return res.status(400).json({
         success: false,
@@ -496,29 +488,24 @@ exports.adminApproval = async (req, res) => {
       });
     }
 
-    // ADMIN APPROVAL - Override all previous approvals
     if (status === "approved") {
-      // Update all statuses to approved
       leave.status = "approved";
+      leave.teamLeadStatus = "approved";
       leave.hrStatus = "approved";
-      leave.teamLeadStatus = "approved"; // admin can override TL approval
-      
-      // Update leave balance
+
+      // Deduct Leave Balance
       await updateLeaveBalance(leave);
     } else {
-      // Reject
       leave.status = "rejected";
-      leave.hrStatus = "rejected";
       leave.teamLeadStatus = "rejected";
+      leave.hrStatus = "rejected";
     }
 
-    // Add admin remark
     if (remark) {
       leave.remark = remark;
-      leave.adminRemark = remark; // Optional: store admin remark separately
+      leave.adminRemark = remark;
     }
 
-    // Track admin who approved
     leave.adminApprovedBy = req.user._id;
     leave.adminApprovedAt = new Date();
 
@@ -528,15 +515,17 @@ exports.adminApproval = async (req, res) => {
       success: true,
       message:
         status === "approved"
-          ? "Leave approved by Admin successfully"
-          : "Leave rejected by Admin successfully",
+          ? "Leave approved by Admin successfully."
+          : "Leave rejected by Admin successfully.",
       data: leave,
     });
   } catch (error) {
     console.error("Admin Approval Error:", error);
+
     return res.status(500).json({
       success: false,
-      message: error.message,
+      message: "Internal Server Error",
+      error: error.message,
     });
   }
 };
