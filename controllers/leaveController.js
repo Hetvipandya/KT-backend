@@ -84,44 +84,40 @@ exports.getAllLeaves = async (req, res) => {
     
     // ROLE-BASED FILTERING
     if (role === "team lead") {
-      // Team Lead can see ALL Employee and Intern leaves (including pending, approved, rejected)
+      // Team Lead can see ALL Employee and Intern leaves (regardless of status)
+      // Frontend will handle the filtering
       filter = {
         applicantRole: { $in: ["employee", "intern"] }
       };
       
-      // Optional: Team Lead can also see only their team members
-      // If you have a team mapping system, you can add:
-      // const teamMemberIds = await getTeamMembers(_id);
-      // filter = {
-      //   $and: [
-      //     { applicantRole: { $in: ["employee", "intern"] } },
-      //     { employeeId: { $in: teamMemberIds } }
-      //   ]
-      // };
-      
     } else if (role === "hr") {
-      // HR can see all leaves that are pending_hr or approved/rejected
-      filter = {
-        $or: [
-          { status: "pending_hr" },
-          { status: "approved" },
-          { status: "rejected" },
-        ],
-      };
+      // HR can see ALL leaves (all statuses)
+      // Frontend will handle the filtering
+      filter = {}; // Empty filter = get all leaves
+      
     } else if (role === "employee" || role === "intern") {
       // Employees/Interns can only see their own leaves
-      filter = { employeeId: _id }; 
+      filter = { employeeId: _id };
+      
     } else if (role === "admin") {
       // Admin can see ALL leaves
-      filter = {}; // No filter - get all leaves
+      filter = {};
     }
 
-    console.log("Applied filter:", filter);
+    console.log("Applied filter:", JSON.stringify(filter, null, 2));
 
     const leaves = await Leave.find(filter)
       .populate({
         path: "employeeId",
         select: "name email role uniqueID",
+      })
+      .populate({
+        path: "teamLeadApprovedBy",
+        select: "name email role",
+      })
+      .populate({
+        path: "adminApprovedBy",
+        select: "name email role",
       })
       .sort({ createdAt: -1 });
 
