@@ -84,16 +84,24 @@ exports.getAllLeaves = async (req, res) => {
     
     // ROLE-BASED FILTERING
     if (role === "team lead") {
-      // Team Lead can see ALL Employee and Intern leaves (regardless of status)
+      // 🔥 Team Lead can see:
+      // 1. All Employee and Intern leaves (any status)
+      // 2. Their OWN leaves (if they applied as team lead)
       filter = {
-        applicantRole: { $in: ["employee", "intern"] }
+        $or: [
+          { applicantRole: { $in: ["employee", "intern"] } }, // All employee/intern leaves
+          { employeeId: _id } // Team Lead's own leaves
+        ]
       };
+      
     } else if (role === "hr") {
-      // HR can see ALL leaves (all statuses)
+      // HR can see ALL leaves (all roles, all statuses)
       filter = {};
+      
     } else if (role === "employee" || role === "intern") {
       // Employees/Interns can only see their own leaves
       filter = { employeeId: _id };
+      
     } else if (role === "admin") {
       // Admin can see ALL leaves
       filter = {};
@@ -101,7 +109,6 @@ exports.getAllLeaves = async (req, res) => {
 
     console.log("Applied filter:", JSON.stringify(filter, null, 2));
 
-    // ✅ ONLY populate employeeId (which exists in schema)
     const leaves = await Leave.find(filter)
       .populate({
         path: "employeeId",
@@ -225,6 +232,7 @@ const updateLeaveBalance = async (leave) => {
 };
 
 // ================= TEAM LEAD APPROVAL =================
+// ================= TEAM LEAD APPROVAL =================
 exports.teamLeadApproval = async (req, res) => {
   try {
     const { leaveId, status, remark } = req.body;
@@ -249,6 +257,14 @@ exports.teamLeadApproval = async (req, res) => {
       return res.status(404).json({
         success: false,
         message: "Leave not found",
+      });
+    }
+
+    // 🔥 Check: Team Lead cannot approve their OWN leave
+    if (leave.employeeId._id.toString() === req.user._id.toString()) {
+      return res.status(403).json({
+        success: false,
+        message: "You cannot approve your own leave. It will be directly processed by HR.",
       });
     }
 
@@ -289,6 +305,7 @@ exports.teamLeadApproval = async (req, res) => {
       data: leave,
     });
   } catch (error) {
+    console.error("Team Lead Approval Error:", error);
     res.status(500).json({
       success: false,
       message: error.message,
@@ -296,6 +313,7 @@ exports.teamLeadApproval = async (req, res) => {
   }
 };
 
+// ================= HR APPROVAL =================
 // ================= HR APPROVAL =================
 exports.hrApproval = async (req, res) => {
   try {
@@ -315,7 +333,6 @@ exports.hrApproval = async (req, res) => {
       });
     }
 
-    // Get Leave with Employee Details
     const leave = await Leave.findById(leaveId).populate("employeeId");
 
     if (!leave) {
@@ -332,7 +349,6 @@ exports.hrApproval = async (req, res) => {
     console.log("TL Status:", leave.teamLeadStatus);
     console.log("HR Status:", leave.hrStatus);
 
-    // Get Current Applicant Role
     const currentRole = (
       leave.employeeId?.role ||
       leave.applicantRole ||
@@ -343,12 +359,10 @@ exports.hrApproval = async (req, res) => {
 
     const isTeamLead = currentRole === "teamlead" || currentRole === "team lead";
 
-    // Save applicantRole if missing
     if (!leave.applicantRole && leave.employeeId?.role) {
       leave.applicantRole = leave.employeeId.role;
     }
 
-    // Already processed by HR
     if (leave.hrStatus !== "pending") {
       return res.status(400).json({
         success: false,
@@ -357,19 +371,18 @@ exports.hrApproval = async (req, res) => {
     }
 
     // ==========================
-    // TEAM LEAD
+    // TEAM LEAD LEAVE (Direct HR Approval)
     // ==========================
     if (isTeamLead) {
       console.log("✅ Team Lead Leave -> Direct HR Approval");
 
-      // Team lead applications skip the team lead approval step and go directly to HR.
       if (leave.teamLeadStatus !== "skipped") {
         leave.teamLeadStatus = "skipped";
       }
     }
 
     // ==========================
-    // EMPLOYEE / INTERN
+    // EMPLOYEE / INTERN LEAVE (Must be approved by TL first)
     // ==========================
     else {
       console.log("👤 Employee / Intern Leave");
