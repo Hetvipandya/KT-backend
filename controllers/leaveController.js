@@ -78,27 +78,22 @@ exports.getAllLeaves = async (req, res) => {
   console.log("User role:", req.user ? req.user.role : "No role");
 
   try {
-    const { role, _id } = req.user; // Assuming req.user is set by auth middleware
+    const { role, _id } = req.user;
 
     let filter = {};
     
     // ROLE-BASED FILTERING
     if (role === "team lead") {
       // Team Lead can see ALL Employee and Intern leaves (regardless of status)
-      // Frontend will handle the filtering
       filter = {
         applicantRole: { $in: ["employee", "intern"] }
       };
-      
     } else if (role === "hr") {
       // HR can see ALL leaves (all statuses)
-      // Frontend will handle the filtering
-      filter = {}; // Empty filter = get all leaves
-      
+      filter = {};
     } else if (role === "employee" || role === "intern") {
       // Employees/Interns can only see their own leaves
       filter = { employeeId: _id };
-      
     } else if (role === "admin") {
       // Admin can see ALL leaves
       filter = {};
@@ -106,18 +101,11 @@ exports.getAllLeaves = async (req, res) => {
 
     console.log("Applied filter:", JSON.stringify(filter, null, 2));
 
+    // ✅ ONLY populate employeeId (which exists in schema)
     const leaves = await Leave.find(filter)
       .populate({
         path: "employeeId",
         select: "name email role uniqueID",
-      })
-      .populate({
-        path: "teamLeadApprovedBy",
-        select: "name email role",
-      })
-      .populate({
-        path: "adminApprovedBy",
-        select: "name email role",
       })
       .sort({ createdAt: -1 });
 
