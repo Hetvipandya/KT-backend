@@ -237,26 +237,30 @@ exports.updateProjectStatus =
   };
 
 // Delete Project
-exports.deleteProject =
-  async (req, res) => {
-    try {
-      await Project.findByIdAndDelete(
-        req.params.id
-      );
-
-      res.status(200).json({
-        success: true,
-        message:
-          "Project deleted successfully",
-      });
-    } catch (error) {
-      res.status(500).json({
+// In projectController.js
+exports.deleteProject = async (req, res) => {
+  try {
+    const project = await Project.findOneAndDelete({ _id: req.params.id });
+    
+    if (!project) {
+      return res.status(404).json({
         success: false,
-        message:
-          error.message,
+        message: "Project not found",
       });
     }
-  };
+
+    res.status(200).json({
+      success: true,
+      message: "Project and all related data deleted successfully",
+    });
+  } catch (error) {
+    console.log(error);
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
 
 
 // ======================================================
