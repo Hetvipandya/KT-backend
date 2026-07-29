@@ -251,21 +251,25 @@ exports.deleteProject = async (req, res) => {
       });
     }
 
-    // Get all task ids of this project
-    const tasks = await Task.find({ projectId: id }).select("_id");
-    const taskIds = tasks.map(task => task._id);
+    const milestones = await Milestone.find({ projectId: id }).select("_id");
+    const milestoneIds = milestones.map((milestone) => milestone._id);
 
-    // Delete Daily Updates
-    await DailyUpdate.deleteMany({
-      taskId: { $in: taskIds },
-    });
+    const tasks = await Task.find({
+      $or: [{ projectId: id }, { milestoneId: { $in: milestoneIds } }],
+    }).select("_id");
 
-    // Delete Tasks
+    const taskIds = tasks.map((task) => task._id);
+
+    if (taskIds.length > 0) {
+      await DailyUpdate.deleteMany({
+        taskId: { $in: taskIds },
+      });
+    }
+
     await Task.deleteMany({
-      projectId: id,
+      $or: [{ projectId: id }, { milestoneId: { $in: milestoneIds } }],
     });
 
-    // Delete Milestones
     await Milestone.deleteMany({
       projectId: id,
     });
