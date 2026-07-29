@@ -71,43 +71,41 @@ exports.applyLeave = async (req, res) => {
 };
 
 // ================= GET ALL LEAVES (Role-Based) =================
-// ================= GET ALL LEAVES (Role-Based) =================
 exports.getAllLeaves = async (req, res) => {
-  console.log("=== getAllLeaves function STARTED ===");
-  console.log("User from token:", req.user ? req.user._id : "No user");
-  console.log("User role:", req.user ? req.user.role : "No role");
-
   try {
     const { role, _id } = req.user;
 
     let filter = {};
-    
-    // ROLE-BASED FILTERING
+
     if (role === "team lead") {
-      // 🔥 Team Lead can see:
-      // 1. All Employee and Intern leaves (any status)
-      // 2. Their OWN leaves (if they applied as team lead)
+      // Get all Employee + Intern user ids
+      const users = await User.find({
+        role: { $in: ["employee", "intern"] },
+      }).select("_id");
+
+      const userIds = users.map((u) => u._id);
+
       filter = {
         $or: [
-          { applicantRole: { $in: ["employee", "intern"] } }, // All employee/intern leaves
-          { employeeId: _id } // Team Lead's own leaves
-        ]
+          {
+            employeeId: { $in: userIds }, // All employee & intern leaves
+          },
+          {
+            employeeId: _id, // Team Lead's own leaves
+          },
+        ],
       };
-      
-    } else if (role === "hr") {
-      // HR can see ALL leaves (all roles, all statuses)
-      filter = {};
-      
-    } else if (role === "employee" || role === "intern") {
-      // Employees/Interns can only see their own leaves
-      filter = { employeeId: _id };
-      
-    } else if (role === "admin") {
-      // Admin can see ALL leaves
-      filter = {};
     }
 
-    console.log("Applied filter:", JSON.stringify(filter, null, 2));
+    else if (role === "employee" || role === "intern") {
+      filter = {
+        employeeId: _id,
+      };
+    }
+
+    else if (role === "hr" || role === "admin") {
+      filter = {};
+    }
 
     const leaves = await Leave.find(filter)
       .populate({
@@ -116,21 +114,18 @@ exports.getAllLeaves = async (req, res) => {
       })
       .sort({ createdAt: -1 });
 
-    console.log(`Found ${leaves.length} leaves for role: ${role}`);
-
     return res.status(200).json({
       success: true,
       total: leaves.length,
       data: leaves,
     });
+
   } catch (error) {
-    console.log("GET ALL LEAVES ERROR:", error);
-    console.log("Error stack:", error.stack);
+    console.error("GET ALL LEAVES ERROR:", error);
 
     return res.status(500).json({
       success: false,
       message: error.message,
-      stack: process.env.NODE_ENV === "development" ? error.stack : undefined,
     });
   }
 };
