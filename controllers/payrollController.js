@@ -77,7 +77,7 @@ exports.createSalaryStructure =
       }
 
       res.status(500).json({
-        success: false,
+        success: false, 
         message: error.message,
       });
     }
@@ -363,6 +363,14 @@ exports.generatePayslip = async (req, res) => {
       });
     }
 
+    // Payslip can be generated only when payroll is paid
+    if (payroll.status !== "paid") {
+      return res.status(400).json({
+        success: false,
+        message: "Payslip can only be generated when payroll status is paid",
+      });
+    }
+
     // Check existing payslip
     const existingPayslip = await Payslip.findOne({
       payrollId,
@@ -393,13 +401,13 @@ exports.generatePayslip = async (req, res) => {
       payslip._id
     ).populate("userId", "name email");
 
-    res.status(201).json({
+    return res.status(201).json({
       success: true,
       message: "Payslip generated successfully",
       data: populatedPayslip,
     });
   } catch (error) {
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: error.message,
     });
