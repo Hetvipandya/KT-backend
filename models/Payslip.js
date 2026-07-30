@@ -32,10 +32,10 @@ const payslipSchema =
         required: true,
       },
  
-      totalBonus: {
-        type: Number,
-        default: 0,
-      },
+      // totalBonus: {
+      //   type: Number,
+      //   default: 0,
+      // },
 
       totalDeduction: {
         type: Number,
