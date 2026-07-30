@@ -12,7 +12,7 @@ const payrollSchema =
       salaryStructureId: {
         type:
           mongoose.Schema.Types.ObjectId,
-        ref: "SalaryStructure",
+        ref: "SalaryStructure", 
         required: true,
       },
 
@@ -26,10 +26,10 @@ const payrollSchema =
         required: true,
       },
 
-      bonus: {
-        type: Number,
-        default: 0,
-      },
+      // bonus: {
+      //   type: Number,
+      //   default: 0,
+      // },
 
       deduction: {
         type: Number,

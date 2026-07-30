@@ -31,7 +31,7 @@ const payslipSchema =
         type: Number,
         required: true,
       },
-
+ 
       totalBonus: {
         type: Number,
         default: 0,
