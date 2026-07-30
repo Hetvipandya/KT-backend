@@ -24,10 +24,10 @@ const salaryStructureSchema =
         default: 0,
       },
 
-      bonus: {
-        type: Number,
-        default: 0,
-      },
+      // bonus: {
+      //   type: Number,
+      //   default: 0,
+      // },
 
       deduction: {
         type: Number,
