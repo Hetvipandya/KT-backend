@@ -566,6 +566,25 @@ GET MY TEAM
 =========================
 */
 
+const resolveTeamLeadUserForResponse = async (team) => {
+  const populatedUser = team.teamLeadUser;
+
+  if (populatedUser && isTeamLeadRole(populatedUser.role)) {
+    return populatedUser;
+  }
+
+  const employee = team.teamLeadEmployee;
+
+  if (employee?.userID) {
+    const linkedUser = await User.findById(employee.userID);
+    if (linkedUser && isTeamLeadRole(linkedUser.role)) {
+      return linkedUser;
+    }
+  }
+
+  return populatedUser || null;
+};
+
 exports.getMyTeam = async (req, res) => {
   try {
     let teams = await Team.find()
@@ -603,14 +622,13 @@ exports.getMyTeam = async (req, res) => {
       teams = [newTeam];
     }
 
-    const data = teams.map((team) => {
+    const data = [];
 
-      const leadUser = team.teamLeadUser;
-
+    for (const team of teams) {
+      const leadUser = await resolveTeamLeadUserForResponse(team);
       const leadEmployee = team.teamLeadEmployee;
 
-
-      return {
+      data.push({
 
         _id: team._id,
 
@@ -699,10 +717,8 @@ exports.getMyTeam = async (req, res) => {
 
         createdAt: team.createdAt,
         updatedAt: team.updatedAt,
-
-      };
-
-    });
+      });
+    }
 
 
 

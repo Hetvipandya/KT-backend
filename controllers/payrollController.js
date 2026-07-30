@@ -313,78 +313,70 @@ exports.processPayroll =
       });
     }
   };
-
+ 
 
 // ===============================
 // Generate Payslip
 // ===============================
-exports.generatePayslip =
-  async (req, res) => {
-    try {
-      const { payrollId } =
-        req.body;
 
-      const payroll =
-        await Payroll.findById(
-          payrollId
-        );
+exports.generatePayslip = async (req, res) => {
+  try {
+    const { payrollId } = req.body;
 
-      if (!payroll) {
-        return res.status(404).json({
-          success: false,
-          message:
-            "Payroll not found",
-        });
-      }
+    // Find Payroll
+    const payroll = await Payroll.findById(payrollId);
 
-      const existingPayslip =
-        await Payslip.findOne({
-          payrollId,
-        });
-
-      if (existingPayslip) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "Payslip already generated",
-        });
-      }
-
-      const payslip =
-        await Payslip.create({
-          payrollId:
-            payroll._id,
-          userId:
-            payroll.userId,
-          month:
-            payroll.month,
-          year:
-            payroll.year,
-          grossSalary:
-            payroll.grossSalary,
-          totalBonus:
-            payroll.bonus,
-          totalDeduction:
-            payroll.deduction,
-          tdsAmount:
-            payroll.tdsAmount,
-          netSalary:
-            payroll.netSalary,
-        });
-
-      res.status(201).json({
-        success: true,
-        message:
-          "Payslip generated successfully",
-        data: payslip,
-      });
-    } catch (error) {
-      res.status(500).json({
+    if (!payroll) {
+      return res.status(404).json({
         success: false,
-        message: error.message,
+        message: "Payroll not found",
       });
     }
-  };
+
+    // Check existing payslip
+    const existingPayslip = await Payslip.findOne({
+      payrollId,
+    });
+
+    if (existingPayslip) {
+      return res.status(400).json({
+        success: false,
+        message: "Payslip already generated",
+      });
+    }
+
+    // Create Payslip
+    const payslip = await Payslip.create({
+      payrollId: payroll._id,
+      userId: payroll.userId,
+      month: payroll.month,
+      year: payroll.year,
+      grossSalary: payroll.grossSalary,
+      totalBonus: payroll.bonus,
+      totalDeduction: payroll.deduction,
+      tdsAmount: payroll.tdsAmount,
+      netSalary: payroll.netSalary,
+    });
+
+    // Populate User details
+    const populatedPayslip = await Payslip.findById(
+      payslip._id
+    ).populate("userId", "name email");
+
+    res.status(201).json({
+      success: true,
+      message: "Payslip generated successfully",
+      data: populatedPayslip,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+
 
 
 // ===============================
