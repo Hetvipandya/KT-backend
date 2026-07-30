@@ -51,6 +51,14 @@ const salaryStructureSchema =
     { timestamps: true }
   );
 
+salaryStructureSchema.index(
+  { userId: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { isActive: true },
+  }
+);
+
 module.exports = mongoose.model(
   "SalaryStructure",
   salaryStructureSchema

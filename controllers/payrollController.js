@@ -19,6 +19,20 @@ exports.createSalaryStructure =
         tdsPercentage,
       } = req.body;
 
+      const existingSalaryStructure =
+        await SalaryStructure.findOne({
+          userId,
+          isActive: true,
+        });
+
+      if (existingSalaryStructure) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "An active salary structure already exists for this user.",
+        });
+      }
+
       const grossSalary =
         basicSalary +
         (hra || 0) +
@@ -54,6 +68,14 @@ exports.createSalaryStructure =
         data: salaryStructure,
       });
     } catch (error) {
+      if (error.code === 11000) {
+        return res.status(409).json({
+          success: false,
+          message:
+            "An active salary structure already exists for this user.",
+        });
+      }
+
       res.status(500).json({
         success: false,
         message: error.message,
@@ -210,7 +232,7 @@ exports.getSalaryStructure =
       data: updatedSalary,
     });
   } catch (error) {
-    res.status(500).json({
+    res.status(500).json({ 
       success: false,
       message: error.message,
     });
@@ -307,6 +329,14 @@ exports.processPayroll =
         data: payroll,
       });
     } catch (error) {
+      if (error.code === 11000) {
+        return res.status(409).json({
+          success: false,
+          message:
+            "Payroll for this user and month already exists.",
+        });
+      }
+
       res.status(500).json({
         success: false,
         message: error.message,
