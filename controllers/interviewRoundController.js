@@ -8,7 +8,7 @@
       req.params.id,
       {
         status: "approved", 
-      },
+      }, 
       { new: true }
     );
 
