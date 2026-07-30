@@ -26,10 +26,6 @@ const payrollSchema =
         required: true,
       },
 
-      // bonus: {
-      //   type: Number,
-      //   default: 0,
-      // },
 
       deduction: {
         type: Number,
