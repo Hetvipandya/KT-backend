@@ -566,30 +566,24 @@ GET MY TEAM
 =========================
 */
 
-/*
-=========================
-GET MY TEAM (FIXED)
-=========================
-*/
-
 exports.getMyTeam = async (req, res) => {
   try {
-    // Get the logged-in user's ID
     const userId = req.user._id;
     
-    console.log("🔍 Getting team for user:", userId);
+    console.log("🔍 Fetching team for user:", userId);
+    console.log("👤 User role:", req.user.role);
 
-    // First, resolve the team lead reference for the current user
-    const leadReference = await resolveTeamLeadReference(userId);
-    
-    console.log("👤 Lead Reference:", leadReference);
+    // First, check if user is a team lead
+    if (!isTeamLeadRole(req.user.role)) {
+      return res.status(403).json({
+        success: false,
+        message: "Access denied. User is not a Team Lead.",
+      });
+    }
 
     // Find the team where this user is the team lead
     let team = await Team.findOne({
       $or: [
-        { teamLeadUser: leadReference.teamLeadUser || userId },
-        { teamLeadEmployee: leadReference.teamLeadEmployee || userId },
-        // Also check if the user is directly referenced
         { teamLeadUser: userId },
         { teamLeadEmployee: userId },
       ]
@@ -611,7 +605,7 @@ exports.getMyTeam = async (req, res) => {
       select: "name email role uniqueID employeeID",
     });
 
-    // Populate employees
+    // Populate employees if team exists
     if (team) {
       await Team.populate(team, {
         path: "employees",
@@ -625,11 +619,40 @@ exports.getMyTeam = async (req, res) => {
 
     // If no team exists, create one for this team lead
     if (!team) {
-      console.log("🆕 No team found, creating new team for user:", userId);
-      const newTeam = await createTeamForLead(userId);
+      console.log("🆕 No team found, creating new team for:", userId);
       
+      // Find or create employee record
+      let employee = await Employee.findOne({ userID: userId });
+      
+      if (!employee) {
+        const user = await User.findById(userId);
+        if (user) {
+          employee = await Employee.create({
+            userID: user._id,
+            firstName: user.name?.split(' ')[0] || 'Team',
+            lastName: user.name?.split(' ').slice(1).join(' ') || 'Lead',
+            email: user.email,
+            isTeamLead: true,
+            role: "team lead",
+            designation: "Team Lead",
+          });
+          console.log("✅ Created employee record for team lead");
+        }
+      }
+
+      // Create new team
+      const newTeam = await Team.create({
+        name: `${req.user.name || 'Team'}'s Team`,
+        teamLeadUser: userId,
+        teamLeadEmployee: employee?._id || null,
+        employees: [],
+        interns: [],
+      });
+
+      console.log("✅ New team created:", newTeam._id);
+
       // Populate the new team
-      const populatedTeam = await Team.findById(newTeam._id)
+      team = await Team.findById(newTeam._id)
         .populate({
           path: "teamLeadUser",
           select: "name email role uniqueID",
@@ -646,8 +669,8 @@ exports.getMyTeam = async (req, res) => {
           path: "interns",
           select: "name email role uniqueID employeeID",
         });
-      
-      await Team.populate(populatedTeam, {
+
+      await Team.populate(team, {
         path: "employees",
         select: "firstName lastName email employeeID designation department",
         populate: {
@@ -655,28 +678,34 @@ exports.getMyTeam = async (req, res) => {
           select: "name",
         },
       });
-      
-      team = populatedTeam;
     }
 
     // Format the team data for response
     const leadUser = team.teamLeadUser;
     const leadEmployee = team.teamLeadEmployee;
 
+    // Get the team lead name
+    let leadName = leadUser?.name || 
+                   `${leadEmployee?.firstName || ""} ${leadEmployee?.lastName || ""}`.trim();
+    
+    // If still empty, use the user's name
+    if (!leadName) {
+      const user = await User.findById(userId);
+      leadName = user?.name || "Team Lead";
+    }
+
     const formattedTeam = {
       _id: team._id,
       name: team.name || "",
       teamLead: {
-        userId: leadUser?._id || null,
+        userId: leadUser?._id || userId || null,
         employeeId: leadEmployee?._id || null,
-        name: leadUser?.name || 
-              `${leadEmployee?.firstName || ""} ${leadEmployee?.lastName || ""}`.trim() || 
-              "Unnamed",
-        email: leadUser?.email || leadEmployee?.email || "",
+        name: leadName,
+        email: leadUser?.email || leadEmployee?.email || req.user?.email || "",
         role: leadUser?.role || "team lead",
         uniqueID: leadUser?.uniqueID || "",
         employeeID: leadEmployee?.employeeID || "",
-        designation: leadEmployee?.designation || "",
+        designation: leadEmployee?.designation || "Team Lead",
         department: leadEmployee?.department || null,
       },
       interns: team.interns?.map((intern) => ({
@@ -700,6 +729,8 @@ exports.getMyTeam = async (req, res) => {
       createdAt: team.createdAt,
       updatedAt: team.updatedAt,
     };
+
+    console.log("✅ Team found and formatted successfully");
 
     return res.status(200).json({
       success: true,
