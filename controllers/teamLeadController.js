@@ -566,167 +566,153 @@ GET MY TEAM
 =========================
 */
 
+/*
+=========================
+GET MY TEAM (FIXED)
+=========================
+*/
+
 exports.getMyTeam = async (req, res) => {
   try {
-    let teams = await Team.find()
-      .populate({
-        path: "teamLeadUser",
-        select: "name email role uniqueID",
-      })
-      .populate({
-        path: "teamLeadEmployee",
-        select:
-          "firstName lastName email mobile employeeID designation department",
-        populate: {
-          path: "department",
-          select: "name",
-        },
-      })
-      .populate({
-        path: "interns",
-        select:
-          "name email role uniqueID employeeID",
-      });
+    // Get the logged-in user's ID
+    const userId = req.user._id;
+    
+    console.log("🔍 Getting team for user:", userId);
 
-    // Also populate assigned employees
-    await Team.populate(teams, {
-      path: "employees",
-      select: "firstName lastName email employeeID designation department",
+    // First, resolve the team lead reference for the current user
+    const leadReference = await resolveTeamLeadReference(userId);
+    
+    console.log("👤 Lead Reference:", leadReference);
+
+    // Find the team where this user is the team lead
+    let team = await Team.findOne({
+      $or: [
+        { teamLeadUser: leadReference.teamLeadUser || userId },
+        { teamLeadEmployee: leadReference.teamLeadEmployee || userId },
+        // Also check if the user is directly referenced
+        { teamLeadUser: userId },
+        { teamLeadEmployee: userId },
+      ]
+    })
+    .populate({
+      path: "teamLeadUser",
+      select: "name email role uniqueID",
+    })
+    .populate({
+      path: "teamLeadEmployee",
+      select: "firstName lastName email mobile employeeID designation department",
       populate: {
         path: "department",
         select: "name",
       },
+    })
+    .populate({
+      path: "interns",
+      select: "name email role uniqueID employeeID",
     });
 
-    if (!teams.length) {
-      const newTeam = await createTeamForLead(req.user._id);
-      teams = [newTeam];
+    // Populate employees
+    if (team) {
+      await Team.populate(team, {
+        path: "employees",
+        select: "firstName lastName email employeeID designation department",
+        populate: {
+          path: "department",
+          select: "name",
+        },
+      });
     }
 
-    const data = teams.map((team) => {
-
-      const leadUser = team.teamLeadUser;
-
-      const leadEmployee = team.teamLeadEmployee;
-
-
-      return {
-
-        _id: team._id,
-
-        name: team.name || "",
-
-        teamLead: {
-
-          userId: leadUser?._id || null,
-
-          employeeId:
-            leadEmployee?._id || null,
-
-
-          name:
-            leadUser?.name ||
-            `${leadEmployee?.firstName || ""} ${
-              leadEmployee?.lastName || ""
-            }`,
-
-
-          email:
-            leadUser?.email ||
-            leadEmployee?.email ||
-            "",
-
-
-          role:
-            leadUser?.role ||
-            "team lead",
-
-
-          uniqueID:
-            leadUser?.uniqueID || "",
-
-
-          employeeID:
-            leadEmployee?.employeeID || "",
-
-
-          designation:
-            leadEmployee?.designation || "",
-
-
-          department:
-            leadEmployee?.department || null,
+    // If no team exists, create one for this team lead
+    if (!team) {
+      console.log("🆕 No team found, creating new team for user:", userId);
+      const newTeam = await createTeamForLead(userId);
+      
+      // Populate the new team
+      const populatedTeam = await Team.findById(newTeam._id)
+        .populate({
+          path: "teamLeadUser",
+          select: "name email role uniqueID",
+        })
+        .populate({
+          path: "teamLeadEmployee",
+          select: "firstName lastName email mobile employeeID designation department",
+          populate: {
+            path: "department",
+            select: "name",
+          },
+        })
+        .populate({
+          path: "interns",
+          select: "name email role uniqueID employeeID",
+        });
+      
+      await Team.populate(populatedTeam, {
+        path: "employees",
+        select: "firstName lastName email employeeID designation department",
+        populate: {
+          path: "department",
+          select: "name",
         },
+      });
+      
+      team = populatedTeam;
+    }
 
+    // Format the team data for response
+    const leadUser = team.teamLeadUser;
+    const leadEmployee = team.teamLeadEmployee;
 
-        interns: team.interns?.map((intern)=>({
-
-          _id: intern._id,
-
-          name:
-            intern.name || "",
-
-          email:
-            intern.email || "",
-
-          role:
-            intern.role,
-
-          uniqueID:
-            intern.uniqueID,
-
-          employeeID:
-            intern.employeeID || "",
-
-        })) || [],
-
-        employees: team.employees?.map((emp) => ({
-          _id: emp._id,
-          name:
-            emp.name || `${emp.firstName || ""} ${emp.lastName || ""}`.trim(),
-          email: emp.email || "",
-          designation: emp.designation || "",
-          employeeID: emp.employeeID || "",
-        })) || [],
-
-
-        totalInterns:
-          team.interns?.length || 0,
-
-        totalEmployees:
-          team.employees?.length || 0,
-
-
-        createdAt: team.createdAt,
-        updatedAt: team.updatedAt,
-
-      };
-
-    });
-
-
+    const formattedTeam = {
+      _id: team._id,
+      name: team.name || "",
+      teamLead: {
+        userId: leadUser?._id || null,
+        employeeId: leadEmployee?._id || null,
+        name: leadUser?.name || 
+              `${leadEmployee?.firstName || ""} ${leadEmployee?.lastName || ""}`.trim() || 
+              "Unnamed",
+        email: leadUser?.email || leadEmployee?.email || "",
+        role: leadUser?.role || "team lead",
+        uniqueID: leadUser?.uniqueID || "",
+        employeeID: leadEmployee?.employeeID || "",
+        designation: leadEmployee?.designation || "",
+        department: leadEmployee?.department || null,
+      },
+      interns: team.interns?.map((intern) => ({
+        _id: intern._id,
+        name: intern.name || "",
+        email: intern.email || "",
+        role: intern.role,
+        uniqueID: intern.uniqueID,
+        employeeID: intern.employeeID || "",
+      })) || [],
+      employees: team.employees?.map((emp) => ({
+        _id: emp._id,
+        name: `${emp.firstName || ""} ${emp.lastName || ""}`.trim() || emp.name || "Unnamed",
+        email: emp.email || "",
+        designation: emp.designation || "",
+        employeeID: emp.employeeID || "",
+        department: emp.department || null,
+      })) || [],
+      totalInterns: team.interns?.length || 0,
+      totalEmployees: team.employees?.length || 0,
+      createdAt: team.createdAt,
+      updatedAt: team.updatedAt,
+    };
 
     return res.status(200).json({
-
-      success:true,
-
-      total:data.length,
-
-      data
-
+      success: true,
+      total: 1,
+      data: [formattedTeam],
     });
 
-
-  } catch(error){
-
+  } catch (error) {
+    console.error("❌ Error in getMyTeam:", error);
     return res.status(500).json({
-
-      success:false,
-
-      message:error.message
-
+      success: false,
+      message: error.message,
     });
-
   }
 };
 
