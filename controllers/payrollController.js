@@ -6,104 +6,82 @@ const Payslip = require("../models/Payslip");
 // ===============================
 // Create Salary Structure
 // ===============================
-exports.createSalaryStructure = async (req, res) => {
-  try {
-    const {
-      userId,
-      basicSalary,
-      hra,
-      allowance,
-      bonus,
-      deduction,
-      tdsPercentage,
-    } = req.body;
-
-    // Find employee and check linked user role
-    const employee = await Employee.findById(userId).populate(
-      "userID",
-      "role"
-    );
-
-    if (!employee) {
-      return res.status(404).json({
-        success: false,
-        message: "Employee not found",
-      });
-    }
-
-    // Admin cannot have salary structure
-    if (employee.userID?.role === "admin") {
-      return res.status(400).json({
-        success: false,
-        message: "Salary structure cannot be created for admin.",
-      });
-    }
-
-    // Check existing active salary structure
-    const existingSalaryStructure =
-      await SalaryStructure.findOne({
-        userId,
-        isActive: true,
-      });
-
-    if (existingSalaryStructure) {
-      return res.status(400).json({
-        success: false,
-        message:
-          "An active salary structure already exists for this user.",
-      });
-    }
-
-    // Calculate gross salary
-    const grossSalary =
-      Number(basicSalary || 0) +
-      Number(hra || 0) +
-      Number(allowance || 0) +
-      Number(bonus || 0);
-
-    // Calculate TDS
-    const tdsAmount =
-      (grossSalary * Number(tdsPercentage || 0)) / 100;
-
-    // Calculate net salary
-    const netSalary =
-      grossSalary -
-      Number(deduction || 0) -
-      tdsAmount;
-
-    // Create salary structure
-    const salaryStructure =
-      await SalaryStructure.create({
-        userId,
+exports.createSalaryStructure = 
+  async (req, res) => {
+    try {
+      const {
+        userId, 
         basicSalary,
         hra,
         allowance,
         bonus,
         deduction,
         tdsPercentage,
-        netSalary,
-      });
+      } = req.body;
 
-    return res.status(201).json({
-      success: true,
-      message: "Salary structure created successfully",
-      data: salaryStructure,
-    });
-  } catch (error) {
-    if (error.code === 11000) {
-      return res.status(409).json({
-        success: false,
+      const existingSalaryStructure =
+        await SalaryStructure.findOne({
+          userId,
+          isActive: true,
+        });
+
+      if (existingSalaryStructure) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "An active salary structure already exists for this user.",
+        });
+      }
+
+      const grossSalary =
+        basicSalary +
+        (hra || 0) +
+        (allowance || 0) +
+        (bonus || 0);
+
+      const tdsAmount =
+        (grossSalary *
+          (tdsPercentage || 0)) /
+        100;
+
+      const netSalary =
+        grossSalary -
+        (deduction || 0) -
+        tdsAmount;
+
+      const salaryStructure =
+        await SalaryStructure.create({
+          userId,
+          basicSalary,
+          hra,
+          allowance,
+          bonus,
+          deduction,
+          tdsPercentage,
+          netSalary,
+        });
+
+      res.status(201).json({
+        success: true,
         message:
-          "An active salary structure already exists for this user.",
+          "Salary structure created successfully",
+        data: salaryStructure,
+      });
+    } catch (error) {
+      if (error.code === 11000) {
+        return res.status(409).json({
+          success: false,
+          message:
+            "An active salary structure already exists for this user.",
+        });
+      }
+
+      res.status(500).json({
+        success: false, 
+        message: error.message,
       });
     }
-
-    return res.status(500).json({
-      success: false,
-      message: error.message,
-    });
-  }
-};
+  };
 
 
 // ===============================
