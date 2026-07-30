@@ -14,7 +14,7 @@ exports.createSalaryStructure =
         basicSalary,
         hra,
         allowance,
-        bonus,
+        bonus,  
         deduction,
         tdsPercentage,
       } = req.body;

@@ -558,32 +558,13 @@ exports.createOrUpdateTeam = async (req, res) => {
       message: error.message,
     });
   }
-}; 
+};
 
 /*
 =========================
 GET MY TEAM
 =========================
 */
-
-const resolveTeamLeadUserForResponse = async (team) => {
-  const populatedUser = team.teamLeadUser;
-
-  if (populatedUser && isTeamLeadRole(populatedUser.role)) {
-    return populatedUser;
-  }
-
-  const employee = team.teamLeadEmployee;
-
-  if (employee?.userID) {
-    const linkedUser = await User.findById(employee.userID);
-    if (linkedUser && isTeamLeadRole(linkedUser.role)) {
-      return linkedUser;
-    }
-  }
-
-  return populatedUser || null;
-};
 
 exports.getMyTeam = async (req, res) => {
   try {
@@ -622,13 +603,14 @@ exports.getMyTeam = async (req, res) => {
       teams = [newTeam];
     }
 
-    const data = [];
+    const data = teams.map((team) => {
 
-    for (const team of teams) {
-      const leadUser = await resolveTeamLeadUserForResponse(team);
+      const leadUser = team.teamLeadUser;
+
       const leadEmployee = team.teamLeadEmployee;
 
-      data.push({
+
+      return {
 
         _id: team._id,
 
@@ -717,8 +699,10 @@ exports.getMyTeam = async (req, res) => {
 
         createdAt: team.createdAt,
         updatedAt: team.updatedAt,
-      });
-    }
+
+      };
+
+    });
 
 
 
