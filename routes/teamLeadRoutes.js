@@ -41,7 +41,7 @@ router.get(
   authorizeRoles(
     "team lead",
     "admin"
-  ),
+  ), 
   getMyTeam
 );
 

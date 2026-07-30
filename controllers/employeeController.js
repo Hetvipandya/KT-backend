@@ -10,7 +10,6 @@ const EmployeeHistory =
   require(
     "../models/EmployeeHistory"
   );
-
   const User = require("../models/User");
 const { syncEmployeeToUser } = require("../utils/userEmployeeSync");
 
@@ -377,7 +376,7 @@ exports.getEmployeeList = async (req, res) => {
       .sort({ createdAt: -1 });
 
     res.status(200).json({
-      success: true,
+      success: true, 
       employees,
     });
   } catch (error) {

@@ -4,7 +4,7 @@ const User =
   require("../models/Employee");
 
 const bcrypt =
-  require("bcryptjs");
+  require("bcryptjs"); 
 
 const jwt =
   require("jsonwebtoken");
