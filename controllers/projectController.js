@@ -125,7 +125,7 @@ exports.assignTeamLead = async (req, res) => {
           });
         }
         if (user.role !== "teamlead" && user.role !== "team lead") {
-          user.role = "teamlead";
+          user.role = "team lead";
           await user.save();
         }
         const linkedEmp = await Employee.findOne({ userID: user._id });
@@ -151,7 +151,7 @@ exports.assignTeamLead = async (req, res) => {
               });
             }
             if (linkedUser.role !== "teamlead" && linkedUser.role !== "team lead") {
-              linkedUser.role = "teamlead";
+              linkedUser.role = "team lead";
               await linkedUser.save();
             }
           }

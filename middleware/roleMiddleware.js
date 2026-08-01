@@ -45,10 +45,11 @@ exports.authorizeRoles = (...roles) => {
 
     // Check if user's role matches any of the allowed roles
     // Using exact match (case-sensitive) since enum stores "team lead"
+    const userRoleNorm = userRole?.toLowerCase().replace(/[_\s]+/g, "");
+
     const hasAccess = roles.some(role => {
-      // For roles with spaces, do a case-insensitive comparison
-      // This handles "team lead" from enum and "Team Lead" variations
-      return role.toLowerCase() === userRole?.toLowerCase();
+      const roleNorm = role.toLowerCase().replace(/[_\s]+/g, "");
+      return roleNorm === userRoleNorm;
     });
 
     if (!hasAccess) {

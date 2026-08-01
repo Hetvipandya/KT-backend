@@ -6,7 +6,7 @@ const normalizeRole = (role) => {
   const normalized = String(role).trim().toLowerCase().replace(/[_\s]+/g, "");
 
   if (normalized === "teamlead" || normalized === "teamleader") {
-    return "teamlead";
+    return "team lead";
   }
 
   return String(role).trim().toLowerCase();
@@ -44,11 +44,11 @@ exports.syncEmployeeToUser = async ({ employee, role, userData = {} }) => {
 
   let finalRole;
   if (employee?.isTeamLead) {
-    finalRole = "teamlead";
+    finalRole = "team lead";
   } else {
     const candidateRole = normalizeRole(userData.role || role || "employee");
-    if (candidateRole === "teamlead") {
-      finalRole = "teamlead";
+    if (candidateRole === "teamlead" || candidateRole === "team lead") {
+      finalRole = "team lead";
     } else {
       finalRole = candidateRole;
     }

@@ -49,11 +49,16 @@ exports.assignTeamLead = async (req, res) => {
         ...employeeData,
         isTeamLead: true,
       },
-      role: "teamlead",
+      role: "team lead",
       userData: {
-        role: "teamlead",
+        role: "team lead",
       },
     });
+
+    if (syncedUser) {
+      syncedUser.role = "team lead";
+      await syncedUser.save();
+    }
 
     if (!employee.userID && syncedUser?._id) {
       employee.userID = syncedUser._id;
@@ -269,7 +274,7 @@ exports.addEmployee =
       const rawRole = req.body.role ? String(req.body.role).trim().toLowerCase().replace(/[_\s]+/g, "") : "";
       const employeeRole =
         rawRole === "teamlead" || rawRole === "teamleader" || Boolean(req.body.isTeamLead)
-          ? "teamlead"
+          ? "team lead"
           : "employee";
 
       const employee =
@@ -277,10 +282,10 @@ exports.addEmployee =
           ...req.body,
           employeeID,
           currentAction: "created",
-          isTeamLead: employeeRole === "teamlead",
+          isTeamLead: employeeRole === "team lead",
         });
 
-      if (employeeRole === "employee" || employeeRole === "teamlead") {
+      if (employeeRole === "employee" || employeeRole === "team lead") {
         await syncEmployeeToUser({
           employee,
           role: employeeRole,
@@ -504,14 +509,14 @@ exports.updateEmployee = async (req, res) => {
     const rawUpdateRole = req.body.role ? String(req.body.role).trim().toLowerCase().replace(/[_\s]+/g, "") : "";
     const roleValue =
       rawUpdateRole === "teamlead" || rawUpdateRole === "teamleader" || req.body.isTeamLead === true
-        ? "teamlead"
+        ? "team lead"
         : (req.body.isTeamLead === false ? "employee" : null);
 
     if (roleValue) {
       await syncEmployeeToUser({
         employee: {
           ...employee.toObject(),
-          isTeamLead: roleValue === "teamlead",
+          isTeamLead: roleValue === "team lead",
         },
         role: roleValue,
         userData: {

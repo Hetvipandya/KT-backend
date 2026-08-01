@@ -353,9 +353,9 @@ exports.createOrUpdateTeam = async (req, res) => {
 
       // Make this user a team lead if they are being used as one
       if (!isTeamLeadRole(user.role)) {
-        user.role = "teamlead";
+        user.role = "team lead";
         await user.save();
-        console.log("✅ Updated user role to teamlead");
+        console.log("✅ Updated user role to team lead");
       }
 
       // Link or create an employee record for this user
@@ -402,9 +402,9 @@ exports.createOrUpdateTeam = async (req, res) => {
           }
           teamLeadUser = usr._id;
           if (!isTeamLeadRole(usr.role)) {
-            usr.role = "teamlead";
+            usr.role = "team lead";
             await usr.save();
-            console.log("✅ Updated linked user role to teamlead");
+            console.log("✅ Updated linked user role to team lead");
           }
         }
       }
