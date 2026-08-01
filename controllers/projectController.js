@@ -48,9 +48,10 @@ exports.getAllProjects =
   async (req, res) => {
     try {
      const projects = await Project.find()
-  .populate("teamLead", "name email")
- .populate("employees", "firstName lastName email")
-  .populate("interns", "name email");
+  .populate("teamLeadUser", "name email employeeID")
+  .populate("teamLeadEmployee", "name email employeeID")
+  .populate("employees", "name email employeeID")
+  .populate("interns", "name email employeeID");
 
 console.log(JSON.stringify(projects, null, 2));
       res.status(200).json({

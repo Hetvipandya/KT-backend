@@ -15,7 +15,7 @@ const projectSchema = new mongoose.Schema(
 
     clientName: {
       type: String,
-      required: true, 
+      required: true,
       trim: true,
     },
 
@@ -32,10 +32,12 @@ const projectSchema = new mongoose.Schema(
 
     startDate: {
       type: Date,
+      default: null,
     },
 
     endDate: {
       type: Date,
+      default: null,
     },
 
     priority: {
@@ -64,11 +66,25 @@ const projectSchema = new mongoose.Schema(
       default: "pending",
     },
 
-    teamLead: {
+    // ==========================
+    // TEAM LEAD
+    // ==========================
+
+    teamLeadUser: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       default: null,
     },
+
+    teamLeadEmployee: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Employee",
+      default: null,
+    },
+
+    // ==========================
+    // EMPLOYEES
+    // ==========================
 
     employees: [
       {
@@ -77,17 +93,31 @@ const projectSchema = new mongoose.Schema(
       },
     ],
 
+    // ==========================
+    // INTERNS
+    // ==========================
+
     interns: [
       {
         type: mongoose.Schema.Types.ObjectId,
         ref: "User",
       },
     ],
- 
+
+    // ==========================
+    // FILES
+    // ==========================
+
     files: [
       {
-        fileName: String,
-        fileUrl: String,
+        fileName: {
+          type: String,
+          default: "",
+        },
+        fileUrl: {
+          type: String,
+          default: "",
+        },
       },
     ],
   },
