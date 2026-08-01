@@ -11,6 +11,7 @@ const EmployeeHistory =
     "../models/EmployeeHistory"
   );
   const User = require("../models/User");
+  const Team = require("../models/Team");
 const { syncEmployeeToUser } = require("../utils/userEmployeeSync");
 
 
@@ -57,6 +58,31 @@ exports.assignTeamLead = async (req, res) => {
     if (!employee.userID && syncedUser?._id) {
       employee.userID = syncedUser._id;
       await employee.save();
+    }
+
+    // Ensure record exists/is inserted in Team collection
+    let team = await Team.findOne({
+      $or: [
+        { teamLeadEmployee: employee._id },
+        ...(syncedUser?._id ? [{ teamLeadUser: syncedUser._id }] : [])
+      ]
+    });
+
+    const leadName = `${employee.firstName || ""} ${employee.lastName || ""}`.trim();
+    if (!team) {
+      team = await Team.create({
+        name: leadName ? `${leadName} Team` : "New Team",
+        teamLeadEmployee: employee._id,
+        teamLeadUser: syncedUser?._id || null,
+        employees: [],
+        interns: [],
+      });
+    } else {
+      team.teamLeadEmployee = employee._id;
+      if (syncedUser?._id) {
+        team.teamLeadUser = syncedUser._id;
+      }
+      await team.save();
     }
 
     res.status(200).json({
@@ -106,6 +132,15 @@ exports.removeTeamLead = async (req, res) => {
       employee.userID = syncedUser._id;
       await employee.save();
     }
+
+    // Remove from Team collection when TL access is removed
+    await Team.deleteMany({
+      $or: [
+        { teamLeadEmployee: employee._id },
+        ...(employee.userID ? [{ teamLeadUser: employee.userID }] : []),
+        ...(syncedUser?._id ? [{ teamLeadUser: syncedUser._id }] : [])
+      ]
+    });
 
     res.status(200).json({
       success: true,

@@ -115,7 +115,7 @@ permanentAddress: {
           type: Number,
           default: 0,
         },
-
+ 
         allowances: {
           type: Number,
           default: 0,
