@@ -98,6 +98,7 @@ exports.syncEmployeeToUser = async ({ employee, role, userData = {} }) => {
   } else {
     Object.assign(user, payload);
     await user.save();
+    await User.findByIdAndUpdate(user._id, { role: finalRole });
   }
 
   if (!employee.userID && user._id) {

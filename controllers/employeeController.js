@@ -30,63 +30,83 @@ exports.assignTeamLead = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const employee = await Employee.findById(id);
+    let employee = await Employee.findById(id);
+    let user = null;
 
     if (!employee) {
+      employee = await Employee.findOne({ userID: id });
+    }
+
+    if (!employee) {
+      user = await User.findById(id);
+      if (user) {
+        employee = await Employee.findOne({ email: user.email });
+      }
+    }
+
+    if (!employee && !user) {
       return res.status(404).json({
         success: false,
-        message: "Employee not found",
+        message: "Employee or User not found",
       });
     }
 
-    employee.isTeamLead = true;
-    await employee.save();
-
-    const employeeData = employee.toObject();
-
-    const syncedUser = await syncEmployeeToUser({
-      employee: {
-        ...employeeData,
-        isTeamLead: true,
-      },
-      role: "team lead",
-      userData: {
-        role: "team lead",
-      },
-    });
-
-    if (syncedUser) {
-      syncedUser.role = "team lead";
-      await syncedUser.save();
+    if (employee) {
+      employee.isTeamLead = true;
+      await employee.save();
     }
 
-    if (!employee.userID && syncedUser?._id) {
-      employee.userID = syncedUser._id;
+    if (employee) {
+      const employeeData = employee.toObject();
+      user = await syncEmployeeToUser({
+        employee: {
+          ...employeeData,
+          isTeamLead: true,
+        },
+        role: "team lead",
+        userData: {
+          role: "team lead",
+        },
+      });
+    }
+
+    if (user) {
+      user.role = "team lead";
+      await user.save();
+      await User.findByIdAndUpdate(user._id, { role: "team lead" });
+    }
+
+    if (employee && user && !employee.userID) {
+      employee.userID = user._id;
       await employee.save();
     }
 
     // Ensure record exists/is inserted in Team collection
+    const empId = employee?._id;
+    const userId = user?._id;
+
     let team = await Team.findOne({
       $or: [
-        { teamLeadEmployee: employee._id },
-        ...(syncedUser?._id ? [{ teamLeadUser: syncedUser._id }] : [])
+        ...(empId ? [{ teamLeadEmployee: empId }] : []),
+        ...(userId ? [{ teamLeadUser: userId }] : [])
       ]
     });
 
-    const leadName = `${employee.firstName || ""} ${employee.lastName || ""}`.trim();
+    const leadName = employee
+      ? `${employee.firstName || ""} ${employee.lastName || ""}`.trim()
+      : user?.name || "Team Lead";
+
     if (!team) {
       team = await Team.create({
         name: leadName ? `${leadName} Team` : "New Team",
-        teamLeadEmployee: employee._id,
-        teamLeadUser: syncedUser?._id || null,
+        teamLeadEmployee: empId || null,
+        teamLeadUser: userId || null,
         employees: [],
         interns: [],
       });
     } else {
-      team.teamLeadEmployee = employee._id;
-      if (syncedUser?._id) {
-        team.teamLeadUser = syncedUser._id;
-      }
+      if (empId) team.teamLeadEmployee = empId;
+      if (userId) team.teamLeadUser = userId;
       await team.save();
     }
 
@@ -94,7 +114,7 @@ exports.assignTeamLead = async (req, res) => {
       success: true,
       message: "Assigned as Team Lead successfully",
       employee,
-      user: syncedUser,
+      user,
     });
   } catch (error) {
     res.status(500).json({
@@ -108,42 +128,65 @@ exports.removeTeamLead = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const employee = await Employee.findById(id);
+    let employee = await Employee.findById(id);
+    let user = null;
 
     if (!employee) {
+      employee = await Employee.findOne({ userID: id });
+    }
+
+    if (!employee) {
+      user = await User.findById(id);
+      if (user) {
+        employee = await Employee.findOne({ email: user.email });
+      }
+    }
+
+    if (!employee && !user) {
       return res.status(404).json({
         success: false,
-        message: "Employee not found",
+        message: "Employee or User not found",
       });
     }
 
-    employee.isTeamLead = false;
-    await employee.save();
+    if (employee) {
+      employee.isTeamLead = false;
+      await employee.save();
+    }
 
-    const employeeData = employee.toObject();
-
-    const syncedUser = await syncEmployeeToUser({
-      employee: {
-        ...employeeData,
-        isTeamLead: false,
-      },
-      role: "employee",
-      userData: {
+    if (employee) {
+      const employeeData = employee.toObject();
+      user = await syncEmployeeToUser({
+        employee: {
+          ...employeeData,
+          isTeamLead: false,
+        },
         role: "employee",
-      },
-    });
+        userData: {
+          role: "employee",
+        },
+      });
+    }
 
-    if (!employee.userID && syncedUser?._id) {
-      employee.userID = syncedUser._id;
+    if (user) {
+      user.role = "employee";
+      await user.save();
+      await User.findByIdAndUpdate(user._id, { role: "employee" });
+    }
+
+    if (employee && user && !employee.userID) {
+      employee.userID = user._id;
       await employee.save();
     }
 
     // Remove from Team collection when TL access is removed
+    const empId = employee?._id;
+    const userId = user?._id;
+
     await Team.deleteMany({
       $or: [
-        { teamLeadEmployee: employee._id },
-        ...(employee.userID ? [{ teamLeadUser: employee.userID }] : []),
-        ...(syncedUser?._id ? [{ teamLeadUser: syncedUser._id }] : [])
+        ...(empId ? [{ teamLeadEmployee: empId }] : []),
+        ...(userId ? [{ teamLeadUser: userId }] : [])
       ]
     });
 
@@ -151,7 +194,7 @@ exports.removeTeamLead = async (req, res) => {
       success: true,
       message: "Team Lead removed successfully",
       employee,
-      user: syncedUser,
+      user,
     });
   } catch (error) {
     res.status(500).json({
