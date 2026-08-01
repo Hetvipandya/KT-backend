@@ -72,6 +72,7 @@ const userSchema =
           "hr",
           "employee",
           "intern",
+          "teamlead",
           "team lead",
         ],
       },

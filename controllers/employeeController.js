@@ -48,9 +48,9 @@ exports.assignTeamLead = async (req, res) => {
         ...employeeData,
         isTeamLead: true,
       },
-      role: "team lead",
+      role: "teamlead",
       userData: {
-        role: "team lead",
+        role: "teamlead",
       },
     });
 
@@ -231,21 +231,21 @@ exports.addEmployee =
         await generateEmployeeID();
 
       // CREATE EMPLOYEE
+      const rawRole = req.body.role ? String(req.body.role).trim().toLowerCase().replace(/[_\s]+/g, "") : "";
       const employeeRole =
-        req.body.role ||
-        (req.body.isTeamLead ? "team lead" : "employee");
+        rawRole === "teamlead" || rawRole === "teamleader" || Boolean(req.body.isTeamLead)
+          ? "teamlead"
+          : "employee";
 
       const employee =
         await Employee.create({
           ...req.body,
           employeeID,
           currentAction: "created",
-          isTeamLead:
-            Boolean(req.body.isTeamLead) ||
-            employeeRole === "team lead",
+          isTeamLead: employeeRole === "teamlead",
         });
 
-      if (employeeRole === "employee" || employeeRole === "team lead") {
+      if (employeeRole === "employee" || employeeRole === "teamlead") {
         await syncEmployeeToUser({
           employee,
           role: employeeRole,
@@ -466,15 +466,17 @@ exports.updateEmployee = async (req, res) => {
         { new: true }
       );
 
+    const rawUpdateRole = req.body.role ? String(req.body.role).trim().toLowerCase().replace(/[_\s]+/g, "") : "";
     const roleValue =
-      req.body.role ||
-      (req.body.isTeamLead ? "team lead" : null);
+      rawUpdateRole === "teamlead" || rawUpdateRole === "teamleader" || req.body.isTeamLead === true
+        ? "teamlead"
+        : (req.body.isTeamLead === false ? "employee" : null);
 
     if (roleValue) {
       await syncEmployeeToUser({
         employee: {
           ...employee.toObject(),
-          isTeamLead: roleValue === "team lead",
+          isTeamLead: roleValue === "teamlead",
         },
         role: roleValue,
         userData: {

@@ -228,27 +228,48 @@ exports.getPerformanceDropdown = async (req, res) => {
   try {
     const employees =
       await Employee.find().select(
-        "_id name email department"
+        "_id name email department firstName lastName"
       );
 
     const interns = await User.find({
       role: "intern",
     }).select("_id name email");
 
-    const teamLeads =
-      await TeamLead.find()
-        .populate(
-          "teamLeadUser",
-          "name email"
-        )
-        .populate(
-          "employees",
-          "name email"
-        )
-        .populate(
-          "interns",
-          "name email"
-        );
+    const teamLeadUsers = await User.find({
+      role: { $in: ["teamlead", "team lead"] },
+    }).select("_id name email role department");
+
+    const teamLeadEmployees = await Employee.find({
+      isTeamLead: true,
+    }).select("_id firstName lastName email department");
+
+    // Format combined list of team leads without duplicates or admin users
+    const teamLeadMap = new Map();
+
+    teamLeadUsers.forEach((user) => {
+      if (user.role !== "admin") {
+        teamLeadMap.set(String(user._id), {
+          _id: user._id,
+          name: user.name,
+          email: user.email,
+          role: "teamlead",
+        });
+      }
+    });
+
+    teamLeadEmployees.forEach((emp) => {
+      const empName = `${emp.firstName || ""} ${emp.lastName || ""}`.trim() || emp.email;
+      if (!teamLeadMap.has(String(emp._id))) {
+        teamLeadMap.set(String(emp._id), {
+          _id: emp._id,
+          name: empName,
+          email: emp.email,
+          role: "teamlead",
+        });
+      }
+    });
+
+    const teamLeads = Array.from(teamLeadMap.values());
 
     res.json({
       success: true,

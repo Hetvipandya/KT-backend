@@ -3,13 +3,13 @@ const User = require("../models/User");
 const normalizeRole = (role) => {
   if (!role) return "employee";
 
-  const normalized = String(role).trim().toLowerCase();
+  const normalized = String(role).trim().toLowerCase().replace(/[_\s]+/g, "");
 
-  if (normalized === "teamlead" || normalized === "team lead") {
-    return "team lead";
+  if (normalized === "teamlead" || normalized === "teamleader") {
+    return "teamlead";
   }
 
-  return normalized;
+  return String(role).trim().toLowerCase();
 };
 
 const formatDob = (value) => {
@@ -42,12 +42,17 @@ exports.syncEmployeeToUser = async ({ employee, role, userData = {} }) => {
     userData.name ||
     [employee.firstName, employee.lastName].filter(Boolean).join(" ").trim();
 
-  const normalizedExplicitRole = normalizeRole(userData.role || role || "employee");
-  const forceTeamLead =
-    Boolean(employee?.isTeamLead) ||
-    normalizedExplicitRole === "team lead" ||
-    normalizeRole(role) === "team lead" ||
-    normalizeRole(userData.role) === "team lead";
+  let finalRole;
+  if (employee?.isTeamLead) {
+    finalRole = "teamlead";
+  } else {
+    const candidateRole = normalizeRole(userData.role || role || "employee");
+    if (candidateRole === "teamlead") {
+      finalRole = "teamlead";
+    } else {
+      finalRole = candidateRole;
+    }
+  }
 
   const payload = {
     name,
@@ -66,7 +71,7 @@ exports.syncEmployeeToUser = async ({ employee, role, userData = {} }) => {
       "",
     department: userData.department || employee.department || "",
     bloodGroup: userData.bloodGroup || employee.bloodGroup || "",
-    role: forceTeamLead ? "team lead" : normalizedExplicitRole,
+    role: finalRole,
     isApproved: userData.isApproved ?? true,
     isFirstLogin: userData.isFirstLogin ?? false,
     isActive: userData.isActive ?? true,

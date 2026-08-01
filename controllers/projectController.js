@@ -2,6 +2,8 @@ const Project = require("../models/projectModel");
 const Task = require("../models/taskModel");
 const Milestone = require("../models/milestoneModel");
 const DailyUpdate = require("../models/dailyUpdateModel");
+const User = require("../models/User");
+const Employee = require("../models/Employee");
 
 
 // ====================================================== 
@@ -113,12 +115,56 @@ exports.assignTeamLead = async (req, res) => {
   try {
     const { teamLeadId } = req.body;
 
+    if (teamLeadId) {
+      const user = await User.findById(teamLeadId);
+      if (user) {
+        if (user.role === "admin") {
+          return res.status(400).json({
+            success: false,
+            message: "Admin cannot be assigned as Team Lead",
+          });
+        }
+        if (user.role !== "teamlead" && user.role !== "team lead") {
+          user.role = "teamlead";
+          await user.save();
+        }
+        const linkedEmp = await Employee.findOne({ userID: user._id });
+        if (linkedEmp && !linkedEmp.isTeamLead) {
+          linkedEmp.isTeamLead = true;
+          await linkedEmp.save();
+        }
+      }
+
+      const emp = await Employee.findById(teamLeadId);
+      if (emp) {
+        if (!emp.isTeamLead) {
+          emp.isTeamLead = true;
+          await emp.save();
+        }
+        if (emp.userID) {
+          const linkedUser = await User.findById(emp.userID);
+          if (linkedUser) {
+            if (linkedUser.role === "admin") {
+              return res.status(400).json({
+                success: false,
+                message: "Admin cannot be assigned as Team Lead",
+              });
+            }
+            if (linkedUser.role !== "teamlead" && linkedUser.role !== "team lead") {
+              linkedUser.role = "teamlead";
+              await linkedUser.save();
+            }
+          }
+        }
+      }
+    }
+
     const project = await Project.findByIdAndUpdate(
       req.params.id,
       { teamLead: teamLeadId },
       { new: true }
     )
-      .populate("teamLead", "name email")
+      .populate("teamLead", "name email role")
       .populate("employees", "name email")
       .populate("interns", "name email");
 

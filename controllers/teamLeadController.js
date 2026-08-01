@@ -342,13 +342,20 @@ exports.createOrUpdateTeam = async (req, res) => {
     let teamLeadEmployee = null;
 
     if (user) {
+      if (user.role === "admin") {
+        return res.status(400).json({
+          success: false,
+          message: "Admin user cannot be assigned as Team Lead",
+        });
+      }
+
       teamLeadUser = user._id;
 
       // Make this user a team lead if they are being used as one
       if (!isTeamLeadRole(user.role)) {
-        user.role = "team lead";
+        user.role = "teamlead";
         await user.save();
-        console.log("✅ Updated user role to team lead");
+        console.log("✅ Updated user role to teamlead");
       }
 
       // Link or create an employee record for this user
@@ -360,7 +367,6 @@ exports.createOrUpdateTeam = async (req, res) => {
           lastName: user.name?.split(' ').slice(1).join(' ') || 'Lead',
           email: user.email,
           isTeamLead: true,
-          role: "team lead",
           department: user.department || null,
           mobile: user.phoneNumber || "",
           currentAddress: user.address || "",
@@ -388,11 +394,17 @@ exports.createOrUpdateTeam = async (req, res) => {
       if (employee.userID) {
         const usr = await User.findById(employee.userID);
         if (usr) {
+          if (usr.role === "admin") {
+            return res.status(400).json({
+              success: false,
+              message: "Admin user cannot be assigned as Team Lead",
+            });
+          }
           teamLeadUser = usr._id;
           if (!isTeamLeadRole(usr.role)) {
-            usr.role = "team lead";
+            usr.role = "teamlead";
             await usr.save();
-            console.log("✅ Updated linked user role to team lead");
+            console.log("✅ Updated linked user role to teamlead");
           }
         }
       }
@@ -775,13 +787,15 @@ exports.getMyTeam = async (req, res) => {
 
 
 
+    const filteredData = data.filter((item) => item.teamLead?.role !== "admin");
+
     return res.status(200).json({
 
       success:true,
 
-      total:data.length,
+      total:filteredData.length,
 
-      data
+      data: filteredData
 
     });
 
