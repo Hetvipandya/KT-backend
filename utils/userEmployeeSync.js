@@ -42,6 +42,13 @@ exports.syncEmployeeToUser = async ({ employee, role, userData = {} }) => {
     userData.name ||
     [employee.firstName, employee.lastName].filter(Boolean).join(" ").trim();
 
+  const normalizedExplicitRole = normalizeRole(userData.role || role || "employee");
+  const forceTeamLead =
+    Boolean(employee?.isTeamLead) ||
+    normalizedExplicitRole === "team lead" ||
+    normalizeRole(role) === "team lead" ||
+    normalizeRole(userData.role) === "team lead";
+
   const payload = {
     name,
     email: userData.email || employee.email || "",
@@ -59,7 +66,7 @@ exports.syncEmployeeToUser = async ({ employee, role, userData = {} }) => {
       "",
     department: userData.department || employee.department || "",
     bloodGroup: userData.bloodGroup || employee.bloodGroup || "",
-    role: normalizeRole(userData.role || role || (employee.isTeamLead ? "team lead" : "employee")),
+    role: forceTeamLead ? "team lead" : normalizedExplicitRole,
     isApproved: userData.isApproved ?? true,
     isFirstLogin: userData.isFirstLogin ?? false,
     isActive: userData.isActive ?? true,
