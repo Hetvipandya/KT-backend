@@ -9,7 +9,7 @@ const Payslip = require("../models/Payslip");
 exports.createSalaryStructure = 
   async (req, res) => {
     try {
-      const {
+      const { 
         userId, 
         basicSalary,
         hra,
@@ -290,10 +290,14 @@ exports.processPayroll =
         salaryStructure.bonus;
 
       const finalBonus =
-        bonus || 0;
+  bonus !== undefined
+    ? Number(bonus)
+    : Number(salaryStructure.bonus);
 
-      const finalDeduction =
-        deduction || 0;
+    const finalDeduction =
+  deduction !== undefined
+    ? Number(deduction)
+    : Number(salaryStructure.deduction);
 
       const tdsAmount =
         (grossSalary *
@@ -306,22 +310,18 @@ exports.processPayroll =
         finalDeduction -
         tdsAmount;
 
-      const payroll =
-        await Payroll.create({
-          userId,
-          salaryStructureId:
-            salaryStructure._id,
-          month,
-          year,
-          bonus: finalBonus,
-          deduction:
-            finalDeduction,
-          tdsAmount,
-          grossSalary,
-          netSalary,
-          status: "processed",
-        });
-
+ const payroll = await Payroll.create({
+  userId,
+  salaryStructureId: salaryStructure._id,
+  month,
+  year,
+  bonus: finalBonus,
+  deduction: finalDeduction,
+  tdsAmount,
+  grossSalary,
+  netSalary,
+  status: "processed",
+});
       res.status(201).json({
         success: true,
         message:
