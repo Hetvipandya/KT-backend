@@ -649,6 +649,48 @@ GET MY TEAM
 
 exports.getMyTeam = async (req, res) => {
   try {
+    // Ensure all active Team Leads (from Employee and User models) have a Team document in database
+    const tlEmployees = await Employee.find({ isTeamLead: true });
+    const tlUsers = await User.find({ role: { $in: ["teamlead", "team lead"] } });
+
+    for (const emp of tlEmployees) {
+      let existingTeam = await Team.findOne({
+        $or: [
+          { teamLeadEmployee: emp._id },
+          ...(emp.userID ? [{ teamLeadUser: emp.userID }] : [])
+        ]
+      });
+      if (!existingTeam) {
+        const leadName = `${emp.firstName || ""} ${emp.lastName || ""}`.trim();
+        await Team.create({
+          name: leadName ? `${leadName} Team` : "New Team",
+          teamLeadEmployee: emp._id,
+          teamLeadUser: emp.userID || null,
+          employees: [],
+          interns: [],
+        });
+      }
+    }
+
+    for (const usr of tlUsers) {
+      if (usr.role === "admin") continue;
+      let existingTeam = await Team.findOne({
+        $or: [
+          { teamLeadUser: usr._id }
+        ]
+      });
+      if (!existingTeam) {
+        const linkedEmp = await Employee.findOne({ userID: usr._id });
+        await Team.create({
+          name: `${usr.name || "Team Lead"} Team`,
+          teamLeadUser: usr._id,
+          teamLeadEmployee: linkedEmp ? linkedEmp._id : null,
+          employees: [],
+          interns: [],
+        });
+      }
+    }
+
     let teams = await Team.find()
       .populate({
         path: "teamLeadUser",
@@ -660,7 +702,7 @@ exports.getMyTeam = async (req, res) => {
           "firstName lastName email mobile employeeID designation department",
         populate: {
           path: "department",
-          select: "name",
+          select: "name departmentName",
         },
       })
       .populate({
@@ -675,7 +717,7 @@ exports.getMyTeam = async (req, res) => {
       select: "firstName lastName email employeeID designation department",
       populate: {
         path: "department",
-        select: "name",
+        select: "name departmentName",
       },
     });
 
