@@ -15,7 +15,7 @@ const projectSchema = new mongoose.Schema(
 
     clientName: {
       type: String,
-      required: true,
+      required: true, 
       trim: true,
     },
 
@@ -73,7 +73,7 @@ const projectSchema = new mongoose.Schema(
     employees: [
       {
         type: mongoose.Schema.Types.ObjectId,
-        ref: "User",
+        ref: "Employee",
       },
     ],
 
@@ -83,7 +83,7 @@ const projectSchema = new mongoose.Schema(
         ref: "User",
       },
     ],
-
+ 
     files: [
       {
         fileName: String,

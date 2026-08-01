@@ -317,7 +317,7 @@ exports.createOrUpdateTeam = async (req, res) => {
       name,
       employees = [],
       interns = [],
-      developers = [],
+      developers = [], 
       designers = [],
       testers = [],
     } = req.body;

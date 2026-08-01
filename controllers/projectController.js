@@ -12,7 +12,7 @@ const Employee = require("../models/Employee");
 
 // Create Project
 exports.createProject = async (req, res) => {
-  try {
+  try { 
     const uploadedFiles = req.files 
       ? req.files.map((file) => ({
           fileName: file.originalname,
@@ -49,7 +49,7 @@ exports.getAllProjects =
     try {
      const projects = await Project.find()
   .populate("teamLead", "name email")
-  .populate("employees", "name email")
+ .populate("employees", "firstName lastName email")
   .populate("interns", "name email");
 
 console.log(JSON.stringify(projects, null, 2));
