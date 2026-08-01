@@ -7,7 +7,7 @@ const bcrypt =
   require("bcryptjs"); 
 
 const jwt =
-  require("jsonwebtoken");
+  require("jsonwebtoken"); 
 
 const nodemailer =
   require("nodemailer"); 

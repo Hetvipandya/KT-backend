@@ -6,7 +6,7 @@ const Attendance =
 
 const DailyReport = 
   require("../models/DailyReport");
-  
+   
 const Task =
   require("../models/taskModel");
 
@@ -456,37 +456,106 @@ exports.createOrUpdateTeam = async (req, res) => {
     let employeeIds = [];
     let internIds = [];
 
+    const normalizeEmployeeIds = async (ids = []) => {
+      const uniqueIds = new Set();
+
+      for (const item of ids) {
+        const rawId = String(item || "").trim();
+        if (!rawId) continue;
+
+        const employee = await Employee.findById(rawId);
+        if (employee) {
+          uniqueIds.add(String(employee._id));
+          continue;
+        }
+
+        const user = await User.findById(rawId);
+        if (user) {
+          const linkedEmployee = await Employee.findOne({ userID: user._id });
+          if (linkedEmployee) {
+            uniqueIds.add(String(linkedEmployee._id));
+            continue;
+          }
+
+          const newEmployee = await Employee.create({
+            userID: user._id,
+            firstName: user.name?.split(" ")[0] || "User",
+            lastName: user.name?.split(" ").slice(1).join(" ") || "",
+            email: user.email,
+            mobile: user.phoneNumber || "",
+            department: user.department || null,
+            designation: user.role === "team lead" ? "Team Lead" : "Employee",
+            isTeamLead: false,
+          });
+
+          uniqueIds.add(String(newEmployee._id));
+          console.log(`✅ Created employee record for user ${user.name}`);
+        }
+      }
+
+      return [...uniqueIds];
+    };
+
+    const normalizeInternIds = async (ids = []) => {
+      const uniqueIds = new Set();
+
+      for (const item of ids) {
+        const rawId = String(item || "").trim();
+        if (!rawId) continue;
+
+        const user = await User.findById(rawId);
+        if (user) {
+          uniqueIds.add(String(user._id));
+          user.role = user.role === "team lead" ? "team lead" : "intern";
+          await user.save();
+        }
+      }
+
+      return [...uniqueIds];
+    };
+
     // Process employees (Employee model IDs)
     if (employees && employees.length > 0) {
-      employeeIds = employees.map(id => String(id));
+      employeeIds = await normalizeEmployeeIds(employees);
     } else if (developers && developers.length > 0) {
-      // For backward compatibility - developers are User IDs, not Employee IDs
-      // Convert to Employee IDs if needed
-      for (const userId of developers) {
-        const emp = await Employee.findOne({ userID: userId });
-        if (emp) {
-          employeeIds.push(String(emp._id));
-        } else {
-          // If no employee record exists, create one
-          const usr = await User.findById(userId);
-          if (usr) {
-            const newEmp = await Employee.create({
-              userID: usr._id,
-              firstName: usr.name?.split(' ')[0] || 'User',
-              lastName: usr.name?.split(' ').slice(1).join(' ') || '',
-              email: usr.email,
-              role: usr.role || 'employee'
-            });
-            employeeIds.push(String(newEmp._id));
-            console.log(`✅ Created employee record for user ${usr.name}`);
+      employeeIds = await normalizeEmployeeIds(developers);
+    }
+
+    // Process interns (User model IDs)
+    if (interns && interns.length > 0) {
+      internIds = await normalizeInternIds(interns);
+    }
+
+    for (const employeeId of employeeIds) {
+      const employeeDoc = await Employee.findById(employeeId);
+      if (employeeDoc) {
+        employeeDoc.isTeamLead = false;
+        await employeeDoc.save();
+
+        if (employeeDoc.userID) {
+          const employeeUser = await User.findById(employeeDoc.userID);
+          if (employeeUser && employeeUser.role !== "team lead") {
+            employeeUser.role = "employee";
+            await employeeUser.save();
           }
         }
       }
     }
 
-    // Process interns (User model IDs)
-    if (interns && interns.length > 0) {
-      internIds = interns.map(id => String(id));
+    if (teamLeadUser) {
+      const leadUser = await User.findById(teamLeadUser);
+      if (leadUser) {
+        leadUser.role = "team lead";
+        await leadUser.save();
+      }
+    }
+
+    if (teamLeadEmployee) {
+      const leadEmployee = await Employee.findById(teamLeadEmployee);
+      if (leadEmployee) {
+        leadEmployee.isTeamLead = true;
+        await leadEmployee.save();
+      }
     }
 
     console.log(`📊 Team Members: ${employeeIds.length} employees, ${internIds.length} interns`);

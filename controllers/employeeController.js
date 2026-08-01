@@ -17,7 +17,7 @@ const { syncEmployeeToUser } = require("../utils/userEmployeeSync");
 // ================= GENERATE EMPLOYEE ID =================
 const generateEmployeeID =
   async () => {
-    const count =
+    const count = 
       await Employee.countDocuments();
 
     return `EMP${String(
@@ -29,13 +29,7 @@ exports.assignTeamLead = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const employee = await Employee.findByIdAndUpdate(
-      id,
-      {
-        isTeamLead: true,
-      },
-      { new: true }
-    );
+    const employee = await Employee.findById(id);
 
     if (!employee) {
       return res.status(404).json({
@@ -43,6 +37,9 @@ exports.assignTeamLead = async (req, res) => {
         message: "Employee not found",
       });
     }
+
+    employee.isTeamLead = true;
+    await employee.save();
 
     const employeeData = employee.toObject();
 
@@ -56,7 +53,7 @@ exports.assignTeamLead = async (req, res) => {
         role: "team lead",
       },
     });
- 
+
     if (!employee.userID && syncedUser?._id) {
       employee.userID = syncedUser._id;
       await employee.save();
@@ -66,6 +63,7 @@ exports.assignTeamLead = async (req, res) => {
       success: true,
       message: "Assigned as Team Lead successfully",
       employee,
+      user: syncedUser,
     });
   } catch (error) {
     res.status(500).json({
@@ -79,13 +77,7 @@ exports.removeTeamLead = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const employee = await Employee.findByIdAndUpdate(
-      id,
-      {
-        isTeamLead: false,
-      },
-      { new: true }
-    );
+    const employee = await Employee.findById(id);
 
     if (!employee) {
       return res.status(404).json({
@@ -93,6 +85,9 @@ exports.removeTeamLead = async (req, res) => {
         message: "Employee not found",
       });
     }
+
+    employee.isTeamLead = false;
+    await employee.save();
 
     const employeeData = employee.toObject();
 
@@ -116,6 +111,7 @@ exports.removeTeamLead = async (req, res) => {
       success: true,
       message: "Team Lead removed successfully",
       employee,
+      user: syncedUser,
     });
   } catch (error) {
     res.status(500).json({
