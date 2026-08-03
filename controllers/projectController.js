@@ -499,50 +499,44 @@ exports.createTask = async (req, res) => {
     const taskData = { ...req.body };
 
     // ================= Auto Assign From Project =================
-    if (taskData.projectId) {
-      const project = await Project.findById(taskData.projectId);
+   // ================= Auto Assign From Project =================
+if (taskData.projectId) {
+  const project = await Project.findById(taskData.projectId);
 
-      if (!project) {
-        return res.status(404).json({
-          success: false,
-          message: "Project not found",
-        });
-      }
+  if (!project) {
+    return res.status(404).json({
+      success: false,
+      message: "Project not found",
+    });
+  }
 
-      // Auto Assign Employee
-      if (
-        !taskData.assignedEmployee &&
-        project.employees &&
-        project.employees.length > 0
-      ) {
-        taskData.assignedEmployee = project.employees[0];
-      }
+  // Employee
+  if (!taskData.assignedEmployee && project.employees.length > 0) {
+    taskData.assignedEmployee = project.employees[0];
+  }
 
-      // Auto Assign Intern
-      if (
-        !taskData.assignedIntern &&
-        project.interns &&
-        project.interns.length > 0
-      ) {
-        taskData.assignedIntern = project.interns[0];
-      }
+  // Intern
+  if (!taskData.assignedIntern && project.interns.length > 0) {
+    taskData.assignedIntern = project.interns[0];
+  }
 
-      // Auto Assign Team
-      // if (!taskData.assignedTeamLead && project.teamLeadUser) {
-      //   const team = await Team.findOne({
-      //     teamLead: project.teamLeadUser,
-      //   });
+  // ================= TEAM LEAD =================
+  if (!taskData.assignedTeamLead && project.teamLead) {
+    const team = await Team.findById(project.teamLead);
 
-      //   if (team) {
-      //     taskData.assignedTeamLead = team._id;
-      //   }
-      // }
-
-      // Auto Assign Creator
-      if (!taskData.assignedBy && req.user) {
-        taskData.assignedBy = req.user._id;
-      }
+    if (team && team.teamLeadUser) {
+      taskData.assignedTeamLead = team.teamLeadUser;
     }
+  }
+
+  // Assigned By
+  if (!taskData.assignedBy) {
+    taskData.assignedBy =
+      req.user?._id ||
+      taskData.assignedTeamLead ||
+      null;
+  }
+}
 
     // ================= Create Task =================
     const task = await Task.create(taskData);
