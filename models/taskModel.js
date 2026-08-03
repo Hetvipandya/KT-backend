@@ -1,3 +1,93 @@
+// const mongoose = require("mongoose");
+
+// const taskSchema = new mongoose.Schema(
+//   {
+//     projectId: {
+//       type: mongoose.Schema.Types.ObjectId,
+//       ref: "Project",
+//       required: true,
+//     },
+ 
+//     milestoneId: {
+//       type: mongoose.Schema.Types.ObjectId,
+//       ref: "Milestone",
+//       required: true,
+//     },
+
+//     taskTitle: {
+//       type: String,
+//       required: true,
+//       trim: true,
+//     },
+
+//     description: {
+//       type: String,
+//       default: "",
+//     },
+
+//     assignedBy: {
+//       type: mongoose.Schema.Types.ObjectId,
+//       ref: "User",
+//     },
+
+//     startDate: {
+//       type: Date,
+//     },
+
+//     dueDate: {
+//       type: Date,
+//     },
+
+//     priority: {
+//       type: String,
+//       enum: ["low", "medium", "high"],
+//       default: "medium",
+//     },
+
+//     progress: {
+//       type: Number,
+//       default: 0,
+//       min: 0,
+//       max: 100,
+//     },
+
+//     status: {
+//       type: String,
+//       enum: [
+//         "pending",
+//         "in_progress",
+//         "testing",
+//         "review",
+//         "completed",
+//         "cancelled",
+//       ],
+//       default: "pending",
+//     },
+
+//     remarks: {
+//       type: String,
+//       default: "",
+//     },
+
+//     completedAt: {
+//       type: Date,
+//       default: null,
+//     },
+
+//     attachments: [
+//       {
+//         fileName: String,
+//         fileUrl: String,
+//       },
+//     ],
+//   },
+//   {
+//     timestamps: true,
+//   }
+// );
+
+// module.exports = mongoose.model("Task", taskSchema);
+
 const mongoose = require("mongoose");
 
 const taskSchema = new mongoose.Schema(
@@ -11,7 +101,7 @@ const taskSchema = new mongoose.Schema(
     milestoneId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Milestone",
-      required: true,
+      default: null,
     },
 
     taskTitle: {
@@ -20,14 +110,33 @@ const taskSchema = new mongoose.Schema(
       trim: true,
     },
 
-    description: {
+    taskDescription: {
       type: String,
       default: "",
+    },
+
+    // For employee assignments (User ID)
+    assignedEmployee: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
+
+    // For intern assignments (Intern ID)
+    assignedIntern: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Intern",
+      default: null,
     },
 
     assignedBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
+    },
+
+    estimatedHours: {
+      type: Number,
+      default: 0,
     },
 
     startDate: {
@@ -64,6 +173,43 @@ const taskSchema = new mongoose.Schema(
       default: "pending",
     },
 
+    taskDependencies: {
+      type: [mongoose.Schema.Types.ObjectId],
+      ref: "Task",
+      default: [],
+    },
+
+    subTasks: {
+      type: [String],
+      default: [],
+    },
+
+    checklist: {
+      type: [String],
+      default: [],
+    },
+
+    comments: {
+      type: [
+        {
+          userId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+          text: String,
+          createdAt: { type: Date, default: Date.now },
+        },
+      ],
+      default: [],
+    },
+
+    attachments: {
+      type: [
+        {
+          fileName: String,
+          fileUrl: String,
+        },
+      ],
+      default: [],
+    },
+
     remarks: {
       type: String,
       default: "",
@@ -73,13 +219,6 @@ const taskSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
-
-    attachments: [
-      {
-        fileName: String,
-        fileUrl: String,
-      },
-    ],
   },
   {
     timestamps: true,
