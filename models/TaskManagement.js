@@ -66,7 +66,7 @@ const taskManagementSchema =
       // Priority
       priority: {
         type: String,
-      },
+      }, 
 
       // Status
      status: {

@@ -29,7 +29,7 @@ const {
   // Daily Update
   addDailyUpdate,
   getTaskUpdates,
-} = require("../controllers/projectController");
+} = require("../controllers/projectController"); 
 
 
 // ======================================================

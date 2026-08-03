@@ -4,7 +4,7 @@ const Milestone = require("../models/milestoneModel");
 const DailyUpdate = require("../models/dailyUpdateModel");
 const User = require("../models/User");
 const Employee = require("../models/Employee");
-const TaskManagement = require("../models/TaskManagement");
+// const TaskManagement = require("../models/TaskManagement");
 
 const buildProjectAssignmentTasks = ({
   projectId,
@@ -119,7 +119,7 @@ const autoCreateProjectTasks = async ({ project, assignedBy }) => {
 
   const createdTasks = [];
   for (const task of tasks) {
-    const existingTask = await TaskManagement.findOne({
+    const existingTask = await Task.findOne({
       projectId: task.projectId,
       assignedEmployee: task.assignedEmployee,
       taskTitle: task.taskTitle,
@@ -130,7 +130,7 @@ const autoCreateProjectTasks = async ({ project, assignedBy }) => {
       continue;
     }
 
-    const createdTask = await TaskManagement.create(task);
+    const createdTask = await Task.create(task);
     createdTasks.push(createdTask);
   }
 
