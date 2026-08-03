@@ -125,7 +125,7 @@ const taskSchema = new mongoose.Schema(
     // For intern assignments (Intern ID)
     assignedIntern: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "Intern",
+      ref: "User",
       default: null,
     },
 
