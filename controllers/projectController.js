@@ -756,6 +756,36 @@ exports.createTask = async (req, res) => {
   try {
     const taskData = { ...req.body };
 
+    const explicitTeamLeadUser =
+      taskData.assignedTeamLeadUser ??
+      taskData.teamLeadUser ??
+      taskData.teamLeadUserId ??
+      null;
+
+    const explicitTeamLeadEmployee =
+      taskData.assignedTeamLeadEmployee ??
+      taskData.teamLeadEmployee ??
+      taskData.teamLeadEmployeeId ??
+      null;
+
+    const explicitAssignedBy =
+      taskData.assignedBy ??
+      taskData.assignedByUser ??
+      taskData.userId ??
+      null;
+
+    if (explicitTeamLeadUser !== null) {
+      taskData.assignedTeamLeadUser = explicitTeamLeadUser;
+    }
+
+    if (explicitTeamLeadEmployee !== null) {
+      taskData.assignedTeamLeadEmployee = explicitTeamLeadEmployee;
+    }
+
+    if (explicitAssignedBy !== null) {
+      taskData.assignedBy = explicitAssignedBy;
+    }
+
     // Automatically Fetch & Assign From Project Members if not explicitly provided
     if (taskData.projectId) {
       const project = await Project.findById(taskData.projectId);
@@ -794,6 +824,7 @@ exports.createTask = async (req, res) => {
       if (!taskData.assignedBy) {
         taskData.assignedBy =
           req.user?._id ||
+          explicitAssignedBy ||
           resolvedTeamLeadUser ||
           taskData.assignedTeamLeadUser ||
           fallbackAssigneeUser ||
