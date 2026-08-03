@@ -70,7 +70,7 @@ const projectSchema = new mongoose.Schema(
     // TEAM LEAD
     // ==========================
 
-    teamLeadUser: {
+    teamLeadUser: { 
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       default: null,

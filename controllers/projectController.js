@@ -8,31 +8,34 @@ const Employee = require("../models/Employee");
 // ======================================================
 // BUILD TASK HELPER FUNCTIONS
 // ======================================================
-
 const resolveProjectTeamLeadUser = async (project) => {
   if (!project) {
     return null;
   }
 
+  // If project already has User ID
   if (project.teamLeadUser) {
     return project.teamLeadUser;
   }
 
+  // If project has Employee ID
   if (project.teamLeadEmployee) {
-    const employeeRecord = await Employee.findById(project.teamLeadEmployee).select("userID");
-    if (employeeRecord && employeeRecord.userID) {
-      return employeeRecord.userID;
+    const employee = await Employee.findById(
+      project.teamLeadEmployee
+    ).select("userID");
+
+    if (employee?.userID) {
+      return employee.userID;
     }
   }
 
+  // If project stores Team ID
   if (project.teamLead) {
-    const teamLeadValue = project.teamLead;
-    if (teamLeadValue && typeof teamLeadValue === "string") {
-      return teamLeadValue;
-    }
+    const team = await Team.findById(project.teamLead)
+      .select("teamLeadUser");
 
-    if (teamLeadValue && teamLeadValue.userID) {
-      return teamLeadValue.userID;
+    if (team?.teamLeadUser) {
+      return team.teamLeadUser;
     }
   }
 
@@ -573,25 +576,53 @@ exports.createTask = async (req, res) => {
       }
 
       // ================= TEAM LEAD =================
-      if (!taskData.assignedTeamLead) {
-        taskData.assignedTeamLead = await resolveProjectTeamLeadUser(project);
-      }
+    // ================= TEAM LEAD =================
+if (!taskData.assignedTeamLeadUser) {
+  if (project.teamLeadUser) {
+    taskData.assignedTeamLeadUser = project.teamLeadUser;
+  }
+}
 
-      // Assigned By
-      if (!taskData.assignedBy) {
-        taskData.assignedBy = req.user?._id || taskData.assignedTeamLead || null;
-      }
+if (!taskData.assignedTeamLeadEmployee) {
+  if (project.teamLeadEmployee) {
+    taskData.assignedTeamLeadEmployee = project.teamLeadEmployee;
+  }
+}
+
+// Assigned By
+if (!taskData.assignedBy) {
+  taskData.assignedBy =
+    req.user?._id ||
+    taskData.assignedTeamLeadUser ||
+    null;
+}
     }
 
     // ================= Create Task =================
     const task = await Task.create(taskData);
 
     // ================= Populate =================
-    const populatedTask = await Task.findById(task._id)
-      .populate("assignedEmployee", "firstName lastName email")
-      .populate("assignedIntern", "name email")
-      .populate("assignedTeamLead", "name email")
-      .populate("assignedBy", "name email");
+ const populatedTask = await Task.findById(task._id)
+  .populate(
+    "assignedEmployee",
+    "firstName lastName email"
+  )
+  .populate(
+    "assignedIntern",
+    "name email"
+  )
+  .populate(
+    "assignedTeamLeadUser",
+    "name email"
+  )
+  .populate(
+    "assignedTeamLeadEmployee",
+    "firstName lastName email"
+  )
+  .populate(
+    "assignedBy",
+    "name email"
+  );
 
     // ================= Update Milestone =================
     if (task.milestoneId) {
