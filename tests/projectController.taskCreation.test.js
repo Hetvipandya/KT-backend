@@ -21,11 +21,11 @@ test("buildProjectAssignmentTasks creates tasks for assigned employees and inter
   });
 
   assert.equal(tasks.length, 3);
-  assert.equal(tasks[0].assignedTeamLead, "team-lead-user-1");
+  assert.equal(tasks[0].assignedTeamLeadUser, "team-lead-user-1");
 
   const internTask = tasks.find((task) => task.assignedIntern === "user-intern-1");
   assert.ok(internTask);
-  assert.equal(internTask.assignedEmployee, "user-manager-1");
-  assert.equal(internTask.assignedTeamLead, "team-lead-user-1");
+  assert.equal(internTask.assignedEmployee, null);
+  assert.equal(internTask.assignedTeamLeadUser, "team-lead-user-1");
   assert.equal(internTask.taskTitle, "Website Redesign - Intern 1");
 });

@@ -8,6 +8,7 @@ const {
   createProject,
   getAllProjects,
   getSingleProject,
+  getProjectMembers,
   assignTeamLead,
   assignEmployees,
   assignInterns,
@@ -53,6 +54,12 @@ router.get(
 router.get(
   "/project/:id",
   getSingleProject
+);
+
+// Get Automatically Fetched Project Members (Team Lead + Employees + Interns)
+router.get(
+  "/project/members/:projectId",
+  getProjectMembers
 );
 
 // Assign Team Lead

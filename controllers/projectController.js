@@ -4,36 +4,55 @@ const Milestone = require("../models/milestoneModel");
 const DailyUpdate = require("../models/dailyUpdateModel");
 const User = require("../models/User");
 const Employee = require("../models/Employee");
+const Team = require("../models/Team");
 
 // ======================================================
-// BUILD TASK HELPER FUNCTIONS
+// HELPER FUNCTIONS FOR TEAM & PROGRESS MANAGEMENT
 // ======================================================
+
+// Helper: Automatically Fetch Team Members from Team Collection based on Team Lead
+const fetchTeamMembersByTeamLead = async ({ teamLead, teamLeadUser, teamLeadEmployee }) => {
+  const query = [];
+  if (teamLead) query.push({ _id: teamLead });
+  if (teamLeadUser) query.push({ teamLeadUser });
+  if (teamLeadEmployee) query.push({ teamLeadEmployee });
+
+  if (query.length === 0) {
+    return { employees: [], interns: [], teamLeadUser: null, teamLeadEmployee: null };
+  }
+
+  const team = await Team.findOne({ $or: query });
+  if (team) {
+    return {
+      employees: team.employees || [],
+      interns: team.interns || [],
+      teamLeadUser: team.teamLeadUser || null,
+      teamLeadEmployee: team.teamLeadEmployee || null,
+    };
+  }
+
+  return { employees: [], interns: [], teamLeadUser: null, teamLeadEmployee: null };
+};
+
+// Helper: Resolve Team Lead User ID
 const resolveProjectTeamLeadUser = async (project) => {
   if (!project) {
     return null;
   }
 
-  // If project already has User ID
   if (project.teamLeadUser) {
     return project.teamLeadUser;
   }
 
-  // If project has Employee ID
   if (project.teamLeadEmployee) {
-    const employee = await Employee.findById(
-      project.teamLeadEmployee
-    ).select("userID");
-
+    const employee = await Employee.findById(project.teamLeadEmployee).select("userID");
     if (employee?.userID) {
       return employee.userID;
     }
   }
 
-  // If project stores Team ID
   if (project.teamLead) {
-    const team = await Team.findById(project.teamLead)
-      .select("teamLeadUser");
-
+    const team = await Team.findById(project.teamLead).select("teamLeadUser");
     if (team?.teamLeadUser) {
       return team.teamLeadUser;
     }
@@ -42,6 +61,7 @@ const resolveProjectTeamLeadUser = async (project) => {
   return null;
 };
 
+// Helper: Build Task Assignment Objects
 const buildProjectAssignmentTasks = ({
   projectId,
   projectName,
@@ -70,14 +90,14 @@ const buildProjectAssignmentTasks = ({
     }
 
     seen.add(uniqueKey);
-    
+
     const taskData = {
       projectId,
       milestoneId: null,
       taskTitle: `${projectName || "Project"} - ${label}`,
       taskDescription: `Project assignment for ${projectName || "Project"}.`,
       assignedBy: assignedBy || assignedTeamLead || userId,
-      assignedTeamLead: assignedTeamLead || null,
+      assignedTeamLeadUser: assignedTeamLead || null,
       dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
       estimatedHours: 0,
       priority: "medium",
@@ -102,7 +122,6 @@ const buildProjectAssignmentTasks = ({
   };
 
   employees.forEach((employeeId, index) => {
-    // For employees, we store Employee ID in project, but need to get User ID
     const userId = employeeUserMap[String(employeeId)] || employeeUserMap[employeeId];
     if (!userId) {
       return;
@@ -112,7 +131,6 @@ const buildProjectAssignmentTasks = ({
   });
 
   interns.forEach((internId, index) => {
-    // For interns, the ID stored in project is the User ID directly
     const userId = internUserMap[String(internId)] || internUserMap[internId] || internId;
     const internLabel = `Intern ${index + 1}`;
     addTask({ userId, role: "intern", label: internLabel });
@@ -121,6 +139,7 @@ const buildProjectAssignmentTasks = ({
   return tasks;
 };
 
+// Helper: Auto Create Tasks on Project Save / Member Assignment
 const autoCreateProjectTasks = async ({ project, assignedBy }) => {
   if (!project) {
     return [];
@@ -134,23 +153,20 @@ const autoCreateProjectTasks = async ({ project, assignedBy }) => {
     return [];
   }
 
-  // For employees: Employee IDs are stored, need to get User IDs
   const employeeUserMap = {};
   if (employees.length > 0) {
     const employeeRecords = await Employee.find({ _id: { $in: employees } })
       .select("_id userID firstName lastName")
       .populate("userID", "name email");
-    
+
     employeeRecords.forEach((employee) => {
       if (employee.userID) {
-        // If userID is populated, get the _id, else use the userID directly
         const userId = employee.userID._id || employee.userID;
         employeeUserMap[String(employee._id)] = userId;
       }
     });
   }
 
-  // For interns: User IDs are stored directly
   const internUserMap = {};
   interns.forEach((internId) => {
     if (internId) {
@@ -179,7 +195,7 @@ const autoCreateProjectTasks = async ({ project, assignedBy }) => {
       projectId: task.projectId,
       $or: [
         { assignedEmployee: task.assignedEmployee },
-        { assignedIntern: task.assignedIntern }
+        { assignedIntern: task.assignedIntern },
       ],
       taskTitle: task.taskTitle,
     });
@@ -196,14 +212,82 @@ const autoCreateProjectTasks = async ({ project, assignedBy }) => {
   return createdTasks;
 };
 
+// Helper: Cascading Progress Update (Task Progress -> Milestone Progress -> Project Progress)
+const recalculateMilestoneAndProjectProgress = async (milestoneId, targetProjectId = null) => {
+  let pId = targetProjectId;
+
+  if (milestoneId) {
+    const milestone = await Milestone.findById(milestoneId);
+    if (milestone && milestone.projectId) {
+      pId = milestone.projectId;
+    }
+
+    const tasks = await Task.find({ milestoneId });
+    const totalTasks = tasks.length;
+
+    const milestoneProgress =
+      totalTasks === 0
+        ? 0
+        : Math.round(tasks.reduce((sum, t) => sum + (t.progress || 0), 0) / totalTasks);
+
+    let milestoneStatus = "pending";
+    if (milestoneProgress > 0 && milestoneProgress < 100) {
+      milestoneStatus = "in_progress";
+    } else if (milestoneProgress === 100) {
+      milestoneStatus = "completed";
+    }
+
+    await Milestone.findByIdAndUpdate(
+      milestoneId,
+      {
+        progress: milestoneProgress,
+        status: milestoneStatus,
+        completedAt: milestoneProgress === 100 ? new Date() : null,
+      },
+      { new: true }
+    );
+  }
+
+  if (pId) {
+    const milestones = await Milestone.find({ projectId: pId });
+    let projectProgress = 0;
+
+    if (milestones.length > 0) {
+      projectProgress = Math.round(
+        milestones.reduce((sum, m) => sum + (m.progress || 0), 0) / milestones.length
+      );
+    } else {
+      const projectTasks = await Task.find({ projectId: pId });
+      if (projectTasks.length > 0) {
+        projectProgress = Math.round(
+          projectTasks.reduce((sum, t) => sum + (t.progress || 0), 0) / projectTasks.length
+        );
+      }
+    }
+
+    let projectStatus = "pending";
+    if (projectProgress > 0 && projectProgress < 100) {
+      projectStatus = "in_progress";
+    } else if (projectProgress === 100) {
+      projectStatus = "completed";
+    }
+
+    await Project.findByIdAndUpdate(pId, {
+      progress: projectProgress,
+      status: projectStatus,
+    });
+  }
+};
+
 module.exports.buildProjectAssignmentTasks = buildProjectAssignmentTasks;
 module.exports.autoCreateProjectTasks = autoCreateProjectTasks;
+module.exports.recalculateMilestoneAndProjectProgress = recalculateMilestoneAndProjectProgress;
 
 // ======================================================
 // PROJECT CONTROLLER
 // ======================================================
 
-// Create Project
+// Create Project: Auto Fetches Team Members (Employee + Intern) from Team Collection if Team Lead is selected
 exports.createProject = async (req, res) => {
   try {
     const uploadedFiles = req.files
@@ -213,8 +297,28 @@ exports.createProject = async (req, res) => {
         }))
       : [];
 
+    let { teamLead, teamLeadUser, teamLeadEmployee, employees = [], interns = [] } = req.body;
+
+    // Automatically Fetch Team Members (Employee + Intern) from Team Collection if Team Lead provided
+    if (teamLead || teamLeadUser || teamLeadEmployee) {
+      const teamData = await fetchTeamMembersByTeamLead({ teamLead, teamLeadUser, teamLeadEmployee });
+      if (!teamLeadUser && teamData.teamLeadUser) teamLeadUser = teamData.teamLeadUser;
+      if (!teamLeadEmployee && teamData.teamLeadEmployee) teamLeadEmployee = teamData.teamLeadEmployee;
+
+      if (!employees || employees.length === 0) {
+        employees = teamData.employees;
+      }
+      if (!interns || interns.length === 0) {
+        interns = teamData.interns;
+      }
+    }
+
     const project = await Project.create({
       ...req.body,
+      teamLeadUser: teamLeadUser || null,
+      teamLeadEmployee: teamLeadEmployee || null,
+      employees,
+      interns,
       files: uploadedFiles,
     });
 
@@ -291,7 +395,41 @@ exports.getSingleProject = async (req, res) => {
   }
 };
 
-// Assign Team Lead
+// Automatically Fetch Project Members (Team Lead + Employees + Interns) for Task Assignment
+exports.getProjectMembers = async (req, res) => {
+  try {
+    const { projectId } = req.params;
+    const project = await Project.findById(projectId)
+      .populate("teamLeadUser", "name email role")
+      .populate("teamLeadEmployee", "firstName lastName email employeeID")
+      .populate("employees", "firstName lastName email employeeID userID")
+      .populate("interns", "name email role");
+
+    if (!project) {
+      return res.status(404).json({
+        success: false,
+        message: "Project not found",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      data: {
+        teamLeadUser: project.teamLeadUser,
+        teamLeadEmployee: project.teamLeadEmployee,
+        employees: project.employees,
+        interns: project.interns,
+      },
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+// Assign Team Lead & Auto Fetch Team Members
 exports.assignTeamLead = async (req, res) => {
   try {
     const { teamLeadId } = req.body;
@@ -352,12 +490,33 @@ exports.assignTeamLead = async (req, res) => {
       }
     }
 
+    // Also check if Team collection has members for this Team Lead
+    const teamData = await fetchTeamMembersByTeamLead({
+      teamLead: teamLeadId,
+      teamLeadUser: resolvedTeamLeadUser,
+      teamLeadEmployee: resolvedTeamLeadEmployee,
+    });
+
+    const updateFields = {
+      teamLeadUser: resolvedTeamLeadUser || null,
+      teamLeadEmployee: resolvedTeamLeadEmployee || null,
+    };
+
+    if (teamData.employees.length > 0 || teamData.interns.length > 0) {
+      const currentProject = await Project.findById(req.params.id);
+      if (currentProject) {
+        if (!currentProject.employees || currentProject.employees.length === 0) {
+          updateFields.employees = teamData.employees;
+        }
+        if (!currentProject.interns || currentProject.interns.length === 0) {
+          updateFields.interns = teamData.interns;
+        }
+      }
+    }
+
     const project = await Project.findByIdAndUpdate(
       req.params.id,
-      {
-        teamLeadUser: resolvedTeamLeadUser || null,
-        teamLeadEmployee: resolvedTeamLeadEmployee || null,
-      },
+      updateFields,
       { new: true }
     )
       .populate("teamLeadUser", "name email role")
@@ -401,7 +560,6 @@ exports.assignEmployees = async (req, res) => {
       { new: true }
     ).populate("employees", "firstName lastName email");
 
-    // Get fresh project data with populated interns for task creation
     const freshProject = await Project.findById(req.params.id)
       .populate("employees", "firstName lastName email")
       .populate("interns", "name email");
@@ -447,7 +605,6 @@ exports.assignInterns = async (req, res) => {
       { new: true }
     ).populate("interns", "name email");
 
-    // Get fresh project data with populated employees for task creation
     const freshProject = await Project.findById(req.params.id)
       .populate("employees", "firstName lastName email")
       .populate("interns", "name email");
@@ -535,7 +692,6 @@ exports.deleteProject = async (req, res) => {
       success: true,
       message: "Project and all related data deleted successfully",
     });
-
   } catch (error) {
     console.log(error);
     return res.status(500).json({
@@ -554,7 +710,7 @@ exports.createTask = async (req, res) => {
   try {
     const taskData = { ...req.body };
 
-    // ================= Auto Assign From Project =================
+    // Automatically Fetch & Assign From Project Members if not explicitly provided
     if (taskData.projectId) {
       const project = await Project.findById(taskData.projectId);
 
@@ -565,118 +721,38 @@ exports.createTask = async (req, res) => {
         });
       }
 
-      // Employee
       if (!taskData.assignedEmployee && project.employees && project.employees.length > 0) {
         taskData.assignedEmployee = project.employees[0];
       }
 
-      // Intern
       if (!taskData.assignedIntern && project.interns && project.interns.length > 0) {
         taskData.assignedIntern = project.interns[0];
       }
 
-      // ================= TEAM LEAD =================
-    // ================= TEAM LEAD =================
-if (!taskData.assignedTeamLeadUser) {
-  if (project.teamLeadUser) {
-    taskData.assignedTeamLeadUser = project.teamLeadUser;
-  }
-}
+      if (!taskData.assignedTeamLeadUser && project.teamLeadUser) {
+        taskData.assignedTeamLeadUser = project.teamLeadUser;
+      }
 
-if (!taskData.assignedTeamLeadEmployee) {
-  if (project.teamLeadEmployee) {
-    taskData.assignedTeamLeadEmployee = project.teamLeadEmployee;
-  }
-}
+      if (!taskData.assignedTeamLeadEmployee && project.teamLeadEmployee) {
+        taskData.assignedTeamLeadEmployee = project.teamLeadEmployee;
+      }
 
-// Assigned By
-if (!taskData.assignedBy) {
-  taskData.assignedBy =
-    req.user?._id ||
-    taskData.assignedTeamLeadUser ||
-    null;
-}
+      if (!taskData.assignedBy) {
+        taskData.assignedBy = req.user?._id || taskData.assignedTeamLeadUser || null;
+      }
     }
 
-    // ================= Create Task =================
     const task = await Task.create(taskData);
 
-    // ================= Populate =================
- const populatedTask = await Task.findById(task._id)
-  .populate(
-    "assignedEmployee",
-    "firstName lastName email"
-  )
-  .populate(
-    "assignedIntern",
-    "name email"
-  )
-  .populate(
-    "assignedTeamLeadUser",
-    "name email"
-  )
-  .populate(
-    "assignedTeamLeadEmployee",
-    "firstName lastName email"
-  )
-  .populate(
-    "assignedBy",
-    "name email"
-  );
+    const populatedTask = await Task.findById(task._id)
+      .populate("assignedEmployee", "firstName lastName email")
+      .populate("assignedIntern", "name email")
+      .populate("assignedTeamLeadUser", "name email")
+      .populate("assignedTeamLeadEmployee", "firstName lastName email")
+      .populate("assignedBy", "name email");
 
-    // ================= Update Milestone =================
-    if (task.milestoneId) {
-      const tasks = await Task.find({
-        milestoneId: task.milestoneId,
-      });
-
-      const totalTasks = tasks.length;
-      const completedTasks = tasks.filter((t) => t.status === "completed").length;
-      const milestoneProgress = totalTasks === 0 ? 0 : Math.round((completedTasks / totalTasks) * 100);
-
-      let milestoneStatus = "pending";
-      if (milestoneProgress > 0 && milestoneProgress < 100) {
-        milestoneStatus = "in_progress";
-      } else if (milestoneProgress === 100) {
-        milestoneStatus = "completed";
-      }
-
-      const milestone = await Milestone.findByIdAndUpdate(
-        task.milestoneId,
-        {
-          progress: milestoneProgress,
-          status: milestoneStatus,
-          completedAt: milestoneProgress === 100 ? new Date() : null,
-        },
-        { new: true }
-      );
-
-      // ================= Update Project =================
-      if (milestone) {
-        const milestones = await Milestone.find({
-          projectId: milestone.projectId,
-        });
-
-        const totalMilestones = milestones.length;
-        const completedMilestones = milestones.filter((m) => m.status === "completed").length;
-        const projectProgress = totalMilestones === 0 ? 0 : Math.round((completedMilestones / totalMilestones) * 100);
-
-        let projectStatus = "pending";
-        if (projectProgress > 0 && projectProgress < 100) {
-          projectStatus = "in_progress";
-        } else if (projectProgress === 100) {
-          projectStatus = "completed";
-        }
-
-        await Project.findByIdAndUpdate(
-          milestone.projectId,
-          {
-            progress: projectProgress,
-            status: projectStatus,
-          }
-        );
-      }
-    }
+    // Recalculate Milestone & Project Progress
+    await recalculateMilestoneAndProjectProgress(task.milestoneId, task.projectId);
 
     return res.status(201).json({
       success: true,
@@ -685,7 +761,6 @@ if (!taskData.assignedBy) {
     });
   } catch (error) {
     console.error("Create Task Error:", error);
-
     return res.status(500).json({
       success: false,
       message: error.message,
@@ -693,13 +768,13 @@ if (!taskData.assignedBy) {
   }
 };
 
-// Get All Tasks (with populated employee/intern names)
+// Get All Tasks
 exports.getAllTasks = async (req, res) => {
   try {
     const tasks = await Task.find()
       .populate("projectId", "projectName clientName")
-      .populate("milestoneId", "milestoneName")
-      .populate("assignedEmployee", "name email")
+      .populate("milestoneId", "milestoneName title")
+      .populate("assignedEmployee", "name firstName lastName email")
       .populate("assignedIntern", "name email")
       .populate("assignedBy", "name email");
 
@@ -716,16 +791,16 @@ exports.getAllTasks = async (req, res) => {
   }
 };
 
-// Get Tasks By Project (with populated employee/intern names)
+// Get Tasks By Project
 exports.getProjectTasks = async (req, res) => {
   try {
     const tasks = await Task.find({
       projectId: req.params.projectId,
     })
-      .populate("assignedEmployee", "name email")
+      .populate("assignedEmployee", "name firstName lastName email")
       .populate("assignedIntern", "name email")
       .populate("assignedBy", "name email")
-      .populate("milestoneId", "milestoneName");
+      .populate("milestoneId", "milestoneName title");
 
     res.status(200).json({
       success: true,
@@ -740,13 +815,13 @@ exports.getProjectTasks = async (req, res) => {
   }
 };
 
-// Get Tasks By Milestone (with populated employee/intern names)
+// Get Tasks By Milestone
 exports.getMilestoneTasks = async (req, res) => {
   try {
     const tasks = await Task.find({
       milestoneId: req.params.milestoneId,
     })
-      .populate("assignedEmployee", "name email")
+      .populate("assignedEmployee", "name firstName lastName email")
       .populate("assignedIntern", "name email")
       .populate("assignedBy", "name email")
       .populate("projectId", "projectName clientName");
@@ -764,22 +839,19 @@ exports.getMilestoneTasks = async (req, res) => {
   }
 };
 
-// Get Tasks By Assigned Employee (with populated employee/intern names)
+// Get Tasks By Assigned Employee
 exports.getTasksByAssignedEmployee = async (req, res) => {
   try {
     const { userId } = req.params;
-    
+
     const tasks = await Task.find({
-      $or: [
-        { assignedEmployee: userId },
-        { assignedIntern: userId }
-      ]
+      $or: [{ assignedEmployee: userId }, { assignedIntern: userId }],
     })
-      .populate("assignedEmployee", "name email")
+      .populate("assignedEmployee", "name firstName lastName email")
       .populate("assignedIntern", "name email")
       .populate("assignedBy", "name email")
       .populate("projectId", "projectName clientName")
-      .populate("milestoneId", "milestoneName");
+      .populate("milestoneId", "milestoneName title");
 
     res.status(200).json({
       success: true,
@@ -794,13 +866,13 @@ exports.getTasksByAssignedEmployee = async (req, res) => {
   }
 };
 
-// Get Single Task (with populated employee/intern names)
+// Get Single Task
 exports.getSingleTask = async (req, res) => {
   try {
     const task = await Task.findById(req.params.id)
       .populate("projectId", "projectName clientName")
-      .populate("milestoneId", "milestoneName")
-      .populate("assignedEmployee", "name email")
+      .populate("milestoneId", "milestoneName title")
+      .populate("assignedEmployee", "name firstName lastName email")
       .populate("assignedIntern", "name email")
       .populate("assignedBy", "name email");
 
@@ -823,19 +895,20 @@ exports.getSingleTask = async (req, res) => {
   }
 };
 
-// Update Task Progress
+// Update Task Progress (Cascades to Milestone Progress & Project Progress)
 exports.updateTaskProgress = async (req, res) => {
   try {
+    const progressVal = Number(req.body.progress);
     const task = await Task.findByIdAndUpdate(
       req.params.id,
       {
-        progress: req.body.progress,
-        status: req.body.progress === 100 ? "completed" : "in_progress",
-        completedAt: req.body.progress === 100 ? new Date() : null,
+        progress: progressVal,
+        status: progressVal === 100 ? "completed" : "in_progress",
+        completedAt: progressVal === 100 ? new Date() : null,
       },
       { new: true }
     )
-      .populate("assignedEmployee", "name email")
+      .populate("assignedEmployee", "name firstName lastName email")
       .populate("assignedIntern", "name email")
       .populate("assignedBy", "name email");
 
@@ -845,6 +918,9 @@ exports.updateTaskProgress = async (req, res) => {
         message: "Task not found",
       });
     }
+
+    // Cascade update to Milestone & Project progress
+    await recalculateMilestoneAndProjectProgress(task.milestoneId, task.projectId);
 
     res.status(200).json({
       success: true,
@@ -858,7 +934,7 @@ exports.updateTaskProgress = async (req, res) => {
   }
 };
 
-// Update Task Status
+// Update Task Status (Cascades to Milestone Progress & Project Progress)
 exports.updateTaskStatus = async (req, res) => {
   try {
     const { status } = req.body;
@@ -890,57 +966,12 @@ exports.updateTaskStatus = async (req, res) => {
     await task.save();
 
     const updatedTask = await Task.findById(task._id)
-      .populate("assignedEmployee", "name email")
+      .populate("assignedEmployee", "name firstName lastName email")
       .populate("assignedIntern", "name email")
       .populate("assignedBy", "name email");
 
-    // Update Milestone Progress
-    if (task.milestoneId) {
-      const tasks = await Task.find({
-        milestoneId: task.milestoneId,
-      });
-
-      const totalTasks = tasks.length;
-      const completedTasks = tasks.filter((t) => t.status === "completed").length;
-      const milestoneProgress = totalTasks === 0 ? 0 : Math.round((completedTasks / totalTasks) * 100);
-
-      let milestoneStatus = "pending";
-      if (milestoneProgress > 0 && milestoneProgress < 100) milestoneStatus = "in_progress";
-      if (milestoneProgress === 100) milestoneStatus = "completed";
-
-      const milestone = await Milestone.findByIdAndUpdate(
-        task.milestoneId,
-        {
-          progress: milestoneProgress,
-          status: milestoneStatus,
-          completedAt: milestoneProgress === 100 ? new Date() : null,
-        },
-        { new: true }
-      );
-
-      // Update Project Progress
-      if (milestone) {
-        const milestones = await Milestone.find({
-          projectId: milestone.projectId,
-        });
-
-        const totalMilestones = milestones.length;
-        const completedMilestones = milestones.filter((m) => m.status === "completed").length;
-        const projectProgress = totalMilestones === 0 ? 0 : Math.round((completedMilestones / totalMilestones) * 100);
-
-        let projectStatus = "pending";
-        if (projectProgress > 0 && projectProgress < 100) projectStatus = "in_progress";
-        if (projectProgress === 100) projectStatus = "completed";
-
-        await Project.findByIdAndUpdate(
-          milestone.projectId,
-          {
-            progress: projectProgress,
-            status: projectStatus,
-          }
-        );
-      }
-    }
+    // Cascade update to Milestone & Project progress
+    await recalculateMilestoneAndProjectProgress(task.milestoneId, task.projectId);
 
     res.status(200).json({
       success: true,
@@ -955,7 +986,7 @@ exports.updateTaskStatus = async (req, res) => {
   }
 };
 
-// Delete Task
+// Delete Task (Cascades to recalculating Milestone & Project Progress)
 exports.deleteTask = async (req, res) => {
   try {
     const task = await Task.findById(req.params.id);
@@ -967,10 +998,14 @@ exports.deleteTask = async (req, res) => {
       });
     }
 
-    // Delete daily updates for this task
-    await DailyUpdate.deleteMany({ taskId: task._id });
+    const milestoneId = task.milestoneId;
+    const projectId = task.projectId;
 
+    await DailyUpdate.deleteMany({ taskId: task._id });
     await Task.findByIdAndDelete(req.params.id);
+
+    // Recalculate progress after deletion
+    await recalculateMilestoneAndProjectProgress(milestoneId, projectId);
 
     res.status(200).json({
       success: true,
@@ -993,6 +1028,11 @@ exports.createMilestone = async (req, res) => {
   try {
     const milestone = await Milestone.create(req.body);
 
+    // Recalculate Project Progress if necessary
+    if (milestone.projectId) {
+      await recalculateMilestoneAndProjectProgress(milestone._id, milestone.projectId);
+    }
+
     res.status(201).json({
       success: true,
       data: milestone,
@@ -1008,8 +1048,7 @@ exports.createMilestone = async (req, res) => {
 // Get All Milestones
 exports.getAllMilestones = async (req, res) => {
   try {
-    const milestones = await Milestone.find()
-      .populate("projectId", "projectName clientName");
+    const milestones = await Milestone.find().populate("projectId", "projectName clientName");
 
     res.status(200).json({
       success: true,
@@ -1050,9 +1089,15 @@ exports.completeMilestone = async (req, res) => {
       req.params.id,
       {
         status: "completed",
+        progress: 100,
+        completedAt: new Date(),
       },
       { new: true }
     );
+
+    if (milestone) {
+      await recalculateMilestoneAndProjectProgress(milestone._id, milestone.projectId);
+    }
 
     res.status(200).json({
       success: true,
@@ -1070,17 +1115,24 @@ exports.completeMilestone = async (req, res) => {
 // DAILY UPDATE CONTROLLER
 // ======================================================
 
-// Add Daily Update
+// Add Daily Update (Updates Task Progress & Cascades to Milestone + Project)
 exports.addDailyUpdate = async (req, res) => {
   try {
     const update = await DailyUpdate.create(req.body);
 
-    await Task.findByIdAndUpdate(
+    const task = await Task.findByIdAndUpdate(
       req.body.taskId,
       {
         progress: req.body.progress,
-      }
+        status: req.body.progress === 100 ? "completed" : "in_progress",
+        completedAt: req.body.progress === 100 ? new Date() : null,
+      },
+      { new: true }
     );
+
+    if (task) {
+      await recalculateMilestoneAndProjectProgress(task.milestoneId, task.projectId);
+    }
 
     res.status(201).json({
       success: true,
