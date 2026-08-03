@@ -118,7 +118,7 @@ const taskSchema = new mongoose.Schema(
     // For employee assignments (User ID)
     assignedEmployee: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "User",
+      ref: "Employee",
       default: null,
     },
 

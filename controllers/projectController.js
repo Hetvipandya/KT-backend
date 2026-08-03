@@ -1623,50 +1623,123 @@ exports.deleteProject = async (req, res) => {
 // Create Task
 exports.createTask = async (req, res) => {
   try {
-    const task = await Task.create(req.body);
+    const taskData = { ...req.body };
 
+    // Auto assign employee/intern from project if not provided
+    if (taskData.projectId) {
+      const project = await Project.findById(taskData.projectId);
+
+      if (!project) {
+        return res.status(404).json({
+          success: false,
+          message: "Project not found",
+        });
+      }
+
+      // If employee is not sent in request
+      if (!taskData.assignedEmployee && project.employees.length > 0) {
+        taskData.assignedEmployee = project.employees[0];
+      }
+
+      // If intern is not sent in request
+      if (!taskData.assignedIntern && project.interns.length > 0) {
+        taskData.assignedIntern = project.interns[0];
+      }
+
+      // Auto assign creator if not provided
+      if (!taskData.assignedBy && req.user) {
+        taskData.assignedBy = req.user._id;
+      }
+    }
+
+    // Create Task
+    const task = await Task.create(taskData);
+
+    // Populate Task
     const populatedTask = await Task.findById(task._id)
-      .populate("assignedEmployee", "name email")
+      .populate("assignedEmployee", "firstName lastName email")
       .populate("assignedIntern", "name email")
       .populate("assignedBy", "name email");
 
-    // Update Milestone Progress
+    // ---------------- Milestone Progress ----------------
     if (task.milestoneId) {
       const tasks = await Task.find({
         milestoneId: task.milestoneId,
       });
 
       const totalTasks = tasks.length;
-      const completedTasks = tasks.filter((t) => t.status === "completed").length;
-      const milestoneProgress = totalTasks === 0 ? 0 : Math.round((completedTasks / totalTasks) * 100);
+
+      const completedTasks = tasks.filter(
+        (t) => t.status === "completed"
+      ).length;
+
+      const milestoneProgress =
+        totalTasks === 0
+          ? 0
+          : Math.round((completedTasks / totalTasks) * 100);
 
       let milestoneStatus = "pending";
-      if (milestoneProgress > 0 && milestoneProgress < 100) milestoneStatus = "in_progress";
-      if (milestoneProgress === 100) milestoneStatus = "completed";
 
-      const milestone = await Milestone.findByIdAndUpdate(
-        task.milestoneId,
-        {
-          progress: milestoneProgress,
-          status: milestoneStatus,
-          completedAt: milestoneProgress === 100 ? new Date() : null,
-        },
-        { new: true }
-      );
+      if (
+        milestoneProgress > 0 &&
+        milestoneProgress < 100
+      ) {
+        milestoneStatus = "in_progress";
+      }
 
-      // Update Project Progress
+      if (milestoneProgress === 100) {
+        milestoneStatus = "completed";
+      }
+
+      const milestone =
+        await Milestone.findByIdAndUpdate(
+          task.milestoneId,
+          {
+            progress: milestoneProgress,
+            status: milestoneStatus,
+            completedAt:
+              milestoneProgress === 100
+                ? new Date()
+                : null,
+          },
+          { new: true }
+        );
+
+      // ---------------- Project Progress ----------------
       if (milestone) {
         const milestones = await Milestone.find({
           projectId: milestone.projectId,
         });
 
-        const totalMilestones = milestones.length;
-        const completedMilestones = milestones.filter((m) => m.status === "completed").length;
-        const projectProgress = totalMilestones === 0 ? 0 : Math.round((completedMilestones / totalMilestones) * 100);
+        const totalMilestones =
+          milestones.length;
+
+        const completedMilestones =
+          milestones.filter(
+            (m) => m.status === "completed"
+          ).length;
+
+        const projectProgress =
+          totalMilestones === 0
+            ? 0
+            : Math.round(
+                (completedMilestones /
+                  totalMilestones) *
+                  100
+              );
 
         let projectStatus = "pending";
-        if (projectProgress > 0 && projectProgress < 100) projectStatus = "in_progress";
-        if (projectProgress === 100) projectStatus = "completed";
+
+        if (
+          projectProgress > 0 &&
+          projectProgress < 100
+        ) {
+          projectStatus = "in_progress";
+        }
+
+        if (projectProgress === 100) {
+          projectStatus = "completed";
+        }
 
         await Project.findByIdAndUpdate(
           milestone.projectId,
@@ -1678,13 +1751,15 @@ exports.createTask = async (req, res) => {
       }
     }
 
-    res.status(201).json({
+    return res.status(201).json({
       success: true,
       message: "Task created successfully",
       data: populatedTask,
     });
   } catch (error) {
-    res.status(500).json({
+    console.error("Create Task Error:", error);
+
+    return res.status(500).json({
       success: false,
       message: error.message,
     });
