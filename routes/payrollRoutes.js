@@ -8,7 +8,7 @@ const {
     getSalaryStructureByUserId,
   updateSalaryStructure, 
   processPayroll,
-  generatePayslip, 
+  generatePayslip,  
   getPayroll,
   getPayslips,
   markSalaryPaid, 
