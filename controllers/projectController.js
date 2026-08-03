@@ -4,7 +4,7 @@ const Milestone = require("../models/milestoneModel");
 const DailyUpdate = require("../models/dailyUpdateModel");
 const User = require("../models/User");
 const Employee = require("../models/Employee");
-const Team = require("../models/Team");
+const Team = require("../models/Team"); 
 
 // ======================================================
 // HELPER FUNCTIONS FOR TEAM & PROGRESS MANAGEMENT
@@ -61,6 +61,32 @@ const resolveProjectTeamLeadUser = async (project) => {
   return null;
 };
 
+const resolveProjectTeamLeadEmployee = async (project) => {
+  if (!project) {
+    return null;
+  }
+
+  if (project.teamLeadEmployee) {
+    return project.teamLeadEmployee;
+  }
+
+  if (project.teamLeadUser) {
+    const employee = await Employee.findOne({ userID: project.teamLeadUser }).select("_id");
+    if (employee?._id) {
+      return employee._id;
+    }
+  }
+
+  if (project.teamLead) {
+    const team = await Team.findById(project.teamLead).select("teamLeadEmployee");
+    if (team?.teamLeadEmployee) {
+      return team.teamLeadEmployee;
+    }
+  }
+
+  return null;
+};
+
 // Helper: Build Task Assignment Objects
 const buildProjectAssignmentTasks = ({
   projectId,
@@ -69,6 +95,7 @@ const buildProjectAssignmentTasks = ({
   interns = [],
   assignedBy = null,
   assignedTeamLead = null,
+  assignedTeamLeadEmployee = null,
   employeeUserMap = {},
   internUserMap = {},
 }) => {
@@ -79,12 +106,13 @@ const buildProjectAssignmentTasks = ({
   const tasks = [];
   const seen = new Set();
 
-  const addTask = ({ userId, role, label }) => {
-    if (!userId) {
+  const addTask = ({ employeeId, internId, assignedUserId, role, label }) => {
+    const validUserId = assignedUserId || assignedTeamLead || assignedBy || null;
+    if (!validUserId && !employeeId && !internId) {
       return;
     }
 
-    const uniqueKey = `${String(projectId)}:${String(userId)}:${role}:${label}`;
+    const uniqueKey = `${String(projectId)}:${String(employeeId || internId || assignedUserId || "unknown")}:${role}:${label}`;
     if (seen.has(uniqueKey)) {
       return;
     }
@@ -96,8 +124,9 @@ const buildProjectAssignmentTasks = ({
       milestoneId: null,
       taskTitle: `${projectName || "Project"} - ${label}`,
       taskDescription: `Project assignment for ${projectName || "Project"}.`,
-      assignedBy: assignedBy || assignedTeamLead || userId,
+      assignedBy: assignedBy || assignedTeamLead || assignedUserId || null,
       assignedTeamLeadUser: assignedTeamLead || null,
+      assignedTeamLeadEmployee: assignedTeamLeadEmployee || null,
       dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
       estimatedHours: 0,
       priority: "medium",
@@ -111,10 +140,10 @@ const buildProjectAssignmentTasks = ({
     };
 
     if (role === "employee") {
-      taskData.assignedEmployee = userId;
+      taskData.assignedEmployee = employeeId || null;
       taskData.assignedIntern = null;
     } else if (role === "intern") {
-      taskData.assignedIntern = userId;
+      taskData.assignedIntern = internId || null;
       taskData.assignedEmployee = null;
     }
 
@@ -123,17 +152,17 @@ const buildProjectAssignmentTasks = ({
 
   employees.forEach((employeeId, index) => {
     const userId = employeeUserMap[String(employeeId)] || employeeUserMap[employeeId];
-    if (!userId) {
+    if (!employeeId) {
       return;
     }
     const employeeLabel = `Employee ${index + 1}`;
-    addTask({ userId, role: "employee", label: employeeLabel });
+    addTask({ employeeId, assignedUserId: userId, role: "employee", label: employeeLabel });
   });
 
   interns.forEach((internId, index) => {
     const userId = internUserMap[String(internId)] || internUserMap[internId] || internId;
     const internLabel = `Intern ${index + 1}`;
-    addTask({ userId, role: "intern", label: internLabel });
+    addTask({ internId, assignedUserId: userId, role: "intern", label: internLabel });
   });
 
   return tasks;
@@ -148,6 +177,7 @@ const autoCreateProjectTasks = async ({ project, assignedBy }) => {
   const employees = Array.isArray(project.employees) ? project.employees : [];
   const interns = Array.isArray(project.interns) ? project.interns : [];
   const assignedTeamLead = await resolveProjectTeamLeadUser(project);
+  const assignedTeamLeadEmployee = await resolveProjectTeamLeadEmployee(project);
 
   if (employees.length === 0 && interns.length === 0) {
     return [];
@@ -181,6 +211,7 @@ const autoCreateProjectTasks = async ({ project, assignedBy }) => {
     interns,
     assignedBy: assignedBy || assignedTeamLead || null,
     assignedTeamLead,
+    assignedTeamLeadEmployee,
     employeeUserMap,
     internUserMap,
   });
@@ -721,6 +752,9 @@ exports.createTask = async (req, res) => {
         });
       }
 
+      const resolvedTeamLeadUser = await resolveProjectTeamLeadUser(project);
+      const resolvedTeamLeadEmployee = await resolveProjectTeamLeadEmployee(project);
+
       if (!taskData.assignedEmployee && project.employees && project.employees.length > 0) {
         taskData.assignedEmployee = project.employees[0];
       }
@@ -729,16 +763,16 @@ exports.createTask = async (req, res) => {
         taskData.assignedIntern = project.interns[0];
       }
 
-      if (!taskData.assignedTeamLeadUser && project.teamLeadUser) {
-        taskData.assignedTeamLeadUser = project.teamLeadUser;
+      if (!taskData.assignedTeamLeadUser && resolvedTeamLeadUser) {
+        taskData.assignedTeamLeadUser = resolvedTeamLeadUser;
       }
 
-      if (!taskData.assignedTeamLeadEmployee && project.teamLeadEmployee) {
-        taskData.assignedTeamLeadEmployee = project.teamLeadEmployee;
+      if (!taskData.assignedTeamLeadEmployee && resolvedTeamLeadEmployee) {
+        taskData.assignedTeamLeadEmployee = resolvedTeamLeadEmployee;
       }
 
       if (!taskData.assignedBy) {
-        taskData.assignedBy = req.user?._id || taskData.assignedTeamLeadUser || null;
+        taskData.assignedBy = req.user?._id || resolvedTeamLeadUser || taskData.assignedTeamLeadUser || null;
       }
     }
 

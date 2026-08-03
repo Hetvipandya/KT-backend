@@ -9,7 +9,7 @@ const {
   getAllProjects,
   getSingleProject,
   getProjectMembers,
-  assignTeamLead,
+  assignTeamLead, 
   assignEmployees,
   assignInterns,
   updateProjectStatus,
