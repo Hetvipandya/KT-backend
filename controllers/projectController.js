@@ -87,6 +87,21 @@ const resolveProjectTeamLeadEmployee = async (project) => {
   return null;
 };
 
+const resolveAssignedUserId = async ({ assignedEmployee, assignedIntern }) => {
+  if (assignedEmployee) {
+    const employee = await Employee.findById(assignedEmployee).select("userID");
+    if (employee?.userID) {
+      return employee.userID;
+    }
+  }
+
+  if (assignedIntern) {
+    return assignedIntern;
+  }
+
+  return null;
+};
+
 // Helper: Build Task Assignment Objects
 const buildProjectAssignmentTasks = ({
   projectId,
@@ -771,8 +786,18 @@ exports.createTask = async (req, res) => {
         taskData.assignedTeamLeadEmployee = resolvedTeamLeadEmployee;
       }
 
+      const fallbackAssigneeUser = await resolveAssignedUserId({
+        assignedEmployee: taskData.assignedEmployee,
+        assignedIntern: taskData.assignedIntern,
+      });
+
       if (!taskData.assignedBy) {
-        taskData.assignedBy = req.user?._id || resolvedTeamLeadUser || taskData.assignedTeamLeadUser || null;
+        taskData.assignedBy =
+          req.user?._id ||
+          resolvedTeamLeadUser ||
+          taskData.assignedTeamLeadUser ||
+          fallbackAssigneeUser ||
+          null;
       }
     }
 
