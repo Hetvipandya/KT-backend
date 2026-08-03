@@ -603,7 +603,7 @@ exports.createTask = async (req, res) => {
 
     // 2. Populate the task with assignedTo details
     const populatedTask = await Task.findById(task._id)
-      .populate("assignedTo", "name email");
+      .populate("assignedBy", "name email");
 
     // ==========================
     // Update Milestone Progress
@@ -712,7 +712,7 @@ exports.getProjectTasks = async (req, res) => {
     const tasks = await Task.find({
       projectId: req.params.projectId,
     })
-      .populate("assignedTo", "name email");
+      .populate("assignedBy", "name email");
 
     res.status(200).json({
       success: true,
@@ -888,7 +888,7 @@ exports.getProjectTasks =
             req.params.projectId,
         })
           .populate(
-            "assignedTo",
+            "assignedBy",
             "name email"
           );
 
