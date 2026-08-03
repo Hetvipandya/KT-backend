@@ -129,6 +129,12 @@ const taskSchema = new mongoose.Schema(
       default: null,
     },
 
+       assignedTeamLead: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Team",
+      default: null,
+    }, 
+
     assignedBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",

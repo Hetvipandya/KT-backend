@@ -1625,7 +1625,7 @@ exports.createTask = async (req, res) => {
   try {
     const taskData = { ...req.body };
 
-    // Auto assign employee/intern from project if not provided
+    // ================= Auto Assign From Project =================
     if (taskData.projectId) {
       const project = await Project.findById(taskData.projectId);
 
@@ -1636,32 +1636,58 @@ exports.createTask = async (req, res) => {
         });
       }
 
-      // If employee is not sent in request
-      if (!taskData.assignedEmployee && project.employees.length > 0) {
+      // Auto Assign Employee
+      if (
+        !taskData.assignedEmployee &&
+        project.employees &&
+        project.employees.length > 0
+      ) {
         taskData.assignedEmployee = project.employees[0];
       }
 
-      // If intern is not sent in request
-      if (!taskData.assignedIntern && project.interns.length > 0) {
+      // Auto Assign Intern
+      if (
+        !taskData.assignedIntern &&
+        project.interns &&
+        project.interns.length > 0
+      ) {
         taskData.assignedIntern = project.interns[0];
       }
 
-      // Auto assign creator if not provided
+      // Auto Assign Team
+      if (!taskData.assignedTeamLead && project.teamLeadUser) {
+        const team = await Team.findOne({
+          teamLead: project.teamLeadUser,
+        });
+
+        if (team) {
+          taskData.assignedTeamLead = team._id;
+        }
+      }
+
+      // Auto Assign Creator
       if (!taskData.assignedBy && req.user) {
         taskData.assignedBy = req.user._id;
       }
     }
 
-    // Create Task
+    // ================= Create Task =================
     const task = await Task.create(taskData);
 
-    // Populate Task
+    // ================= Populate =================
     const populatedTask = await Task.findById(task._id)
       .populate("assignedEmployee", "firstName lastName email")
       .populate("assignedIntern", "name email")
+      .populate({
+        path: "assignedTeamLead",
+        populate: {
+          path: "teamLead",
+          select: "name email",
+        },
+      })
       .populate("assignedBy", "name email");
 
-    // ---------------- Milestone Progress ----------------
+    // ================= Update Milestone =================
     if (task.milestoneId) {
       const tasks = await Task.find({
         milestoneId: task.milestoneId,
@@ -1685,9 +1711,7 @@ exports.createTask = async (req, res) => {
         milestoneProgress < 100
       ) {
         milestoneStatus = "in_progress";
-      }
-
-      if (milestoneProgress === 100) {
+      } else if (milestoneProgress === 100) {
         milestoneStatus = "completed";
       }
 
@@ -1705,14 +1729,13 @@ exports.createTask = async (req, res) => {
           { new: true }
         );
 
-      // ---------------- Project Progress ----------------
+      // ================= Update Project =================
       if (milestone) {
         const milestones = await Milestone.find({
           projectId: milestone.projectId,
         });
 
-        const totalMilestones =
-          milestones.length;
+        const totalMilestones = milestones.length;
 
         const completedMilestones =
           milestones.filter(
@@ -1735,9 +1758,7 @@ exports.createTask = async (req, res) => {
           projectProgress < 100
         ) {
           projectStatus = "in_progress";
-        }
-
-        if (projectProgress === 100) {
+        } else if (projectProgress === 100) {
           projectStatus = "completed";
         }
 
