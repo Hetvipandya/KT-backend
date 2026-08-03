@@ -16,7 +16,7 @@ const getProgressForStatus = (status) => {
     default:
       return null;
   }
-};
+}; 
 
 const isCompletedStatus = (status) => status === "Completed";
 

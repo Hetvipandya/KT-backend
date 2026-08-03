@@ -4,7 +4,138 @@ const Milestone = require("../models/milestoneModel");
 const DailyUpdate = require("../models/dailyUpdateModel");
 const User = require("../models/User");
 const Employee = require("../models/Employee");
+const TaskManagement = require("../models/TaskManagement");
 
+const buildProjectAssignmentTasks = ({
+  projectId,
+  projectName,
+  employees = [],
+  interns = [],
+  assignedBy = null,
+  employeeUserMap = {},
+  internUserMap = {},
+}) => {
+  if (!projectId) {
+    return [];
+  }
+
+  const tasks = [];
+  const seen = new Set();
+
+  const addTask = ({ userId, role, label }) => {
+    if (!userId) {
+      return;
+    }
+
+    const uniqueKey = `${String(projectId)}:${String(userId)}:${role}:${label}`;
+    if (seen.has(uniqueKey)) {
+      return;
+    }
+
+    seen.add(uniqueKey);
+    tasks.push({
+      projectId,
+      milestoneId: null,
+      taskTitle: `${projectName || "Project"} - ${label}`,
+      taskDescription: `Project assignment for ${projectName || "Project"}.`,
+      assignedEmployee: userId,
+      assignedIntern: role === "intern" ? userId : null,
+      assignedBy: assignedBy || userId,
+      dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      estimatedHours: 0,
+      priority: "medium",
+      status: "Pending",
+      progress: 0,
+      taskDependencies: [],
+      subTasks: [],
+      checklist: [],
+      comments: [],
+      attachments: [],
+    });
+  };
+
+  employees.forEach((employeeId, index) => {
+    const userId = employeeUserMap[String(employeeId)] || employeeUserMap[employeeId];
+    if (!userId) {
+      return;
+    }
+
+    const employeeLabel = `Employee ${index + 1}`;
+    addTask({ userId, role: "employee", label: employeeLabel });
+  });
+
+  interns.forEach((internId, index) => {
+    const userId = internUserMap[String(internId)] || internUserMap[internId] || internId;
+    const internLabel = `Intern ${index + 1}`;
+    addTask({ userId, role: "intern", label: internLabel });
+  });
+
+  return tasks;
+};
+
+const autoCreateProjectTasks = async ({ project, assignedBy }) => {
+  if (!project) {
+    return [];
+  }
+
+  const employees = Array.isArray(project.employees) ? project.employees : [];
+  const interns = Array.isArray(project.interns) ? project.interns : [];
+
+  if (employees.length === 0 && interns.length === 0) {
+    return [];
+  }
+
+  const employeeRecords = employees.length
+    ? await Employee.find({ _id: { $in: employees } }).select("_id userID firstName lastName")
+    : [];
+
+  const employeeUserMap = {};
+  employeeRecords.forEach((employee) => {
+    if (employee.userID) {
+      employeeUserMap[String(employee._id)] = employee.userID;
+    }
+  });
+
+  const internUserMap = {};
+  interns.forEach((internId) => {
+    if (internId) {
+      internUserMap[String(internId)] = internId;
+    }
+  });
+
+  const tasks = buildProjectAssignmentTasks({
+    projectId: project._id,
+    projectName: project.projectName,
+    employees,
+    interns,
+    assignedBy: assignedBy || project.teamLeadUser || null,
+    employeeUserMap,
+    internUserMap,
+  });
+
+  if (!tasks.length) {
+    return [];
+  }
+
+  const createdTasks = [];
+  for (const task of tasks) {
+    const existingTask = await TaskManagement.findOne({
+      projectId: task.projectId,
+      assignedEmployee: task.assignedEmployee,
+      taskTitle: task.taskTitle,
+    });
+
+    if (existingTask) {
+      createdTasks.push(existingTask);
+      continue;
+    }
+
+    const createdTask = await TaskManagement.create(task);
+    createdTasks.push(createdTask);
+  }
+
+  return createdTasks;
+};
 
 // ====================================================== 
 // PROJECT CONTROLLER
@@ -12,11 +143,11 @@ const Employee = require("../models/Employee");
 
 // Create Project
 exports.createProject = async (req, res) => {
-  try { 
-    const uploadedFiles = req.files 
+  try {
+    const uploadedFiles = req.files
       ? req.files.map((file) => ({
           fileName: file.originalname,
-          fileUrl: file.path, // Cloudinary URL
+          fileUrl: file.path,
         }))
       : [];
 
@@ -26,13 +157,19 @@ exports.createProject = async (req, res) => {
     });
 
     const populatedProject = await Project.findById(project._id)
-      .populate("teamLead", "name email")
-      .populate("employees", "name email")
+      .populate("teamLeadUser", "name email")
+      .populate("teamLeadEmployee", "firstName lastName email")
+      .populate("employees", "firstName lastName email")
       .populate("interns", "name email");
+
+    await autoCreateProjectTasks({
+      project: populatedProject || project,
+      assignedBy: req.user?._id || req.body.assignedBy || project.teamLeadUser || null,
+    });
 
     res.status(201).json({
       success: true,
-      data: populatedProject,
+      data: populatedProject || project,
     });
   } catch (error) {
     console.log(error);
@@ -72,7 +209,7 @@ exports.getSingleProject =
   async (req, res) => {
     try {
       const project =
-        await Project.findById(
+        await Project.findById( 
           req.params.id
         )
           .populate(
@@ -207,7 +344,12 @@ exports.assignEmployees = async (req, res) => {
         },
       },
       { new: true }
-    ).populate("employees", "name email");
+    ).populate("employees", "firstName lastName email");
+
+    await autoCreateProjectTasks({
+      project: project || (await Project.findById(req.params.id)),
+      assignedBy: req.user?._id || req.body.assignedBy || null,
+    });
 
     res.status(200).json({
       success: true,
@@ -242,6 +384,11 @@ exports.assignInterns =
           },
           { new: true }
         ).populate("interns", "name email");
+
+      await autoCreateProjectTasks({
+        project: project || (await Project.findById(req.params.id)),
+        assignedBy: req.user?._id || req.body.assignedBy || null,
+      });
 
       res.status(200).json({
         success: true,
