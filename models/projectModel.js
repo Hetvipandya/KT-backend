@@ -83,7 +83,7 @@ const projectSchema = new mongoose.Schema(
     },
 
     // ==========================
-    // EMPLOYEES
+    // EMPLOYEES 
     // ==========================
 
     employees: [
