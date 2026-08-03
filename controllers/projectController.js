@@ -9,12 +9,43 @@ const Employee = require("../models/Employee");
 // BUILD TASK HELPER FUNCTIONS
 // ======================================================
 
+const resolveProjectTeamLeadUser = async (project) => {
+  if (!project) {
+    return null;
+  }
+
+  if (project.teamLeadUser) {
+    return project.teamLeadUser;
+  }
+
+  if (project.teamLeadEmployee) {
+    const employeeRecord = await Employee.findById(project.teamLeadEmployee).select("userID");
+    if (employeeRecord && employeeRecord.userID) {
+      return employeeRecord.userID;
+    }
+  }
+
+  if (project.teamLead) {
+    const teamLeadValue = project.teamLead;
+    if (teamLeadValue && typeof teamLeadValue === "string") {
+      return teamLeadValue;
+    }
+
+    if (teamLeadValue && teamLeadValue.userID) {
+      return teamLeadValue.userID;
+    }
+  }
+
+  return null;
+};
+
 const buildProjectAssignmentTasks = ({
   projectId,
   projectName,
   employees = [],
   interns = [],
   assignedBy = null,
+  assignedTeamLead = null,
   employeeUserMap = {},
   internUserMap = {},
 }) => {
@@ -42,7 +73,8 @@ const buildProjectAssignmentTasks = ({
       milestoneId: null,
       taskTitle: `${projectName || "Project"} - ${label}`,
       taskDescription: `Project assignment for ${projectName || "Project"}.`,
-      assignedBy: assignedBy || userId,
+      assignedBy: assignedBy || assignedTeamLead || userId,
+      assignedTeamLead: assignedTeamLead || null,
       dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
       estimatedHours: 0,
       priority: "medium",
@@ -93,6 +125,7 @@ const autoCreateProjectTasks = async ({ project, assignedBy }) => {
 
   const employees = Array.isArray(project.employees) ? project.employees : [];
   const interns = Array.isArray(project.interns) ? project.interns : [];
+  const assignedTeamLead = await resolveProjectTeamLeadUser(project);
 
   if (employees.length === 0 && interns.length === 0) {
     return [];
@@ -127,7 +160,8 @@ const autoCreateProjectTasks = async ({ project, assignedBy }) => {
     projectName: project.projectName,
     employees,
     interns,
-    assignedBy: assignedBy || project.teamLeadUser || null,
+    assignedBy: assignedBy || assignedTeamLead || null,
+    assignedTeamLead,
     employeeUserMap,
     internUserMap,
   });
@@ -158,6 +192,9 @@ const autoCreateProjectTasks = async ({ project, assignedBy }) => {
 
   return createdTasks;
 };
+
+module.exports.buildProjectAssignmentTasks = buildProjectAssignmentTasks;
+module.exports.autoCreateProjectTasks = autoCreateProjectTasks;
 
 // ======================================================
 // PROJECT CONTROLLER
@@ -256,6 +293,9 @@ exports.assignTeamLead = async (req, res) => {
   try {
     const { teamLeadId } = req.body;
 
+    let resolvedTeamLeadUser = null;
+    let resolvedTeamLeadEmployee = null;
+
     if (teamLeadId) {
       const user = await User.findById(teamLeadId);
       if (user) {
@@ -269,15 +309,24 @@ exports.assignTeamLead = async (req, res) => {
           user.role = "team lead";
           await user.save();
         }
+        resolvedTeamLeadUser = user._id;
+
         const linkedEmp = await Employee.findOne({ userID: user._id });
-        if (linkedEmp && !linkedEmp.isTeamLead) {
-          linkedEmp.isTeamLead = true;
-          await linkedEmp.save();
+        if (linkedEmp) {
+          resolvedTeamLeadEmployee = linkedEmp._id;
+          if (!linkedEmp.isTeamLead) {
+            linkedEmp.isTeamLead = true;
+            await linkedEmp.save();
+          }
         }
       }
 
       const emp = await Employee.findById(teamLeadId);
       if (emp) {
+        resolvedTeamLeadEmployee = emp._id;
+        if (emp.userID) {
+          resolvedTeamLeadUser = emp.userID;
+        }
         if (!emp.isTeamLead) {
           emp.isTeamLead = true;
           await emp.save();
@@ -302,10 +351,14 @@ exports.assignTeamLead = async (req, res) => {
 
     const project = await Project.findByIdAndUpdate(
       req.params.id,
-      { teamLead: teamLeadId },
+      {
+        teamLeadUser: resolvedTeamLeadUser || null,
+        teamLeadEmployee: resolvedTeamLeadEmployee || null,
+      },
       { new: true }
     )
-      .populate("teamLead", "name email role")
+      .populate("teamLeadUser", "name email role")
+      .populate("teamLeadEmployee", "firstName lastName email employeeID")
       .populate("employees", "name email")
       .populate("interns", "name email");
 
@@ -499,54 +552,46 @@ exports.createTask = async (req, res) => {
     const taskData = { ...req.body };
 
     // ================= Auto Assign From Project =================
-   // ================= Auto Assign From Project =================
-if (taskData.projectId) {
-  const project = await Project.findById(taskData.projectId);
+    if (taskData.projectId) {
+      const project = await Project.findById(taskData.projectId);
 
-  if (!project) {
-    return res.status(404).json({
-      success: false,
-      message: "Project not found",
-    });
-  }
+      if (!project) {
+        return res.status(404).json({
+          success: false,
+          message: "Project not found",
+        });
+      }
 
-  // Employee
-  if (!taskData.assignedEmployee && project.employees.length > 0) {
-    taskData.assignedEmployee = project.employees[0];
-  }
+      // Employee
+      if (!taskData.assignedEmployee && project.employees && project.employees.length > 0) {
+        taskData.assignedEmployee = project.employees[0];
+      }
 
-  // Intern
-  if (!taskData.assignedIntern && project.interns.length > 0) {
-    taskData.assignedIntern = project.interns[0];
-  }
+      // Intern
+      if (!taskData.assignedIntern && project.interns && project.interns.length > 0) {
+        taskData.assignedIntern = project.interns[0];
+      }
 
-  // ================= TEAM LEAD =================
-  if (!taskData.assignedTeamLead && project.teamLead) {
-    const team = await Team.findById(project.teamLead);
+      // ================= TEAM LEAD =================
+      if (!taskData.assignedTeamLead) {
+        taskData.assignedTeamLead = await resolveProjectTeamLeadUser(project);
+      }
 
-    if (team && team.teamLeadUser) {
-      taskData.assignedTeamLead = team.teamLeadUser;
+      // Assigned By
+      if (!taskData.assignedBy) {
+        taskData.assignedBy = req.user?._id || taskData.assignedTeamLead || null;
+      }
     }
-  }
-
-  // Assigned By
-  if (!taskData.assignedBy) {
-    taskData.assignedBy =
-      req.user?._id ||
-      taskData.assignedTeamLead ||
-      null;
-  }
-}
 
     // ================= Create Task =================
     const task = await Task.create(taskData);
 
     // ================= Populate =================
     const populatedTask = await Task.findById(task._id)
-     .populate("assignedEmployee", "firstName lastName email")
-  .populate("assignedIntern", "name email")
-  .populate("assignedTeamLead", "name email")
-  .populate("assignedBy", "name email");
+      .populate("assignedEmployee", "firstName lastName email")
+      .populate("assignedIntern", "name email")
+      .populate("assignedTeamLead", "name email")
+      .populate("assignedBy", "name email");
 
     // ================= Update Milestone =================
     if (task.milestoneId) {
@@ -555,40 +600,25 @@ if (taskData.projectId) {
       });
 
       const totalTasks = tasks.length;
-
-      const completedTasks = tasks.filter(
-        (t) => t.status === "completed"
-      ).length;
-
-      const milestoneProgress =
-        totalTasks === 0
-          ? 0
-          : Math.round((completedTasks / totalTasks) * 100);
+      const completedTasks = tasks.filter((t) => t.status === "completed").length;
+      const milestoneProgress = totalTasks === 0 ? 0 : Math.round((completedTasks / totalTasks) * 100);
 
       let milestoneStatus = "pending";
-
-      if (
-        milestoneProgress > 0 &&
-        milestoneProgress < 100
-      ) {
+      if (milestoneProgress > 0 && milestoneProgress < 100) {
         milestoneStatus = "in_progress";
       } else if (milestoneProgress === 100) {
         milestoneStatus = "completed";
       }
 
-      const milestone =
-        await Milestone.findByIdAndUpdate(
-          task.milestoneId,
-          {
-            progress: milestoneProgress,
-            status: milestoneStatus,
-            completedAt:
-              milestoneProgress === 100
-                ? new Date()
-                : null,
-          },
-          { new: true }
-        );
+      const milestone = await Milestone.findByIdAndUpdate(
+        task.milestoneId,
+        {
+          progress: milestoneProgress,
+          status: milestoneStatus,
+          completedAt: milestoneProgress === 100 ? new Date() : null,
+        },
+        { new: true }
+      );
 
       // ================= Update Project =================
       if (milestone) {
@@ -597,27 +627,11 @@ if (taskData.projectId) {
         });
 
         const totalMilestones = milestones.length;
-
-        const completedMilestones =
-          milestones.filter(
-            (m) => m.status === "completed"
-          ).length;
-
-        const projectProgress =
-          totalMilestones === 0
-            ? 0
-            : Math.round(
-                (completedMilestones /
-                  totalMilestones) *
-                  100
-              );
+        const completedMilestones = milestones.filter((m) => m.status === "completed").length;
+        const projectProgress = totalMilestones === 0 ? 0 : Math.round((completedMilestones / totalMilestones) * 100);
 
         let projectStatus = "pending";
-
-        if (
-          projectProgress > 0 &&
-          projectProgress < 100
-        ) {
+        if (projectProgress > 0 && projectProgress < 100) {
           projectStatus = "in_progress";
         } else if (projectProgress === 100) {
           projectStatus = "completed";
