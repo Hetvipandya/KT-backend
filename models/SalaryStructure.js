@@ -127,7 +127,7 @@ const salaryStructureSchema = new mongoose.Schema(
   }
 );
 
-salaryStructureSchema.pre("save", function (next) {
+salaryStructureSchema.pre("save", async function () {
   this.grossSalary =
     Number(this.basicSalary) +
     Number(this.hra) +
@@ -141,8 +141,6 @@ salaryStructureSchema.pre("save", function (next) {
     this.grossSalary -
     Number(this.fixedDeduction) -
     tdsAmount;
-
-  next();
 });
 
 salaryStructureSchema.index(
