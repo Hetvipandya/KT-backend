@@ -74,6 +74,10 @@ router.put(
 router.post(
   "/milestone/create",
   createMilestone
+);
+router.post(
+  "/milestones/create",
+  createMilestone
 );  
 
 // GET MILESTONES

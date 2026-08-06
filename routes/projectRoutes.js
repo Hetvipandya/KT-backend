@@ -108,6 +108,10 @@ router.post(
   "/milestone/create",
   createMilestone
 );
+router.post(
+  "/milestones/create",
+  createMilestone
+);
 
 // Get All Milestones
 router.get(
