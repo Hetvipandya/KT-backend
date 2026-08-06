@@ -184,79 +184,178 @@ const buildProjectAssignmentTasks = ({
 };
 
 // Helper: Auto Create Tasks on Project Save / Member Assignment
+// Helper: Auto Create Tasks on Project Save / Member Assignment
 const autoCreateProjectTasks = async ({ project, assignedBy }) => {
-  if (!project) {
-    return [];
-  }
-
+  if (!project) return [];
+  
   const employees = Array.isArray(project.employees) ? project.employees : [];
   const interns = Array.isArray(project.interns) ? project.interns : [];
-  const assignedTeamLead = await resolveProjectTeamLeadUser(project);
-  const assignedTeamLeadEmployee = await resolveProjectTeamLeadEmployee(project);
-
-  if (employees.length === 0 && interns.length === 0) {
-    return [];
-  }
-
-  const employeeUserMap = {};
-  if (employees.length > 0) {
-    const employeeRecords = await Employee.find({ _id: { $in: employees } })
-      .select("_id userID firstName lastName")
-      .populate("userID", "name email");
-
-    employeeRecords.forEach((employee) => {
-      if (employee.userID) {
-        const userId = employee.userID._id || employee.userID;
-        employeeUserMap[String(employee._id)] = userId;
-      }
-    });
-  }
-
-  const internUserMap = {};
-  interns.forEach((internId) => {
-    if (internId) {
-      internUserMap[String(internId)] = internId;
-    }
-  });
-
-  const tasks = buildProjectAssignmentTasks({
+  
+  // Get team lead info
+  const teamLeadUser = await resolveProjectTeamLeadUser(project);
+  const teamLeadEmployee = await resolveProjectTeamLeadEmployee(project);
+  
+  // Create a task for team lead to oversee the project
+  const teamLeadTask = {
     projectId: project._id,
-    projectName: project.projectName,
-    employees,
-    interns,
-    assignedBy: assignedBy || assignedTeamLead || null,
-    assignedTeamLead,
-    assignedTeamLeadEmployee,
-    employeeUserMap,
-    internUserMap,
-  });
-
-  if (!tasks.length) {
-    return [];
+    milestoneId: null,
+    taskTitle: `${project.projectName} - Team Lead Oversight`,
+    taskDescription: `Team lead oversight for project ${project.projectName}`,
+    assignedBy: assignedBy || teamLeadUser || null,
+    assignedTeamLeadUser: teamLeadUser || null,
+    assignedTeamLeadEmployee: teamLeadEmployee || null,
+    dueDate: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
+    estimatedHours: 0,
+    priority: "high",
+    status: "pending",
+    progress: 0
+  };
+  
+  const allTasks = [];
+  
+  // Add team lead task if team lead exists
+  if (teamLeadUser || teamLeadEmployee) {
+    allTasks.push(teamLeadTask);
   }
-
+  
+  // Create tasks for employees
+  employees.forEach((employeeId, index) => {
+    const task = {
+      projectId: project._id,
+      milestoneId: null,
+      taskTitle: `${project.projectName} - Employee Task ${index + 1}`,
+      taskDescription: `Project assignment for ${project.projectName}.`,
+      assignedBy: assignedBy || teamLeadUser || null,
+      assignedTeamLeadUser: teamLeadUser || null,
+      assignedTeamLeadEmployee: teamLeadEmployee || null,
+      assignedEmployee: employeeId,
+      assignedIntern: null,
+      dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      estimatedHours: 0,
+      priority: "medium",
+      status: "pending",
+      progress: 0
+    };
+    allTasks.push(task);
+  });
+  
+  // Create tasks for interns
+  interns.forEach((internId, index) => {
+    const task = {
+      projectId: project._id,
+      milestoneId: null,
+      taskTitle: `${project.projectName} - Intern Task ${index + 1}`,
+      taskDescription: `Project assignment for ${project.projectName}.`,
+      assignedBy: assignedBy || teamLeadUser || null,
+      assignedTeamLeadUser: teamLeadUser || null,
+      assignedTeamLeadEmployee: teamLeadEmployee || null,
+      assignedEmployee: null,
+      assignedIntern: internId,
+      dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      estimatedHours: 0,
+      priority: "medium",
+      status: "pending",
+      progress: 0
+    };
+    allTasks.push(task);
+  });
+  
+  // Create all tasks with deduplication
   const createdTasks = [];
-  for (const task of tasks) {
+  for (const task of allTasks) {
     const existingTask = await Task.findOne({
       projectId: task.projectId,
+      taskTitle: task.taskTitle,
       $or: [
         { assignedEmployee: task.assignedEmployee },
         { assignedIntern: task.assignedIntern },
-      ],
-      taskTitle: task.taskTitle,
+        { assignedTeamLeadUser: task.assignedTeamLeadUser }
+      ]
     });
-
+    
     if (existingTask) {
       createdTasks.push(existingTask);
-      continue;
+    } else {
+      const createdTask = await Task.create(task);
+      createdTasks.push(createdTask);
     }
-
-    const createdTask = await Task.create(task);
-    createdTasks.push(createdTask);
   }
-
+  
   return createdTasks;
 };
+// const autoCreateProjectTasks = async ({ project, assignedBy }) => {
+//   if (!project) {
+//     return [];
+//   }
+
+//   const employees = Array.isArray(project.employees) ? project.employees : [];
+//   const interns = Array.isArray(project.interns) ? project.interns : [];
+//   const assignedTeamLead = await resolveProjectTeamLeadUser(project);
+//   const assignedTeamLeadEmployee = await resolveProjectTeamLeadEmployee(project);
+
+//   if (employees.length === 0 && interns.length === 0) {
+//     return [];
+//   }
+
+//   const employeeUserMap = {};
+//   if (employees.length > 0) {
+//     const employeeRecords = await Employee.find({ _id: { $in: employees } })
+//       .select("_id userID firstName lastName")
+//       .populate("userID", "name email");
+
+//     employeeRecords.forEach((employee) => {
+//       if (employee.userID) {
+//         const userId = employee.userID._id || employee.userID;
+//         employeeUserMap[String(employee._id)] = userId;
+//       }
+//     });
+//   }
+
+//   const internUserMap = {};
+//   interns.forEach((internId) => {
+//     if (internId) {
+//       internUserMap[String(internId)] = internId;
+//     }
+//   });
+
+//   const tasks = buildProjectAssignmentTasks({
+//     projectId: project._id,
+//     projectName: project.projectName,
+//     employees,
+//     interns,
+//     assignedBy: assignedBy || assignedTeamLead || null,
+//     assignedTeamLead,
+//     assignedTeamLeadEmployee,
+//     employeeUserMap,
+//     internUserMap,
+//   });
+
+//   if (!tasks.length) {
+//     return [];
+//   }
+
+//   const createdTasks = [];
+//   for (const task of tasks) {
+//     const existingTask = await Task.findOne({
+//       projectId: task.projectId,
+//       $or: [
+//         { assignedEmployee: task.assignedEmployee },
+//         { assignedIntern: task.assignedIntern },
+//       ],
+//       taskTitle: task.taskTitle,
+//     });
+
+//     if (existingTask) {
+//       createdTasks.push(existingTask);
+//       continue;
+//     }
+
+//     const createdTask = await Task.create(task);
+//     createdTasks.push(createdTask);
+//   }
+
+//   return createdTasks;
+// };
 
 // Helper: Cascading Progress Update (Task Progress -> Milestone Progress -> Project Progress)
 const recalculateMilestoneAndProjectProgress = async (milestoneId, targetProjectId = null) => {
@@ -755,108 +854,188 @@ exports.deleteProject = async (req, res) => {
 exports.createTask = async (req, res) => {
   try {
     const taskData = { ...req.body };
-
-    const explicitTeamLeadUser =
-      taskData.assignedTeamLeadUser ??
-      taskData.teamLeadUser ??
-      taskData.teamLeadUserId ??
-      null;
-
-    const explicitTeamLeadEmployee =
-      taskData.assignedTeamLeadEmployee ??
-      taskData.teamLeadEmployee ??
-      taskData.teamLeadEmployeeId ??
-      null;
-
-    const explicitAssignedBy =
-      taskData.assignedBy ??
-      taskData.assignedByUser ??
-      taskData.userId ??
-      null;
-
-    if (explicitTeamLeadUser !== null) {
-      taskData.assignedTeamLeadUser = explicitTeamLeadUser;
-    }
-
-    if (explicitTeamLeadEmployee !== null) {
-      taskData.assignedTeamLeadEmployee = explicitTeamLeadEmployee;
-    }
-
-    if (explicitAssignedBy !== null) {
-      taskData.assignedBy = explicitAssignedBy;
-    }
-
-    // Automatically Fetch & Assign From Project Members if not explicitly provided
+    
+    // STEP 1: If project exists, fetch project details
     if (taskData.projectId) {
       const project = await Project.findById(taskData.projectId);
-
+      
       if (!project) {
         return res.status(404).json({
           success: false,
-          message: "Project not found",
+          message: "Project not found"
         });
       }
-
-      const resolvedTeamLeadUser = await resolveProjectTeamLeadUser(project);
-      const resolvedTeamLeadEmployee = await resolveProjectTeamLeadEmployee(project);
-
-      if (!taskData.assignedEmployee && project.employees && project.employees.length > 0) {
+      
+      // STEP 2: Resolve team lead from project
+      const teamLead = await getProjectTeamLead(taskData.projectId);
+      
+      // STEP 3: Auto-assign team lead if not explicitly specified
+      if (!taskData.assignedTeamLeadUser && teamLead.teamLeadUser) {
+        taskData.assignedTeamLeadUser = teamLead.teamLeadUser;
+      }
+      if (!taskData.assignedTeamLeadEmployee && teamLead.teamLeadEmployee) {
+        taskData.assignedTeamLeadEmployee = teamLead.teamLeadEmployee;
+      }
+      
+      // STEP 4: Auto-assign employee/intern if not specified
+      if (!taskData.assignedEmployee && project.employees?.length > 0) {
+        // Option 1: Assign to first employee
         taskData.assignedEmployee = project.employees[0];
       }
-
-      if (!taskData.assignedIntern && project.interns && project.interns.length > 0) {
+      
+      if (!taskData.assignedIntern && project.interns?.length > 0) {
+        // Option 1: Assign to first intern
         taskData.assignedIntern = project.interns[0];
       }
-
-      if (!taskData.assignedTeamLeadUser && resolvedTeamLeadUser) {
-        taskData.assignedTeamLeadUser = resolvedTeamLeadUser;
-      }
-
-      if (!taskData.assignedTeamLeadEmployee && resolvedTeamLeadEmployee) {
-        taskData.assignedTeamLeadEmployee = resolvedTeamLeadEmployee;
-      }
-
-      const fallbackAssigneeUser = await resolveAssignedUserId({
-        assignedEmployee: taskData.assignedEmployee,
-        assignedIntern: taskData.assignedIntern,
-      });
-
+      
+      // STEP 5: Set assigned by to team lead if not specified
       if (!taskData.assignedBy) {
-        taskData.assignedBy =
-          req.user?._id ||
-          explicitAssignedBy ||
-          resolvedTeamLeadUser ||
-          taskData.assignedTeamLeadUser ||
-          fallbackAssigneeUser ||
-          null;
+        taskData.assignedBy = teamLead.teamLeadUser || req.user?._id || null;
       }
     }
-
+    
+    // STEP 6: Validate that at least one assignee exists
+    if (!taskData.assignedEmployee && !taskData.assignedIntern && !taskData.assignedTeamLeadUser) {
+      return res.status(400).json({
+        success: false,
+        message: "Task must be assigned to at least one person (employee, intern, or team lead)"
+      });
+    }
+    
+    // STEP 7: Create the task
     const task = await Task.create(taskData);
-
+    
+    // STEP 8: Populate and return
     const populatedTask = await Task.findById(task._id)
       .populate("assignedEmployee", "firstName lastName email")
       .populate("assignedIntern", "name email")
       .populate("assignedTeamLeadUser", "name email")
       .populate("assignedTeamLeadEmployee", "firstName lastName email")
       .populate("assignedBy", "name email");
-
-    // Recalculate Milestone & Project Progress
+    
+    // STEP 9: Recalculate progress
     await recalculateMilestoneAndProjectProgress(task.milestoneId, task.projectId);
-
+    
     return res.status(201).json({
       success: true,
       message: "Task created successfully",
-      data: populatedTask,
+      data: populatedTask
     });
+    
   } catch (error) {
     console.error("Create Task Error:", error);
     return res.status(500).json({
       success: false,
-      message: error.message,
+      message: error.message
     });
   }
 };
+
+// exports.createTask = async (req, res) => {
+//   try {
+//     const taskData = { ...req.body };
+
+//     const explicitTeamLeadUser =
+//       taskData.assignedTeamLeadUser ??
+//       taskData.teamLeadUser ??
+//       taskData.teamLeadUserId ??
+//       null;
+
+//     const explicitTeamLeadEmployee =
+//       taskData.assignedTeamLeadEmployee ??
+//       taskData.teamLeadEmployee ??
+//       taskData.teamLeadEmployeeId ??
+//       null;
+
+//     const explicitAssignedBy =
+//       taskData.assignedBy ??
+//       taskData.assignedByUser ??
+//       taskData.userId ??
+//       null;
+
+//     if (explicitTeamLeadUser !== null) {
+//       taskData.assignedTeamLeadUser = explicitTeamLeadUser;
+//     }
+
+//     if (explicitTeamLeadEmployee !== null) {
+//       taskData.assignedTeamLeadEmployee = explicitTeamLeadEmployee;
+//     }
+
+//     if (explicitAssignedBy !== null) {
+//       taskData.assignedBy = explicitAssignedBy;
+//     }
+
+//     // Automatically Fetch & Assign From Project Members if not explicitly provided
+//     if (taskData.projectId) {
+//       const project = await Project.findById(taskData.projectId);
+
+//       if (!project) {
+//         return res.status(404).json({
+//           success: false,
+//           message: "Project not found",
+//         });
+//       }
+
+//       const resolvedTeamLeadUser = await resolveProjectTeamLeadUser(project);
+//       const resolvedTeamLeadEmployee = await resolveProjectTeamLeadEmployee(project);
+
+//       if (!taskData.assignedEmployee && project.employees && project.employees.length > 0) {
+//         taskData.assignedEmployee = project.employees[0];
+//       }
+
+//       if (!taskData.assignedIntern && project.interns && project.interns.length > 0) {
+//         taskData.assignedIntern = project.interns[0];
+//       }
+
+//       if (!taskData.assignedTeamLeadUser && resolvedTeamLeadUser) {
+//         taskData.assignedTeamLeadUser = resolvedTeamLeadUser;
+//       }
+
+//       if (!taskData.assignedTeamLeadEmployee && resolvedTeamLeadEmployee) {
+//         taskData.assignedTeamLeadEmployee = resolvedTeamLeadEmployee;
+//       }
+
+//       const fallbackAssigneeUser = await resolveAssignedUserId({
+//         assignedEmployee: taskData.assignedEmployee,
+//         assignedIntern: taskData.assignedIntern,
+//       });
+
+//       if (!taskData.assignedBy) {
+//         taskData.assignedBy =
+//           req.user?._id ||
+//           explicitAssignedBy ||
+//           resolvedTeamLeadUser ||
+//           taskData.assignedTeamLeadUser ||
+//           fallbackAssigneeUser ||
+//           null;
+//       }
+//     }
+
+//     const task = await Task.create(taskData);
+
+//     const populatedTask = await Task.findById(task._id)
+//       .populate("assignedEmployee", "firstName lastName email")
+//       .populate("assignedIntern", "name email")
+//       .populate("assignedTeamLeadUser", "name email")
+//       .populate("assignedTeamLeadEmployee", "firstName lastName email")
+//       .populate("assignedBy", "name email");
+
+//     // Recalculate Milestone & Project Progress
+//     await recalculateMilestoneAndProjectProgress(task.milestoneId, task.projectId);
+
+//     return res.status(201).json({
+//       success: true,
+//       message: "Task created successfully",
+//       data: populatedTask,
+//     });
+//   } catch (error) {
+//     console.error("Create Task Error:", error);
+//     return res.status(500).json({
+//       success: false,
+//       message: error.message,
+//     });
+//   }
+// };
 
 // Get All Tasks
 exports.getAllTasks = async (req, res) => {
