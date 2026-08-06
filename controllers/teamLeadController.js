@@ -7,7 +7,7 @@ const Attendance =
 const DailyReport = 
   require("../models/DailyReport");
    
-const Task =
+const Task = 
   require("../models/taskModel");
 
 const User =
@@ -649,10 +649,11 @@ GET MY TEAM
 
 exports.getMyTeam = async (req, res) => {
   try {
-    // Ensure all active Team Leads (from Employee and User models) have a Team document in database
+    // Ensure all active Team Leads have a Team document
     const tlEmployees = await Employee.find({ isTeamLead: true });
-    const tlUsers = await User.find({ role: { $in: ["teamlead", "team lead"] } });
+    const tlUsers = await User.find({ role: { $in: ["teamlead", "team lead", "teamLead", "TeamLead"] } });
 
+    // Create teams for employees marked as team lead
     for (const emp of tlEmployees) {
       let existingTeam = await Team.findOne({
         $or: [
@@ -672,13 +673,16 @@ exports.getMyTeam = async (req, res) => {
       }
     }
 
+    // Create teams for users with team lead role
     for (const usr of tlUsers) {
-      if (usr.role === "admin") continue;
+      if (usr.role?.toLowerCase() === "admin") continue;
+      
       let existingTeam = await Team.findOne({
         $or: [
           { teamLeadUser: usr._id }
         ]
       });
+      
       if (!existingTeam) {
         const linkedEmp = await Employee.findOne({ userID: usr._id });
         await Team.create({
@@ -691,6 +695,7 @@ exports.getMyTeam = async (req, res) => {
       }
     }
 
+    // Fetch all teams with populated data
     let teams = await Team.find()
       .populate({
         path: "teamLeadUser",
@@ -698,8 +703,7 @@ exports.getMyTeam = async (req, res) => {
       })
       .populate({
         path: "teamLeadEmployee",
-        select:
-          "firstName lastName email mobile employeeID designation department",
+        select: "firstName lastName email mobile employeeID designation department isTeamLead",
         populate: {
           path: "department",
           select: "name departmentName",
@@ -707,151 +711,92 @@ exports.getMyTeam = async (req, res) => {
       })
       .populate({
         path: "interns",
-        select:
-          "name email role uniqueID employeeID",
+        select: "name email role uniqueID employeeID",
+      })
+      .populate({
+        path: "employees",
+        select: "firstName lastName email employeeID designation department",
+        populate: {
+          path: "department",
+          select: "name departmentName",
+        },
       });
 
-    // Also populate assigned employees
-    await Team.populate(teams, {
-      path: "employees",
-      select: "firstName lastName email employeeID designation department",
-      populate: {
-        path: "department",
-        select: "name departmentName",
-      },
-    });
-
+    // If no teams exist, create one for the current user
     if (!teams.length) {
       const newTeam = await createTeamForLead(req.user._id);
       teams = [newTeam];
     }
 
+    // Process and format the data
     const data = teams.map((team) => {
-
       const leadUser = team.teamLeadUser;
-
       const leadEmployee = team.teamLeadEmployee;
 
+      // Determine the correct role
+      let role = "team lead";
+      if (leadUser) {
+        role = leadUser.role || "team lead";
+      } else if (leadEmployee?.isTeamLead) {
+        role = "team lead";
+      }
 
       return {
-
         _id: team._id,
-
         name: team.name || "",
-
         teamLead: {
-
           userId: leadUser?._id || null,
-
-          employeeId:
-            leadEmployee?._id || null,
-
-
-          name:
-            leadUser?.name ||
-            `${leadEmployee?.firstName || ""} ${
-              leadEmployee?.lastName || ""
-            }`,
-
-
-          email:
-            leadUser?.email ||
-            leadEmployee?.email ||
-            "",
-
-
-          role:
-            leadUser?.role ||
-            "team lead",
-
-
-          uniqueID:
-            leadUser?.uniqueID || "",
-
-
-          employeeID:
-            leadEmployee?.employeeID || "",
-
-
-          designation:
-            leadEmployee?.designation || "",
-
-
-          department:
-            leadEmployee?.department || null,
+          employeeId: leadEmployee?._id || null,
+          name: leadUser?.name || 
+                `${leadEmployee?.firstName || ""} ${leadEmployee?.lastName || ""}`.trim() ||
+                "Unnamed",
+          email: leadUser?.email || leadEmployee?.email || "",
+          role: role,
+          uniqueID: leadUser?.uniqueID || "",
+          employeeID: leadEmployee?.employeeID || "",
+          designation: leadEmployee?.designation || "",
+          department: leadEmployee?.department || null,
         },
-
-
-        interns: team.interns?.map((intern)=>({
-
+        interns: team.interns?.map((intern) => ({
           _id: intern._id,
-
-          name:
-            intern.name || "",
-
-          email:
-            intern.email || "",
-
-          role:
-            intern.role,
-
-          uniqueID:
-            intern.uniqueID,
-
-          employeeID:
-            intern.employeeID || "",
-
+          name: intern.name || "",
+          email: intern.email || "",
+          role: intern.role,
+          uniqueID: intern.uniqueID,
+          employeeID: intern.employeeID || "",
         })) || [],
-
         employees: team.employees?.map((emp) => ({
           _id: emp._id,
-          name:
-            emp.name || `${emp.firstName || ""} ${emp.lastName || ""}`.trim(),
+          name: `${emp.firstName || ""} ${emp.lastName || ""}`.trim() || "Unnamed",
           email: emp.email || "",
           designation: emp.designation || "",
           employeeID: emp.employeeID || "",
         })) || [],
-
-
-        totalInterns:
-          team.interns?.length || 0,
-
-        totalEmployees:
-          team.employees?.length || 0,
-
-
+        totalInterns: team.interns?.length || 0,
+        totalEmployees: team.employees?.length || 0,
         createdAt: team.createdAt,
         updatedAt: team.updatedAt,
-
       };
-
     });
 
-
-
-    const filteredData = data.filter((item) => item.teamLead?.role !== "admin");
+    // Filter out admin users
+    const filteredData = data.filter((item) => {
+      const role = item.teamLead?.role?.toLowerCase().trim() || "";
+      return role !== "admin";
+    });
 
     return res.status(200).json({
-
-      success:true,
-
-      total:filteredData.length,
-
+      success: true,
+      total: filteredData.length,
       data: filteredData
-
     });
 
-
-  } catch(error){
-
+  } catch (error) {
+    console.error("Error in getMyTeam:", error);
     return res.status(500).json({
-
-      success:false,
-
-      message:error.message
-
+      success: false,
+      message: error.message
     });
-
   }
 };
 
