@@ -80,17 +80,14 @@ const fetchTeamMembersByTeamLead = async ({ teamLead, teamLeadUser, teamLeadEmpl
   return { employees: [], interns: [], teamLeadUser: null, teamLeadEmployee: null };
 };
 
-// Helper: Resolve Team Lead User ID
-const resolveProjectTeamLeadUser = async (project) => {
-  if (!project) {
-    return null;
-  }
-
-  if (project.teamLeadUser) {
+// Helper: Resolve Team Lead User ID with multi-level lookup & fallback
+const resolveProjectTeamLeadUser = async (project = null, assignedEmployee = null, assignedIntern = null) => {
+  // 1. Direct project check
+  if (project?.teamLeadUser) {
     return project.teamLeadUser._id || project.teamLeadUser;
   }
 
-  if (project.teamLeadEmployee) {
+  if (project?.teamLeadEmployee) {
     const empId = project.teamLeadEmployee._id || project.teamLeadEmployee;
     const employee = await Employee.findById(empId).select("userID");
     if (employee?.userID) {
@@ -98,11 +95,11 @@ const resolveProjectTeamLeadUser = async (project) => {
     }
   }
 
-  if (project.teamLead) {
+  if (project?.teamLead) {
     const teamId = project.teamLead._id || project.teamLead;
     const team = await Team.findById(teamId).select("teamLeadUser teamLeadEmployee");
     if (team?.teamLeadUser) {
-      return team.teamLeadUser;
+      return team.teamLeadUser._id || team.teamLeadUser;
     }
     if (team?.teamLeadEmployee) {
       const employee = await Employee.findById(team.teamLeadEmployee).select("userID");
@@ -112,20 +109,81 @@ const resolveProjectTeamLeadUser = async (project) => {
     }
   }
 
+  // 2. Check Team collection matching assigned employee / intern / project employees / project interns
+  const empIds = [];
+  if (assignedEmployee) empIds.push(assignedEmployee._id || assignedEmployee);
+  if (project?.employees?.length) {
+    project.employees.forEach((e) => empIds.push(e._id || e));
+  }
+
+  const intIds = [];
+  if (assignedIntern) intIds.push(assignedIntern._id || assignedIntern);
+  if (project?.interns?.length) {
+    project.interns.forEach((i) => intIds.push(i._id || i));
+  }
+
+  if (empIds.length > 0 || intIds.length > 0) {
+    const teamQuery = [];
+    if (empIds.length > 0) teamQuery.push({ employees: { $in: empIds } });
+    if (intIds.length > 0) teamQuery.push({ interns: { $in: intIds } });
+
+    const team = await Team.findOne({ $or: teamQuery });
+    if (team) {
+      if (team.teamLeadUser) return team.teamLeadUser._id || team.teamLeadUser;
+      if (team.teamLeadEmployee) {
+        const employee = await Employee.findById(team.teamLeadEmployee).select("userID");
+        if (employee?.userID) return employee.userID;
+      }
+    }
+  }
+
+  // 3. Check if any employee in candidates is marked as isTeamLead
+  if (empIds.length > 0) {
+    const leadEmp = await Employee.findOne({ _id: { $in: empIds }, isTeamLead: true }).select("userID");
+    if (leadEmp?.userID) return leadEmp.userID;
+  }
+
+  // 4. Check if any user in candidates has team lead role
+  if (intIds.length > 0) {
+    const leadUser = await User.findOne({ _id: { $in: intIds }, role: { $regex: /team\s*lead/i } }).select("_id");
+    if (leadUser?._id) return leadUser._id;
+  }
+
+  // 5. Fallback: Any Team in DB with a team lead
+  const globalTeam = await Team.findOne({
+    $or: [
+      { teamLeadUser: { $ne: null } },
+      { teamLeadEmployee: { $ne: null } }
+    ]
+  });
+
+  if (globalTeam) {
+    if (globalTeam.teamLeadUser) return globalTeam.teamLeadUser._id || globalTeam.teamLeadUser;
+    if (globalTeam.teamLeadEmployee) {
+      const employee = await Employee.findById(globalTeam.teamLeadEmployee).select("userID");
+      if (employee?.userID) return employee.userID;
+    }
+  }
+
+  // 6. Fallback: Any Employee marked as isTeamLead
+  const anyLeadEmp = await Employee.findOne({ isTeamLead: true }).select("userID");
+  if (anyLeadEmp?.userID) return anyLeadEmp.userID;
+
+  // 7. Fallback: Any User with role team lead
+  const anyLeadUser = await User.findOne({ role: { $regex: /team\s*lead/i } }).select("_id");
+  if (anyLeadUser?._id) return anyLeadUser._id;
+
   return null;
 };
 
-// Helper: Resolve Team Lead Employee ID
-const resolveProjectTeamLeadEmployee = async (project) => {
-  if (!project) {
-    return null;
-  }
-
-  if (project.teamLeadEmployee) {
+// Helper: Resolve Team Lead Employee ID with multi-level lookup & fallback
+const resolveProjectTeamLeadEmployee = async (project = null, assignedEmployee = null, assignedIntern = null) => {
+  // 1. Direct project check
+  if (project?.teamLeadEmployee) {
     return project.teamLeadEmployee._id || project.teamLeadEmployee;
   }
 
-  if (project.teamLeadUser) {
+  if (project?.teamLeadUser) {
     const userId = project.teamLeadUser._id || project.teamLeadUser;
     const employee = await Employee.findOne({ userID: userId }).select("_id");
     if (employee?._id) {
@@ -133,11 +191,11 @@ const resolveProjectTeamLeadEmployee = async (project) => {
     }
   }
 
-  if (project.teamLead) {
+  if (project?.teamLead) {
     const teamId = project.teamLead._id || project.teamLead;
     const team = await Team.findById(teamId).select("teamLeadEmployee teamLeadUser");
     if (team?.teamLeadEmployee) {
-      return team.teamLeadEmployee;
+      return team.teamLeadEmployee._id || team.teamLeadEmployee;
     }
     if (team?.teamLeadUser) {
       const employee = await Employee.findOne({ userID: team.teamLeadUser }).select("_id");
@@ -145,6 +203,76 @@ const resolveProjectTeamLeadEmployee = async (project) => {
         return employee._id;
       }
     }
+  }
+
+  // 2. Check Team collection matching assigned employee / intern / project employees / project interns
+  const empIds = [];
+  if (assignedEmployee) empIds.push(assignedEmployee._id || assignedEmployee);
+  if (project?.employees?.length) {
+    project.employees.forEach((e) => empIds.push(e._id || e));
+  }
+
+  const intIds = [];
+  if (assignedIntern) intIds.push(assignedIntern._id || assignedIntern);
+  if (project?.interns?.length) {
+    project.interns.forEach((i) => intIds.push(i._id || i));
+  }
+
+  if (empIds.length > 0 || intIds.length > 0) {
+    const teamQuery = [];
+    if (empIds.length > 0) teamQuery.push({ employees: { $in: empIds } });
+    if (intIds.length > 0) teamQuery.push({ interns: { $in: intIds } });
+
+    const team = await Team.findOne({ $or: teamQuery });
+    if (team) {
+      if (team.teamLeadEmployee) return team.teamLeadEmployee._id || team.teamLeadEmployee;
+      if (team.teamLeadUser) {
+        const employee = await Employee.findOne({ userID: team.teamLeadUser }).select("_id");
+        if (employee?._id) return employee._id;
+      }
+    }
+  }
+
+  // 3. Check if any employee in candidates is marked as isTeamLead
+  if (empIds.length > 0) {
+    const leadEmp = await Employee.findOne({ _id: { $in: empIds }, isTeamLead: true }).select("_id");
+    if (leadEmp?._id) return leadEmp._id;
+  }
+
+  // 4. Check if any user in candidates has team lead role
+  if (intIds.length > 0) {
+    const leadUser = await User.findOne({ _id: { $in: intIds }, role: { $regex: /team\s*lead/i } }).select("_id");
+    if (leadUser?._id) {
+      const linkedEmp = await Employee.findOne({ userID: leadUser._id }).select("_id");
+      if (linkedEmp?._id) return linkedEmp._id;
+    }
+  }
+
+  // 5. Fallback: Any Team in DB with a team lead
+  const globalTeam = await Team.findOne({
+    $or: [
+      { teamLeadEmployee: { $ne: null } },
+      { teamLeadUser: { $ne: null } }
+    ]
+  });
+
+  if (globalTeam) {
+    if (globalTeam.teamLeadEmployee) return globalTeam.teamLeadEmployee._id || globalTeam.teamLeadEmployee;
+    if (globalTeam.teamLeadUser) {
+      const employee = await Employee.findOne({ userID: globalTeam.teamLeadUser }).select("_id");
+      if (employee?._id) return employee._id;
+    }
+  }
+
+  // 6. Fallback: Any Employee marked as isTeamLead
+  const anyLeadEmp = await Employee.findOne({ isTeamLead: true }).select("_id");
+  if (anyLeadEmp?._id) return anyLeadEmp._id;
+
+  // 7. Fallback: Any User with role team lead
+  const anyLeadUser = await User.findOne({ role: { $regex: /team\s*lead/i } }).select("_id");
+  if (anyLeadUser?._id) {
+    const linkedEmp = await Employee.findOne({ userID: anyLeadUser._id }).select("_id");
+    if (linkedEmp?._id) return linkedEmp._id;
   }
 
   return null;
@@ -878,9 +1006,9 @@ exports.createTask = async (req, res) => {
       }
     }
 
-    // STEP C: If project exists, fetch project & auto-resolve Team Lead (User & Employee) and Members
+    let project = null;
     if (taskData.projectId) {
-      const project = await Project.findById(taskData.projectId);
+      project = await Project.findById(taskData.projectId);
       
       if (!project) {
         return res.status(404).json({
@@ -888,34 +1016,7 @@ exports.createTask = async (req, res) => {
           message: "Project not found"
         });
       }
-      
-      // Resolve Team Lead User and Team Lead Employee from Project (checking teamLeadUser, teamLeadEmployee, & Team)
-      const teamLeadUser = await resolveProjectTeamLeadUser(project);
-      const teamLeadEmployee = await resolveProjectTeamLeadEmployee(project);
-      
-      // Auto-assign Team Lead User & Employee if not explicitly passed
-      if (!taskData.assignedTeamLeadUser && teamLeadUser) {
-        taskData.assignedTeamLeadUser = teamLeadUser;
-      }
-      if (!taskData.assignedTeamLeadEmployee && teamLeadEmployee) {
-        taskData.assignedTeamLeadEmployee = teamLeadEmployee;
-      }
 
-      // If teamLeadEmployee is set but teamLeadUser isn't, resolve User from Employee
-      if (taskData.assignedTeamLeadEmployee && !taskData.assignedTeamLeadUser) {
-        const emp = await Employee.findById(taskData.assignedTeamLeadEmployee).select("userID");
-        if (emp?.userID) {
-          taskData.assignedTeamLeadUser = emp.userID;
-        }
-      }
-      // If teamLeadUser is set but teamLeadEmployee isn't, resolve Employee from User
-      if (taskData.assignedTeamLeadUser && !taskData.assignedTeamLeadEmployee) {
-        const emp = await Employee.findOne({ userID: taskData.assignedTeamLeadUser }).select("_id");
-        if (emp?._id) {
-          taskData.assignedTeamLeadEmployee = emp._id;
-        }
-      }
-      
       // Auto-assign employee/intern from project if neither assignedEmployee nor assignedIntern is provided
       if (!taskData.assignedEmployee && !taskData.assignedIntern) {
         if (project.employees && project.employees.length > 0) {
@@ -925,21 +1026,64 @@ exports.createTask = async (req, res) => {
           taskData.assignedIntern = project.interns[0];
         }
       }
-      
-      // Set assignedBy to TL User or req.user or fallback
-      if (!taskData.assignedBy) {
-        const fallbackUser = await resolveAssignedUserId({
-          assignedEmployee: taskData.assignedEmployee,
-          assignedIntern: taskData.assignedIntern,
-        });
+    }
 
-        taskData.assignedBy =
-          req.user?._id ||
-          taskData.assignedTeamLeadUser ||
-          teamLeadUser ||
-          fallbackUser ||
-          null;
+    // STEP C: Resolve Team Lead User and Team Lead Employee (multi-level check: Project -> Team -> Employee isTeamLead -> User Role -> Fallbacks)
+    const teamLeadUser = await resolveProjectTeamLeadUser(project, taskData.assignedEmployee, taskData.assignedIntern);
+    const teamLeadEmployee = await resolveProjectTeamLeadEmployee(project, taskData.assignedEmployee, taskData.assignedIntern);
+
+    // If project exists, auto-save resolved Team Lead back onto the project if missing
+    if (project) {
+      let projectNeedsSave = false;
+      if (!project.teamLeadUser && teamLeadUser) {
+        project.teamLeadUser = teamLeadUser;
+        projectNeedsSave = true;
       }
+      if (!project.teamLeadEmployee && teamLeadEmployee) {
+        project.teamLeadEmployee = teamLeadEmployee;
+        projectNeedsSave = true;
+      }
+      if (projectNeedsSave) {
+        await project.save();
+      }
+    }
+
+    // Auto-assign Team Lead User & Employee if not explicitly passed in taskData
+    if (!taskData.assignedTeamLeadUser && teamLeadUser) {
+      taskData.assignedTeamLeadUser = teamLeadUser;
+    }
+    if (!taskData.assignedTeamLeadEmployee && teamLeadEmployee) {
+      taskData.assignedTeamLeadEmployee = teamLeadEmployee;
+    }
+
+    // If teamLeadEmployee is set but teamLeadUser isn't, resolve User from Employee
+    if (taskData.assignedTeamLeadEmployee && !taskData.assignedTeamLeadUser) {
+      const emp = await Employee.findById(taskData.assignedTeamLeadEmployee).select("userID");
+      if (emp?.userID) {
+        taskData.assignedTeamLeadUser = emp.userID;
+      }
+    }
+    // If teamLeadUser is set but teamLeadEmployee isn't, resolve Employee from User
+    if (taskData.assignedTeamLeadUser && !taskData.assignedTeamLeadEmployee) {
+      const emp = await Employee.findOne({ userID: taskData.assignedTeamLeadUser }).select("_id");
+      if (emp?._id) {
+        taskData.assignedTeamLeadEmployee = emp._id;
+      }
+    }
+
+    // Set assignedBy to TL User or req.user or fallback
+    if (!taskData.assignedBy) {
+      const fallbackUser = await resolveAssignedUserId({
+        assignedEmployee: taskData.assignedEmployee,
+        assignedIntern: taskData.assignedIntern,
+      });
+
+      taskData.assignedBy =
+        req.user?._id ||
+        taskData.assignedTeamLeadUser ||
+        teamLeadUser ||
+        fallbackUser ||
+        null;
     }
 
     // Validate that at least one assignee exists
