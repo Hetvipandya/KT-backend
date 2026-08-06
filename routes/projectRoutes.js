@@ -114,10 +114,6 @@ router.get(
   "/milestones/all",
   getAllMilestones
 );
-router.get(
-  "/milestone/all",
-  getAllMilestones
-);
 
 // Get Project Milestones
 router.get(
