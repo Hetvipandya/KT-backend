@@ -1539,7 +1539,41 @@ exports.deleteTask = async (req, res) => {
 // Create Milestone
 exports.createMilestone = async (req, res) => {
   try {
-    const milestone = await Milestone.create(req.body);
+    // Validate required fields explicitly
+    const { projectId, title, dueDate } = req.body;
+    
+    if (!projectId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Project ID is required'
+      });
+    }
+    
+    if (!title) {
+      return res.status(400).json({
+        success: false,
+        message: 'Title is required'
+      });
+    }
+    
+    if (!dueDate) {
+      return res.status(400).json({
+        success: false,
+        message: 'Due date is required'
+      });
+    }
+
+    // Create milestone with all fields
+    const milestone = await Milestone.create({
+      projectId: req.body.projectId,
+      title: req.body.title,
+      description: req.body.description || '',
+      dueDate: req.body.dueDate,
+      progress: req.body.progress || 0,
+      status: req.body.status || 'pending',
+      reviewComment: req.body.reviewComment || '',
+      completedAt: req.body.completedAt || null
+    });
 
     // Recalculate Project Progress if necessary
     if (milestone.projectId) {
@@ -1551,6 +1585,18 @@ exports.createMilestone = async (req, res) => {
       data: milestone,
     });
   } catch (error) {
+    // Better error handling
+    console.error('Error creating milestone:', error);
+    
+    // Handle validation errors from Mongoose
+    if (error.name === 'ValidationError') {
+      const messages = Object.values(error.errors).map(err => err.message);
+      return res.status(400).json({
+        success: false,
+        message: messages.join(', ')
+      });
+    }
+    
     res.status(500).json({
       success: false,
       message: error.message,
