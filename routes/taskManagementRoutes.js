@@ -23,57 +23,30 @@ const upload = require("../middleware/uploadMiddleware");
 
  
 
-router.get(
-  "/employee/:employeeId",getTasksByEmployeeId
-);
+router.get("/employee/:employeeId", getTasksByEmployeeId);
 
 // Create Task
-router.post(
-  "/create",
-    upload.array("attachments"), 
-  createTask
-);
+router.post("/create", upload.array("attachments"), createTask);
 
 // Get All Tasks
-router.get(
-  "/all",
-  getAllTasks  
-);
-
-// Get Single Task
-router.get(
-  "/:id",
-  getTaskById
-);
-
-
+router.get("/all", getAllTasks);
 
 // Update Task
-router.put(
-  "/update/:id",
-  updateTask
-);
+router.put("/update/:id", updateTask);
 
-// Update Task Status
-router.put(
-  "/status/:id",
-  updateTaskStatus
-);
-router.post("/create", createStatus);
-router.get("/:taskId", getStatus);
-router.delete("/delete/:taskId", deleteStatus);
+// Task Status Routes
+router.put("/status/:id", updateTaskStatus);
+router.post("/status/create", createStatus);
+router.get("/status/:taskId", getStatus);
+router.delete("/status/delete/:taskId", deleteStatus);
 
 // Add Comment
-router.post(
-  "/comment/:id",
-  addComment
-);
+router.post("/comment/:id", addComment);
 
 // Delete Task
-router.delete(
-  "/delete/:id",
-  deleteTask
-);
+router.delete("/delete/:id", deleteTask);
 
-module.exports =
-  router;
+// Get Single Task (placed last to prevent capturing other routes)
+router.get("/:id", getTaskById);
+
+module.exports = router;

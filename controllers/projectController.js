@@ -2,7 +2,7 @@ const Project = require("../models/projectModel");
 const Task = require("../models/taskModel");
 const Milestone = require("../models/milestoneModel");
 const DailyUpdate = require("../models/dailyUpdateModel");
-const User = require("../models/User");
+const User = require("../models/User"); 
 const Employee = require("../models/Employee");
 const Team = require("../models/Team");  
 
@@ -988,6 +988,31 @@ exports.createTask = async (req, res) => {
     const taskData = { ...req.body };
 
     // STEP A: Support alias keys in request body
+    if (!taskData.taskTitle && taskData.title) {
+      taskData.taskTitle = taskData.title;
+    }
+    if (!taskData.taskDescription && taskData.description) {
+      taskData.taskDescription = taskData.description;
+    }
+    if (taskData.assignedTo && !taskData.assignedEmployee && !taskData.assignedIntern) {
+      const targetId = taskData.assignedTo;
+      const emp = await Employee.findById(targetId);
+      if (emp) {
+        taskData.assignedEmployee = emp._id;
+      } else {
+        const usr = await User.findById(targetId);
+        if (usr) {
+          const linkedEmp = await Employee.findOne({ userID: usr._id });
+          if (linkedEmp) {
+            taskData.assignedEmployee = linkedEmp._id;
+          } else if (String(usr.role || "").toLowerCase().includes("intern")) {
+            taskData.assignedIntern = usr._id;
+          } else {
+            taskData.assignedEmployee = usr._id;
+          }
+        }
+      }
+    }
     if (!taskData.assignedTeamLeadUser && (taskData.teamLeadUser || taskData.teamLeadUserId)) {
       taskData.assignedTeamLeadUser = taskData.teamLeadUser || taskData.teamLeadUserId;
     }
@@ -1353,6 +1378,60 @@ exports.updateTaskStatus = async (req, res) => {
       success: true,
       message: "Task status updated successfully",
       data: updatedTask,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+// Update Task (General updates)
+exports.updateTask = async (req, res) => {
+  try {
+    const updateData = { ...req.body };
+    if (!updateData.taskTitle && updateData.title) {
+      updateData.taskTitle = updateData.title;
+    }
+    if (!updateData.taskDescription && updateData.description) {
+      updateData.taskDescription = updateData.description;
+    }
+    if (updateData.assignedTo && !updateData.assignedEmployee) {
+      updateData.assignedEmployee = updateData.assignedTo;
+    }
+
+    if (updateData.progress !== undefined) {
+      const p = Number(updateData.progress);
+      updateData.progress = p;
+      if (p === 100) {
+        updateData.status = "completed";
+        updateData.completedAt = new Date();
+      }
+    }
+
+    const task = await Task.findByIdAndUpdate(req.params.id, updateData, { new: true })
+      .populate("assignedEmployee", "name firstName lastName email")
+      .populate("assignedIntern", "name email")
+      .populate("assignedTeamLeadUser", "name email")
+      .populate("assignedTeamLeadEmployee", "firstName lastName email")
+      .populate("assignedBy", "name email")
+      .populate("projectId", "projectName clientName")
+      .populate("milestoneId", "milestoneName title");
+
+    if (!task) {
+      return res.status(404).json({
+        success: false,
+        message: "Task not found",
+      });
+    }
+
+    await recalculateMilestoneAndProjectProgress(task.milestoneId, task.projectId);
+
+    res.status(200).json({
+      success: true,
+      message: "Task updated successfully",
+      data: task,
     });
   } catch (error) {
     res.status(500).json({

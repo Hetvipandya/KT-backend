@@ -25,8 +25,13 @@ const {
   createTask,
   getAllTasks,
   getProjectTasks,
+  getMilestoneTasks,
+  getTasksByAssignedEmployee,
+  getSingleTask,
   updateTaskProgress,
   updateTaskStatus,
+  updateTask,
+  deleteTask,
 
   // Daily Update
   addDailyUpdate,
@@ -109,8 +114,24 @@ router.get(
   "/milestones/all",
   getAllMilestones
 );
+router.get(
+  "/milestone/all",
+  getAllMilestones
+);
 
 // Get Project Milestones
+router.get(
+  "/milestone/project/:projectId",
+  getProjectMilestones
+);
+router.get(
+  "/milestones/project/:projectId",
+  getProjectMilestones
+);
+router.get(
+  "/milestones/all/project/:projectId",
+  getProjectMilestones
+);
 router.get(
   "/milestone/:projectId",
   getProjectMilestones
@@ -133,15 +154,50 @@ router.post(
   createTask
 );
 
+// Get All Tasks
 router.get(
   "/task/all",
+  getAllTasks
+);
+router.get(
+  "/tasks/all",
   getAllTasks
 );
 
 // Get Project Tasks
 router.get(
+  "/task/project/:projectId",
+  getProjectTasks
+);
+
+// Get Milestone Tasks
+router.get(
+  "/task/milestone/:milestoneId",
+  getMilestoneTasks
+);
+
+// Get Employee Tasks
+router.get(
+  "/task/employee/:userId",
+  getTasksByAssignedEmployee
+);
+
+// Get Single Task
+router.get(
+  "/task/single/:id",
+  getSingleTask
+);
+
+// Get Project Tasks fallback (must be placed after fixed prefixes)
+router.get(
   "/task/:projectId",
   getProjectTasks
+);
+
+// Update Task (General update)
+router.put(
+  "/task/update/:id",
+  updateTask
 );
 
 // Update Task Progress
@@ -154,6 +210,16 @@ router.put(
 router.put(
   "/task/status/:id",
   updateTaskStatus
+);
+
+// Delete Task
+router.delete(
+  "/task/delete/:id",
+  deleteTask
+);
+router.delete(
+  "/task/:id",
+  deleteTask
 );
 
 
