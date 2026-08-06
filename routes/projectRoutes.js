@@ -5,7 +5,7 @@ const upload = require("../middleware/uploadMiddleware"); // <-- Cloudinary Mult
 
 const {
   // Project
-  createProject,
+  createProject, 
   getAllProjects,
   getSingleProject,
   getProjectMembers,
@@ -23,6 +23,7 @@ const {
 
   // Task
   createTask,
+  getAllTasks,
   getProjectTasks,
   updateTaskProgress,
   updateTaskStatus,
@@ -130,6 +131,11 @@ router.put(
 router.post(
   "/task/create",
   createTask
+);
+
+router.get(
+  "/task/all",
+  getAllTasks
 );
 
 // Get Project Tasks
