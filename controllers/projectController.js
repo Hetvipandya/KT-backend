@@ -10,6 +10,60 @@ const Team = require("../models/Team");
 // HELPER FUNCTIONS FOR TEAM & PROGRESS MANAGEMENT
 // ======================================================
 
+// ======================================================
+// IMPROVED HELPER FUNCTIONS
+// ======================================================
+
+/**
+ * Get team lead from project with clear priority order
+ */
+const getProjectTeamLead = async (projectId) => {
+  const project = await Project.findById(projectId)
+    .populate('teamLeadUser')
+    .populate('teamLeadEmployee');
+  
+  if (!project) return { teamLeadUser: null, teamLeadEmployee: null };
+  
+  // Priority: teamLeadUser (from User) > teamLeadEmployee (from Employee)
+  return {
+    teamLeadUser: project.teamLeadUser?._id || null,
+    teamLeadEmployee: project.teamLeadEmployee?._id || null
+  };
+};
+
+/**
+ * Check if a user is a team lead for a specific project
+ */
+const isUserTeamLeadForProject = async (userId, projectId) => {
+  const project = await Project.findById(projectId);
+  if (!project) return false;
+  
+  const teamLeadUser = await resolveProjectTeamLeadUser(project);
+  return teamLeadUser && teamLeadUser.toString() === userId.toString();
+};
+
+/**
+ * Get all team members (including team lead) for a project
+ */
+const getAllProjectTeamMembers = async (projectId) => {
+  const project = await Project.findById(projectId)
+    .populate('teamLeadUser', 'name email')
+    .populate('teamLeadEmployee', 'firstName lastName email')
+    .populate('employees', 'firstName lastName email')
+    .populate('interns', 'name email');
+  
+  if (!project) return { teamLead: null, employees: [], interns: [] };
+  
+  return {
+    teamLead: {
+      user: project.teamLeadUser,
+      employee: project.teamLeadEmployee
+    },
+    employees: project.employees || [],
+    interns: project.interns || []
+  };
+};
+
 // Helper: Automatically Fetch Team Members from Team Collection based on Team Lead
 const fetchTeamMembersByTeamLead = async ({ teamLead, teamLeadUser, teamLeadEmployee }) => {
   const query = [];
