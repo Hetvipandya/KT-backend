@@ -624,6 +624,7 @@ exports.createProject = async (req, res) => {
 };
 
 // Get All Projects
+// Get All Projects - Updated to properly fetch team lead names
 exports.getAllProjects = async (req, res) => {
   try {
     const projects = await Project.find()
@@ -632,11 +633,68 @@ exports.getAllProjects = async (req, res) => {
       .populate("employees", "name email employeeID")
       .populate("interns", "name email");
 
+    // Process each project to resolve team lead name if not directly populated
+    const processedProjects = await Promise.all(projects.map(async (project) => {
+      const projectObj = project.toObject();
+      
+      // If teamLeadUser is null but we have employees or interns, try to find team lead
+      if (!projectObj.teamLeadUser && !projectObj.teamLeadEmployee) {
+        // Try to find team lead from employees with isTeamLead flag
+        if (projectObj.employees && projectObj.employees.length > 0) {
+          for (const emp of projectObj.employees) {
+            const employee = await Employee.findById(emp._id || emp);
+            if (employee && employee.isTeamLead) {
+              projectObj.teamLeadEmployee = employee;
+              // Also get the user associated with this employee
+              if (employee.userID) {
+                const user = await User.findById(employee.userID).select("name email");
+                if (user) {
+                  projectObj.teamLeadUser = user;
+                }
+              }
+              break;
+            }
+          }
+        }
+        
+        // If still no team lead, try to find from interns
+        if (!projectObj.teamLeadUser && !projectObj.teamLeadEmployee) {
+          if (projectObj.interns && projectObj.interns.length > 0) {
+            for (const intern of projectObj.interns) {
+              const user = await User.findById(intern._id || intern);
+              if (user && user.role && user.role.toLowerCase().includes("team lead")) {
+                projectObj.teamLeadUser = user;
+                break;
+              }
+            }
+          }
+        }
+
+        // Fallback: Try to find any user with team lead role in the system
+        if (!projectObj.teamLeadUser && !projectObj.teamLeadEmployee) {
+          const anyLeadUser = await User.findOne({ 
+            role: { $regex: /team\s*lead/i } 
+          }).select("name email");
+          if (anyLeadUser) {
+            projectObj.teamLeadUser = anyLeadUser;
+          }
+        }
+      }
+
+      // If teamLeadUser is populated but we want to ensure the name is there
+      if (projectObj.teamLeadUser && typeof projectObj.teamLeadUser === 'object') {
+        // Already populated
+      }
+
+      return projectObj;
+    }));
+
     res.status(200).json({
       success: true,
-      data: projects,
+      data: processedProjects,
     });
   } catch (error) {
+    console.error("Get All Projects Error:", error);
     res.status(500).json({
       success: false,
       message: error.message,
