@@ -6,7 +6,7 @@ const router =
 
 const {
   createDailyReport,
-  getAllDailyReports,
+  getAllDailyReports, 
   getSingleDailyReport,
   updateReportStatus,
   addComment,

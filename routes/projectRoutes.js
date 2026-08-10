@@ -7,8 +7,8 @@ const {
   // Project
   createProject, 
   getAllProjects,
-  getSingleProject,
-  getProjectMembers,
+  getSingleProject, 
+  getProjectMembers, 
   assignTeamLead, 
   assignEmployees,
   assignInterns,

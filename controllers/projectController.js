@@ -5,7 +5,7 @@ const DailyUpdate = require("../models/dailyUpdateModel");
 const User = require("../models/User"); 
 const Employee = require("../models/Employee");
 const Team = require("../models/Team");  
-
+ 
 // ======================================================
 // HELPER FUNCTIONS FOR TEAM & PROGRESS MANAGEMENT
 // ======================================================
@@ -1598,7 +1598,7 @@ exports.createMilestone = async (req, res) => {
     }
     
     res.status(500).json({
-      success: false,
+      success: false, 
       message: error.message,
     });
   }

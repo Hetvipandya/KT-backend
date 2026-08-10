@@ -10,7 +10,7 @@ const {
   getAttendanceById,
   getPendingAttendance,
   getAllAttendanceForAdmin,
-  approveAttendance,
+  approveAttendance, 
   rejectAttendance,
   getMyAttendanceHistory,
   getAttendanceByDate,

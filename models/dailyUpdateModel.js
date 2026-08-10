@@ -1,7 +1,7 @@
 const mongoose = require("mongoose");
 
 const dailyUpdateSchema =
-  new mongoose.Schema(
+  new mongoose.Schema( 
     {
       taskId: {
         type:

@@ -9,8 +9,8 @@ const getISTDateParts = (date = new Date()) => {
   const istOffset = 5.5 * 60 * 60000;
   const istDate = new Date(utc + istOffset);
 
-  return {
-    year: istDate.getFullYear(), 
+  return { 
+    year: istDate.getFullYear(),  
     month: pad(istDate.getMonth() + 1),
     day: pad(istDate.getDate()),
     hour: pad(istDate.getHours()),
@@ -568,22 +568,21 @@ exports.checkOut = async (req, res) => {
     attendance.checkOutTime = getISTNow();
 
     // Calculate working hours
-    const totalHours = getWorkingHours(
-      checkInTime,
-      attendance.checkOutTime,
-      attendance.totalBreakTime
-    );
+ const totalHours = getWorkingHours(
+  checkInTime,
+  attendance.checkOutTime,
+  attendance.totalBreakTime
+);
 
-    attendance.totalWorkTime = Number(totalHours.toFixed(2));
+attendance.totalWorkTime = Number(totalHours.toFixed(2));
 
-    // Determine attendance status based on total working hours
-    if (attendance.totalWorkTime >= 8) {
-      attendance.status = "present";
-    } else if (attendance.totalWorkTime >= 4) {
-      attendance.status = "half-day";
-    } else {
-      attendance.status = "absent";
-    }
+if (attendance.totalWorkTime >= 8) {
+  attendance.status = "present";
+} else if (attendance.totalWorkTime >= 4) {
+  attendance.status = "half-day";
+} else {
+  attendance.status = "absent";
+}
 
     await attendance.save();
 
