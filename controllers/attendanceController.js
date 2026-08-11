@@ -3,6 +3,52 @@ const User = require("../models/User");
 
 const pad = (value) => String(value).padStart(2, "0");
 
+
+// ================= CREATE TODAY ATTENDANCE FOR ALL MEMBERS =================
+const ensureTodayAttendance = async () => {
+  const date = getToday();
+
+  // Only these members should have attendance
+  const members = await User.find({
+    role: {
+      $in: ["employee", "intern", "teamlead"],
+    },
+    // If you have active field, you can add:
+    // isActive: true
+  }).select("_id role");
+
+  for (const member of members) {
+    const existingAttendance = await Attendance.findOne({
+      userId: member._id,
+      date,
+    });
+
+    if (!existingAttendance) {
+      await Attendance.create({
+        userId: member._id,
+        userType: member.role.toLowerCase(),
+        date,
+
+        checkInTime: null,
+        approvedCheckInTime: null,
+        checkOutTime: null,
+
+        breaks: [],
+        totalBreakTime: 0,
+        totalWorkTime: 0,
+
+        isLate: false,
+
+        // No check-in = absent
+        status: "absent",
+
+        // No approval required for absent record
+        approvalStatus: "approved",
+      });
+    }
+  }
+};
+
 // Get IST date parts from any date
 const getISTDateParts = (date = new Date()) => {
   const utc = date.getTime() + date.getTimezoneOffset() * 60000;
@@ -11,7 +57,7 @@ const getISTDateParts = (date = new Date()) => {
 
   return { 
     year: istDate.getFullYear(),  
-    month: pad(istDate.getMonth() + 1),
+    month: pad(istDate.getMonth() + 1), 
     day: pad(istDate.getDate()),
     hour: pad(istDate.getHours()),
     minute: pad(istDate.getMinutes()),
@@ -193,6 +239,7 @@ const getWorkingHours = (checkIn, checkOut, breakTime = 0) => {
 const OFFICE_START_TIME = "10:10";
 
 // ================= CHECK IN =================
+// ================= CHECK IN =================
 exports.checkIn = async (req, res) => {
   try {
     const { userId } = req.body;
@@ -204,7 +251,6 @@ exports.checkIn = async (req, res) => {
       });
     }
 
-    // Find User
     const user = await User.findById(userId);
 
     if (!user) {
@@ -214,65 +260,80 @@ exports.checkIn = async (req, res) => {
       });
     }
 
-    // Normalize role
     const userType = user.role.trim().toLowerCase();
-
-    console.log("User Role :", user.role);
-    console.log("Attendance UserType :", userType);
-    console.log(
-      "Attendance Enum :",
-      Attendance.schema.path("userType").enumValues
-    );
-
     const date = getToday();
 
-    // Check today's attendance
-    const existingAttendance = await Attendance.findOne({
+    // Make sure all today's members have attendance
+    await ensureTodayAttendance();
+
+    // Find today's attendance
+    let attendance = await Attendance.findOne({
       userId,
       date,
     });
 
-    if (existingAttendance) {
-      let message = "You have already checked in today.";
-
-      if (existingAttendance.approvalStatus === "pending") {
-        message =
-          "Your check-in request is already pending admin approval.";
-      } else if (
-        existingAttendance.approvalStatus === "approved"
-      ) {
-        message = "You have already checked in today.";
-      }
-
-      return res.status(400).json({
-        success: false,
-        message,
+    // If somehow attendance doesn't exist, create it
+    if (!attendance) {
+      attendance = await Attendance.create({
+        userId,
+        userType,
+        date,
+        checkInTime: null,
+        checkOutTime: null,
+        approvedCheckInTime: null,
+        breaks: [],
+        totalBreakTime: 0,
+        totalWorkTime: 0,
+        isLate: false,
+        status: "absent",
+        approvalStatus: "approved",
       });
     }
 
-    const attendanceData = {
-      userId,
-      userType,
-      date,
-      checkInTime: null,
-      checkOutTime: null,
-      breaks: [],
-      totalBreakTime: 0,
-      totalWorkTime: 0,
-      isLate: false,
-      status: "absent",
-      approvalStatus: "pending",
-    };
+    // Already checked in / request pending
+    if (
+      attendance.approvalStatus === "pending" &&
+      attendance.checkInTime
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Your check-in request is already pending admin approval.",
+      });
+    }
 
-    console.log("Attendance Data :", attendanceData);
+    if (
+      attendance.approvalStatus === "approved" &&
+      attendance.checkInTime
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "You have already checked in today.",
+      });
+    }
 
-    const attendance = await Attendance.create(attendanceData);
+    // Convert today's absent record into check-in request
+    attendance.userType = userType;
+    attendance.checkInTime = null;
+    attendance.checkOutTime = null;
+    attendance.approvedCheckInTime = null;
+
+    attendance.breaks = [];
+    attendance.totalBreakTime = 0;
+    attendance.totalWorkTime = 0;
+
+    attendance.isLate = false;
+
+    // Check-in request
+    attendance.status = "absent";
+    attendance.approvalStatus = "pending";
+
+    await attendance.save();
 
     return res.status(201).json({
       success: true,
       message:
         "Check-in request has been sent to the admin. Please wait for approval.",
-      data: attendance,
+      data: formatAttendanceDocument(attendance),
     });
   } catch (err) {
     console.error("CheckIn Error:", err);
@@ -287,7 +348,10 @@ exports.checkIn = async (req, res) => {
 
 exports.getAllAttendanceForAdmin = async (req, res) => {
   try {
-    const attendance = await Attendance.find() 
+    // Create attendance for all today's members
+    await ensureTodayAttendance();
+
+    const attendance = await Attendance.find()
       .populate({
         path: "userId",
         select: "name uniqueID role email department",
