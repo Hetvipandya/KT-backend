@@ -15,7 +15,7 @@ const employeeSchema =
         ref: "User",
       },  
 
-      // PERSONAL DETAILS
+      // PERSONAL DETAILS 
       firstName: {
         type: String,
         required: true,
@@ -146,9 +146,9 @@ isTeamLead: {
 
 
       department: {
-  type: mongoose.Schema.Types.ObjectId,
-  ref: "Department",
+   type: String,
   required: true,
+  trim: true,
 },
 
     
