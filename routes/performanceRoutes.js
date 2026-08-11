@@ -8,7 +8,7 @@ const {
   updatePerformance,
   deletePerformance,
   getPerformanceDropdown,
-} = require("../controllers/performanceController");
+} = require("../controllers/performanceController"); 
 
 router.post("/create", createPerformance);
 

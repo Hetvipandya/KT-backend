@@ -8,21 +8,45 @@ const TeamLead = require("../models/Team");
 // =============================
 exports.createPerformance = async (req, res) => {
   try {
-    const {
-      employeeID,
-      attendance,
-      taskCompletion,
-      projectContribution,
-      lateComing,
-      leave,
-      managerRating,
-      kpiScore,
-      remarks,
-    } = req.body;
+    const { employeeID, remarks } = req.body;
 
-    const exists = await EmployeePerformance.findOne({
-      employeeID,
-    });
+    if (!employeeID) {
+      return res.status(400).json({
+        success: false,
+        message: "Employee ID is required",
+      });
+    }
+
+    // Check if employee exists in any collection
+    let employeeExists = false;
+
+    // Check in Employee collection
+    const empData = await Employee.findById(employeeID);
+    if (empData) employeeExists = true;
+
+    // Check in User collection (interns)
+    if (!employeeExists) {
+      const userData = await User.findById(employeeID);
+      if (userData) employeeExists = true;
+    }
+
+    // Check in TeamLead
+    if (!employeeExists) {
+      const teamLeadData = await TeamLead.findOne({
+        $or: [{ teamLead: employeeID }, { user: employeeID }],
+      });
+      if (teamLeadData) employeeExists = true;
+    }
+
+    if (!employeeExists) {
+      return res.status(404).json({
+        success: false,
+        message: "Employee not found in any category",
+      });
+    }
+
+    // Check if performance already exists
+    const exists = await EmployeePerformance.findOne({ employeeID });
 
     if (exists) {
       return res.status(400).json({
@@ -31,42 +55,19 @@ exports.createPerformance = async (req, res) => {
       });
     }
 
-    const total =
-      attendance +
-      taskCompletion +
-      projectContribution +
-      managerRating +
-      kpiScore -
-      lateComing -
-      leave;
-
-    let overallGrade = "F";
-
-    if (total >= 90) overallGrade = "A+";
-    else if (total >= 80) overallGrade = "A";
-    else if (total >= 70) overallGrade = "B";
-    else if (total >= 60) overallGrade = "C";
-    else if (total >= 50) overallGrade = "D";
-
+    // Create performance record with just employeeID and remarks
     const performance = await EmployeePerformance.create({
       employeeID,
-      attendance,
-      taskCompletion,
-      projectContribution,
-      lateComing,
-      leave,
-      managerRating,
-      kpiScore,
-      overallGrade,
-      remarks,
+      remarks: remarks || "",
     });
 
     res.status(201).json({
       success: true,
-      message: "Performance added successfully.",
+      message: "Performance record created successfully.",
       data: performance,
     });
   } catch (err) {
+    console.error("Error creating performance:", err);
     res.status(500).json({
       success: false,
       message: err.message,
@@ -79,15 +80,9 @@ exports.createPerformance = async (req, res) => {
 // =============================
 exports.getAllPerformance = async (req, res) => {
   try {
-    const performances =
-      await EmployeePerformance.find()
-        .populate(
-          "employeeID",
-          "name email department employeeId"
-        )
-        .sort({
-          createdAt: -1,
-        });
+    const performances = await EmployeePerformance.find()
+      .populate("employeeID", "name email department firstName lastName")
+      .sort({ createdAt: -1 });
 
     res.json({
       success: true,
@@ -95,6 +90,7 @@ exports.getAllPerformance = async (req, res) => {
       data: performances,
     });
   } catch (err) {
+    console.error("Error fetching performances:", err);
     res.status(500).json({
       success: false,
       message: err.message,
@@ -107,13 +103,8 @@ exports.getAllPerformance = async (req, res) => {
 // =============================
 exports.getPerformanceById = async (req, res) => {
   try {
-    const performance =
-      await EmployeePerformance.findById(
-        req.params.id
-      ).populate(
-        "employeeID",
-        "name email department"
-      );
+    const performance = await EmployeePerformance.findById(req.params.id)
+      .populate("employeeID", "name email department firstNameLastName");
 
     if (!performance) {
       return res.status(404).json({
@@ -127,6 +118,7 @@ exports.getPerformanceById = async (req, res) => {
       data: performance,
     });
   } catch (err) {
+    console.error("Error fetching performance:", err);
     res.status(500).json({
       success: false,
       message: err.message,
@@ -139,52 +131,20 @@ exports.getPerformanceById = async (req, res) => {
 // =============================
 exports.updatePerformance = async (req, res) => {
   try {
-    const {
-      attendance,
-      taskCompletion,
-      projectContribution,
-      lateComing,
-      leave,
-      managerRating,
-      kpiScore,
-      remarks,
-    } = req.body;
+    const { remarks } = req.body;
 
-    const total =
-      attendance +
-      taskCompletion +
-      projectContribution +
-      managerRating +
-      kpiScore -
-      lateComing -
-      leave;
+    const performance = await EmployeePerformance.findByIdAndUpdate(
+      req.params.id,
+      { remarks: remarks || "" },
+      { new: true }
+    );
 
-    let overallGrade = "F";
-
-    if (total >= 90) overallGrade = "A+";
-    else if (total >= 80) overallGrade = "A";
-    else if (total >= 70) overallGrade = "B";
-    else if (total >= 60) overallGrade = "C";
-    else if (total >= 50) overallGrade = "D";
-
-    const performance =
-      await EmployeePerformance.findByIdAndUpdate(
-        req.params.id,
-        {
-          attendance,
-          taskCompletion,
-          projectContribution,
-          lateComing,
-          leave,
-          managerRating,
-          kpiScore,
-          overallGrade,
-          remarks,
-        },
-        {
-          new: true,
-        }
-      );
+    if (!performance) {
+      return res.status(404).json({
+        success: false,
+        message: "Performance not found",
+      });
+    }
 
     res.json({
       success: true,
@@ -192,6 +152,7 @@ exports.updatePerformance = async (req, res) => {
       data: performance,
     });
   } catch (err) {
+    console.error("Error updating performance:", err);
     res.status(500).json({
       success: false,
       message: err.message,
@@ -204,15 +165,21 @@ exports.updatePerformance = async (req, res) => {
 // =============================
 exports.deletePerformance = async (req, res) => {
   try {
-    await EmployeePerformance.findByIdAndDelete(
-      req.params.id
-    );
+    const performance = await EmployeePerformance.findByIdAndDelete(req.params.id);
+
+    if (!performance) {
+      return res.status(404).json({
+        success: false,
+        message: "Performance not found",
+      });
+    }
 
     res.json({
       success: true,
       message: "Performance deleted successfully.",
     });
   } catch (err) {
+    console.error("Error deleting performance:", err);
     res.status(500).json({
       success: false,
       message: err.message,
@@ -226,33 +193,41 @@ exports.deletePerformance = async (req, res) => {
 // =============================
 exports.getPerformanceDropdown = async (req, res) => {
   try {
-    const employees =
-      await Employee.find().select(
-        "_id name email department firstName lastName"
-      );
+    // Get employees
+    const employees = await Employee.find()
+      .select("_id name email department firstName lastName")
+      .lean();
 
+    // Get interns from User collection
     const interns = await User.find({
       role: "intern",
-    }).select("_id name email");
+    })
+      .select("_id name email")
+      .lean();
 
+    // Get team leads
     const teamLeadUsers = await User.find({
       role: { $in: ["teamlead", "team lead"] },
-    }).select("_id name email role department");
+    })
+      .select("_id name email role department")
+      .lean();
 
     const teamLeadEmployees = await Employee.find({
       isTeamLead: true,
-    }).select("_id firstName lastName email department");
+    })
+      .select("_id firstName lastName email department")
+      .lean();
 
-    // Format combined list of team leads without duplicates or admin users
+    // Format combined list of team leads without duplicates
     const teamLeadMap = new Map();
 
     teamLeadUsers.forEach((user) => {
       if (user.role !== "admin") {
         teamLeadMap.set(String(user._id), {
           _id: user._id,
-          name: user.name,
+          name: user.name || user.email,
           email: user.email,
-          role: "teamlead",
+          type: "teamlead",
         });
       }
     });
@@ -264,20 +239,45 @@ exports.getPerformanceDropdown = async (req, res) => {
           _id: emp._id,
           name: empName,
           email: emp.email,
-          role: "teamlead",
+          type: "teamlead",
         });
       }
     });
 
     const teamLeads = Array.from(teamLeadMap.values());
 
+    // Combine all with type field
+    const allEmployees = [
+      ...employees.map((emp) => ({
+        _id: emp._id,
+        name: emp.name || `${emp.firstName || ""} ${emp.lastName || ""}`.trim() || emp.email,
+        email: emp.email,
+        type: "employee",
+        department: emp.department,
+      })),
+      ...interns.map((intern) => ({
+        _id: intern._id,
+        name: intern.name || intern.email,
+        email: intern.email,
+        type: "intern",
+      })),
+      ...teamLeads.map((tl) => ({
+        _id: tl._id,
+        name: tl.name,
+        email: tl.email,
+        type: "teamlead",
+      })),
+    ];
+
+    // Sort by name
+    allEmployees.sort((a, b) => a.name.localeCompare(b.name));
+
     res.json({
       success: true,
-      employees,
-      interns,
-      teamLeads,
+      data: allEmployees,
     });
   } catch (err) {
+    console.error("Error fetching dropdown data:", err);
     res.status(500).json({
       success: false,
       message: err.message,

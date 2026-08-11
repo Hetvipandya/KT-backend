@@ -12,7 +12,7 @@ const projectSchema = new mongoose.Schema(
       type: String,
       default: "", 
     },
-
+ 
     clientName: {
       type: String,
       required: true,
