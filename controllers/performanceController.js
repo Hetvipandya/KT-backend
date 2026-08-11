@@ -17,31 +17,50 @@ exports.createPerformance = async (req, res) => {
       });
     }
 
-    // Check if employee exists in any collection
-    let employeeExists = false;
+    // Find employee details and determine type
+    let employeeType = "";
+    let employeeName = "";
+    let employeeEmail = "";
 
     // Check in Employee collection
-    const empData = await Employee.findById(employeeID);
-    if (empData) employeeExists = true;
+    const empData = await Employee.findById(employeeID).select("name email firstName lastName");
+    if (empData) {
+      employeeType = "employee";
+      employeeName = empData.name || `${empData.firstName || ""} ${empData.lastName || ""}`.trim() || empData.email;
+      employeeEmail = empData.email;
+    }
 
     // Check in User collection (interns)
-    if (!employeeExists) {
-      const userData = await User.findById(employeeID);
-      if (userData) employeeExists = true;
+    if (!empData) {
+      const userData = await User.findById(employeeID).select("name email role");
+      if (userData && userData.role === "intern") {
+        employeeType = "intern";
+        employeeName = userData.name || userData.email;
+        employeeEmail = userData.email;
+      }
     }
 
     // Check in TeamLead
-    if (!employeeExists) {
-      const teamLeadData = await TeamLead.findOne({
-        $or: [{ teamLead: employeeID }, { user: employeeID }],
-      });
-      if (teamLeadData) employeeExists = true;
+    if (!empData && !employeeType) {
+      const teamLeadData = await TeamLead.findOne({ 
+        $or: [
+          { teamLead: employeeID },
+          { user: employeeID }
+        ]
+      }).populate("teamLead user", "name email firstName lastName");
+      
+      if (teamLeadData) {
+        const leadData = teamLeadData.teamLead || teamLeadData.user;
+        employeeType = "teamlead";
+        employeeName = leadData.name || `${leadData.firstName || ""} ${leadData.lastName || ""}`.trim() || leadData.email;
+        employeeEmail = leadData.email;
+      }
     }
 
-    if (!employeeExists) {
+    if (!employeeType) {
       return res.status(404).json({
         success: false,
-        message: "Employee not found in any category",
+        message: "Employee not found in any category (employee, intern, or teamlead)",
       });
     }
 
@@ -55,9 +74,12 @@ exports.createPerformance = async (req, res) => {
       });
     }
 
-    // Create performance record with just employeeID and remarks
+    // Create performance record with employeeType
     const performance = await EmployeePerformance.create({
       employeeID,
+      employeeType, // Store the type
+      employeeName,
+      employeeEmail,
       remarks: remarks || "",
     });
 

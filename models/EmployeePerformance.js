@@ -7,6 +7,19 @@ const employeePerformanceSchema = new mongoose.Schema(
       required: true,
       ref: "Employee",
     },
+    employeeType: {
+      type: String,
+      enum: ["employee", "intern", "teamlead"],
+      default: "employee",
+    },
+    employeeName: {
+      type: String,
+      default: "",
+    },
+    employeeEmail: {
+      type: String,
+      default: "",
+    },
     remarks: {
       type: String,
       default: "",
