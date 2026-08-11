@@ -348,19 +348,26 @@ exports.checkIn = async (req, res) => {
 
 exports.getAllAttendanceForAdmin = async (req, res) => {
   try {
-    // Create attendance for all today's members
-    await ensureTodayAttendance();
-
-    const attendance = await Attendance.find()
-      .populate({
-        path: "userId",
-        select: "name uniqueID role email department",
-      })
-      .populate({
-        path: "approvedBy",
-        select: "name uniqueID role",
-      })
-      .sort({ createdAt: -1 });
+    // Fetch only attendance records where user has actually checked in
+    // (either pending approval or already approved with check-in time)
+    const attendance = await Attendance.find({
+      $or: [
+        { approvalStatus: "pending" },
+        { 
+          approvalStatus: "approved",
+          checkInTime: { $ne: null }
+        }
+      ]
+    })
+    .populate({
+      path: "userId",
+      select: "name uniqueID role email department",
+    })
+    .populate({
+      path: "approvedBy",
+      select: "name uniqueID role",
+    })
+    .sort({ createdAt: -1 });
 
     const formatted = attendance.map((item) => {
       const data = formatAttendanceDocument(item);
