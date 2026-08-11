@@ -12,6 +12,8 @@ const jwt =
 const nodemailer =
   require("nodemailer"); 
 
+  const axios = require("axios");
+
 const { syncEmployeeToUser } = require("../utils/userEmployeeSync");
  
 // ================= EMAIL CONFIG =================
@@ -682,60 +684,147 @@ exports.getAllUsers =
         .json({
           success:
             false,  
-          message:
+          message: 
             error.message,
         });
     }
   };
 
 // ================= APPROVE EMPLOYEE =================
-exports.approveEmployee =
-  async (req, res) => {
-    try {
-      const {
-        userId,
-      } = req.body;
+// ================= APPROVE EMPLOYEE =================
+exports.approveEmployee = async (req, res) => {
+  try {
+    const { userId } = req.body;
 
-      const user =
-        await User.findById(
-          userId
-        );
+    // ================= FIND USER =================
+    const user = await User.findById(userId);
 
-      if (!user) {
-        return res
-          .status(404)
-          .json({
-            success:
-              false,
-            message:
-              "User not found",
-          });
-      }
-
-      user.isApproved =
-        true;
-
-      await user.save();
-
-      res.json({
-        success:
-          true,
-        message:
-          "Employee approved successfully",
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
       });
-    } catch (
-      error
-    ) {
-      res
-        .status(500)
-        .json({
-          success:
-            false,
-          message:
-            error.message,
-        });
     }
-  };
+
+    // ================= ALREADY APPROVED CHECK =================
+    if (user.isApproved) {
+      return res.status(400).json({
+        success: false,
+        message: "Employee is already approved",
+      });
+    }
+
+    // ================= CHECK EMAIL =================
+    if (!user.email) {
+      return res.status(400).json({
+        success: false,
+        message: "Employee email not found",
+      });
+    }
+
+    // ================= CHECK PASSWORD =================
+    if (!user.plainPassword) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Employee password not available. Please reset/generate password first.",
+      });
+    }
+
+    // ================= SEND APPROVAL EMAIL =================
+    await axios.post(
+      "https://api.emailjs.com/api/v1.0/email/send",
+      {
+        service_id: process.env.EMAILJS_SERVICE_ID,
+
+        template_id: process.env.EMAILJS_TEMPLATE_ID,
+
+        user_id: process.env.EMAILJS_PUBLIC_KEY,
+
+        template_params: {
+          name: user.name,
+          email: user.email,
+          password: user.plainPassword,
+          uniqueID: user.uniqueID,
+          role: user.role,
+        },
+      }
+    );
+
+    // ================= APPROVE USER =================
+    user.isApproved = true;
+
+    await user.save();
+
+    // ================= RESPONSE =================
+    return res.status(200).json({
+      success: true,
+      message:
+        "Employee approved successfully and login credentials sent to email.",
+      data: {
+        userId: user._id,
+        name: user.name,
+        email: user.email,
+        uniqueID: user.uniqueID,
+        role: user.role,
+      },
+    });
+  } catch (error) {
+    console.log("Approve Employee Error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+// exports.approveEmployee =
+//   async (req, res) => {
+//     try {
+//       const {
+//         userId,
+//       } = req.body;
+
+//       const user =
+//         await User.findById(
+//           userId
+//         );
+
+//       if (!user) {
+//         return res
+//           .status(404)
+//           .json({
+//             success:
+//               false,
+//             message:
+//               "User not found",
+//           });
+//       }
+
+//       user.isApproved =
+//         true;
+
+//       await user.save();
+
+//       res.json({
+//         success:
+//           true,
+//         message:
+//           "Employee approved successfully",
+//       });
+//     } catch (
+//       error
+//     ) {
+//       res
+//         .status(500)
+//         .json({
+//           success:
+//             false,
+//           message:
+//             error.message,
+//         });
+//     }
+//   };
 
   // ================= REJECT EMPLOYEE =================
 exports.rejectEmployee =
