@@ -2194,17 +2194,15 @@ exports.getAllUsers = async (req, res) => {
 // ======================================================
 // APPROVE EMPLOYEE
 // ======================================================
-exports.approveEmployee = async (
-  req,
-  res
-) => {
+// ======================================================
+// APPROVE EMPLOYEE
+// ======================================================
+exports.approveEmployee = async (req, res) => {
   try {
     const { userId } = req.body;
 
     // ================= FIND USER =================
-    const user = await User.findById(
-      userId
-    );
+    const user = await User.findById(userId);
 
     if (!user) {
       return res.status(404).json({
@@ -2217,8 +2215,7 @@ exports.approveEmployee = async (
     if (user.isApproved) {
       return res.status(400).json({
         success: false,
-        message:
-          "Employee is already approved",
+        message: "Employee is already approved",
       });
     }
 
@@ -2226,8 +2223,7 @@ exports.approveEmployee = async (
     if (!user.email) {
       return res.status(400).json({
         success: false,
-        message:
-          "Employee email not found",
+        message: "Employee email not found",
       });
     }
 
@@ -2236,12 +2232,26 @@ exports.approveEmployee = async (
       return res.status(400).json({
         success: false,
         message:
-          "Employee password not available. Please reset/generate password first.",
+          "Employee password not available.",
       });
     }
 
     // ==================================================
-    // CHECK EMAILJS ENV VARIABLES
+    // FIND EMPLOYEE DETAILS
+    // ==================================================
+    const employee = await Employee.findOne({
+      userID: user._id,
+    });
+
+    if (!employee) {
+      return res.status(404).json({
+        success: false,
+        message: "Employee record not found",
+      });
+    }
+
+    // ==================================================
+    // EMAILJS CONFIG CHECK
     // ==================================================
     if (
       !process.env.EMAILJS_SERVICE_ID ||
@@ -2254,6 +2264,20 @@ exports.approveEmployee = async (
           "EmailJS configuration is missing in environment variables.",
       });
     }
+
+    // ==================================================
+    // FORMAT JOINING DATE
+    // ==================================================
+    const joiningDate = employee.joiningDate
+      ? new Date(employee.joiningDate).toLocaleDateString(
+          "en-IN",
+          {
+            day: "2-digit",
+            month: "2-digit",
+            year: "numeric",
+          }
+        )
+      : "";
 
     // ==================================================
     // SEND APPROVAL EMAIL USING EMAILJS
@@ -2271,23 +2295,29 @@ exports.approveEmployee = async (
           process.env.EMAILJS_PUBLIC_KEY,
 
         template_params: {
-          name: user.name,
+          employeeID:
+            employee.employeeID,
 
-          email: user.email,
+          username:
+            user.name,
+
+          email:
+            user.email,
 
           password:
             user.plainPassword,
 
-          uniqueID:
-            user.uniqueID,
+          designation:
+            employee.designation,
 
-          role: user.role,
+          joiningDate:
+            joiningDate,
         },
       }
     );
 
     // ==================================================
-    // APPROVE USER ONLY AFTER EMAIL SUCCESS
+    // APPROVE USER AFTER EMAIL SUCCESS
     // ==================================================
     user.isApproved = true;
 
@@ -2305,13 +2335,20 @@ exports.approveEmployee = async (
       data: {
         userId: user._id,
 
-        name: user.name,
+        employeeID:
+          employee.employeeID,
 
-        email: user.email,
+        username:
+          user.name,
 
-        uniqueID: user.uniqueID,
+        email:
+          user.email,
 
-        role: user.role,
+        designation:
+          employee.designation,
+
+        joiningDate:
+          joiningDate,
 
         isApproved:
           user.isApproved,
