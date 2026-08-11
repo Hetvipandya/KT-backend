@@ -32,7 +32,7 @@ const formatDob = (value) => {
     }
 
     return trimmed;
-  }
+  } 
 
   return "";
 };

@@ -262,167 +262,119 @@ exports.getEmployeeDocuments = async (req, res) => {
 };
 
 // ================= ADD EMPLOYEE =================
-exports.addEmployee =
-  async (req, res) => {
-    try {
-      const {
-        firstName,
-        lastName,
-        email,
-        mobile,
-        department,
-        designation,
-        teamLead,
-      } = req.body;
+exports.addEmployee = async (req, res) => {
+  try {
+    const {
+      firstName,
+      lastName,
+      email,
+      mobile,
+      department,
+      designation,
+      teamLead,
+    } = req.body;
 
-      // VALIDATION
-      if (
-          !firstName ||
-  !email ||
-  !mobile ||
-  !designation
-      ) {
-        return res
-          .status(400)
-          .json({
-            success: false,
-            message:
-              "First name, email, mobile and designation are required",
-          });
-      }
-
-      // CHECK EMPLOYEE EXISTS
-      const existEmployee =
-        await Employee.findOne({
-          email,
-        });
-
-      if (
-        existEmployee
-      ) {
-        return res
-          .status(400)
-          .json({
-            success: false,
-            message:
-              "Employee already exists",
-          });
-      }
-
-      // GENERATE EMPLOYEE ID
-      const employeeID =
-        await generateEmployeeID();
-
-      // CREATE EMPLOYEE
-      const rawRole = req.body.role ? String(req.body.role).trim().toLowerCase().replace(/[_\s]+/g, "") : "";
-      const employeeRole =
-        rawRole === "teamlead" || rawRole === "teamleader" || Boolean(req.body.isTeamLead)
-          ? "team lead"
-          : "employee";
-
-      const employee =
-        await Employee.create({
-          ...req.body,
-          employeeID,
-          currentAction: "created",
-          isTeamLead: employeeRole === "team lead",
-        });
-
-      if (employeeRole === "employee" || employeeRole === "team lead") {
-        await syncEmployeeToUser({
-          employee,
-          role: employeeRole,
-          userData: {
-            name: `${firstName} ${lastName}`.trim(),
-            email,
-            phoneNumber: mobile,
-            address: req.body.currentAddress || req.body.permanentAddress || req.body.address || "",
-            department: req.body.department,
-            bloodGroup: req.body.bloodGroup,
-            role: employeeRole,
-            isApproved: true,
-            isFirstLogin: false,
-          },
-        });
-      }
-
-      // FILES
-      const files =
-        req.files || {};
-
-      // CREATE DOCUMENTS
-      const employeeDocuments =
-        await EmployeeDocument.create(
-          {
-            employeeID:
-              employee._id,
-
-            aadharCard:
-              files 
-                ?.aadharCard?.[0]
-                ?.path  ||
-              "",
-
-            panCard:
-              files
-                ?.panCard?.[0]
-                ?.path  ||
-              "",
-
-            resume:
-              files
-                ?.resume?.[0]
-                ?.path  ||
-              "",
-
-            offerLetter:
-              files
-                ?.offerLetter?.[0]
-                ?.path  ||
-              "",
-
-            joiningLetter:
-              files
-                ?.joiningLetter?.[0]
-                ?.path  ||
-              "",
-
-            certificates:
-              files
-                ?.certificates?.map(
-                  (
-                    file
-                  ) =>
-                    file.path 
-                ) || [],
-          }
-        );
-
-      // CREATE HISTORY
-      await EmployeeHistory.create({
-  employeeID: employee._id,
-  action: "created",
-  message: `${firstName} ${lastName} added`,
-});
-
-      res.status(201).json({
-        success: true,
-        message:
-          "Employee added successfully",
-        employee,
-        documents:
-          employeeDocuments,
-      });
-    } catch (error) {
-      console.log(error);
-
-      res.status(500).json({
+    // VALIDATION
+    if (!firstName || !email || !mobile || !designation) {
+      return res.status(400).json({
         success: false,
-        message:
-          error.message,
+        message: "First name, email, mobile and designation are required",
       });
     }
-  };
+
+    // CHECK EMPLOYEE EXISTS
+    const existEmployee = await Employee.findOne({ email });
+    if (existEmployee) {
+      return res.status(400).json({
+        success: false,
+        message: "Employee already exists",
+      });
+    }
+
+    // GENERATE EMPLOYEE ID
+    const employeeID = await generateEmployeeID();
+
+    // DETERMINE ROLE
+    const rawRole = req.body.role ? String(req.body.role).trim().toLowerCase().replace(/[_\s]+/g, "") : "";
+    const employeeRole =
+      rawRole === "teamlead" || rawRole === "teamleader" || Boolean(req.body.isTeamLead)
+        ? "team lead"
+        : "employee";
+
+    // ✅ CREATE EMPLOYEE
+    const employee = await Employee.create({
+      ...req.body,
+      employeeID,
+      currentAction: "created",
+      isTeamLead: employeeRole === "team lead",
+    });
+
+    // ✅ SYNC TO USER (Employee thi User create/update)
+    let syncedUser = null;
+    if (employeeRole === "employee" || employeeRole === "team lead") {
+      syncedUser = await syncEmployeeToUser({
+        employee: employee, // ✅ mongoose document directly pass kari sakay
+        role: employeeRole,
+        userData: {
+          name: `${firstName} ${lastName}`.trim(),
+          email,
+          phoneNumber: mobile,
+          address: req.body.currentAddress || req.body.permanentAddress || req.body.address || "",
+          department: req.body.department,
+          bloodGroup: req.body.bloodGroup,
+          role: employeeRole,
+          isApproved: true,
+          isFirstLogin: false,
+        },
+      });
+    }
+
+    // ✅ Employee ma userID update karo (syncEmployeeToUser internally kare che, pan confirm mate)
+    if (syncedUser && syncedUser._id) {
+      // syncEmployeeToUser already employee.userID set kare che
+      // but ensure kari lo
+      if (!employee.userID) {
+        employee.userID = syncedUser._id;
+        await employee.save();
+      }
+    }
+
+    // ✅ FILES
+    const files = req.files || {};
+
+    // ✅ CREATE DOCUMENTS
+    const employeeDocuments = await EmployeeDocument.create({
+      employeeID: employee._id,
+      aadharCard: files?.aadharCard?.[0]?.path || "",
+      panCard: files?.panCard?.[0]?.path || "",
+      resume: files?.resume?.[0]?.path || "",
+      offerLetter: files?.offerLetter?.[0]?.path || "",
+      joiningLetter: files?.joiningLetter?.[0]?.path || "",
+      certificates: files?.certificates?.map((file) => file.path) || [],
+    });
+
+    // ✅ CREATE HISTORY
+    await EmployeeHistory.create({
+      employeeID: employee._id,
+      action: "created",
+      message: `${firstName} ${lastName} added`,
+    });
+
+    res.status(201).json({
+      success: true,
+      message: "Employee added successfully",
+      employee,
+      documents: employeeDocuments,
+      user: syncedUser, // optional - user details pan response ma moklo
+    });
+  } catch (error) {
+    console.error("Add Employee Error:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
 
   exports.getAllEmployeeHistory = async (req, res) => {
   try {
