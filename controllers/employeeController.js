@@ -399,7 +399,7 @@ exports.addEmployee = async (req, res) => {
 
 
 // ================= EMPLOYEE LIST =================
-exports.getEmployeeList = async (req, res) => {
+exports.getEmployeeList = async (req, res) => { 
   try {
     const employees = await Employee.find()
       .populate("department", "departmentName")

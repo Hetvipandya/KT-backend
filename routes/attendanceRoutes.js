@@ -16,6 +16,7 @@ const {
   getAttendanceByDate,
   getSingleAttendance,
   getMonthlyAttendance,
+  getUsersNotCheckedIn
 } = require("../controllers/attendanceController");
 
 const { protect } = require("../middleware/authMiddleware");
@@ -103,5 +104,10 @@ router.get(
   "/history/month/:userId/:month",
   getMonthlyAttendance
 );
+
+router.get(
+  "/not-checked-in/:dat",
+  getUsersNotCheckedIn
+)
 
 module.exports = router;

@@ -53,7 +53,7 @@ router.post(
 // Get All Projects
 router.get(
   "/project/all",
-  getAllProjects
+  getAllProjects 
 );
 
 // Get Single Project

@@ -3,20 +3,16 @@ const User = require("../models/User");
 
 const pad = (value) => String(value).padStart(2, "0");
 
-
-// ================= CREATE TODAY ATTENDANCE FOR ALL MEMBERS =================
 const ensureTodayAttendance = async () => {
   const date = getToday();
 
-  // Only these members should have attendance
+  // Only these members should have attendance 
   const members = await User.find({
     role: {
       $in: ["employee", "intern", "teamlead"],
     },
-    // If you have active field, you can add:
-    // isActive: true
   }).select("_id role");
-
+ 
   for (const member of members) {
     const existingAttendance = await Attendance.findOne({
       userId: member._id,
@@ -38,11 +34,7 @@ const ensureTodayAttendance = async () => {
         totalWorkTime: 0,
 
         isLate: false,
-
-        // No check-in = absent
         status: "absent",
-
-        // No approval required for absent record
         approvalStatus: "approved",
       });
     }
@@ -1036,6 +1028,88 @@ exports.getAttendanceStats = async (req, res) => {
   } catch (err) {
     console.error("GetAttendanceStats Error:", err);
     res.status(500).json({
+      success: false,
+      message: err.message,
+    });
+  }
+};
+
+// ================= GET USERS NOT CHECKED IN =================
+exports.getUsersNotCheckedIn = async (req, res) => {
+  try {
+    const today = getToday();
+
+    // Get all members who should have attendance
+    const members = await User.find({
+      role: {
+        $in: ["employee", "intern", "teamlead"],
+      },
+    }).select("_id name uniqueID email role department");
+
+    // Get all attendance records for today
+    const todayAttendance = await Attendance.find({
+      date: today,
+    }).select("userId checkInTime approvalStatus");
+
+    // Create a Set of user IDs who have checked in (approved or pending)
+    const checkedInUserIds = new Set();
+    todayAttendance.forEach((attendance) => {
+      // Consider checked in if:
+      // 1. Approved and has checkInTime
+      // 2. Pending (request submitted)
+      if (
+        (attendance.approvalStatus === "approved" && attendance.checkInTime) ||
+        attendance.approvalStatus === "pending"
+      ) {
+        checkedInUserIds.add(attendance.userId.toString());
+      }
+    });
+
+    // Filter members who haven't checked in
+    const notCheckedInUsers = members.filter(
+      (member) => !checkedInUserIds.has(member._id.toString())
+    );
+
+    // Format the response
+    const formattedUsers = notCheckedInUsers.map((user) => ({
+      _id: user._id,
+      name: user.name,
+      uniqueID: user.uniqueID,
+      email: user.email,
+      role: user.role,
+      department: user.department || "N/A",
+    }));
+
+    // Get additional stats
+    const totalMembers = members.length;
+    const checkedInCount = checkedInUserIds.size;
+    const notCheckedInCount = notCheckedInUsers.length;
+
+    // Get count by status
+    const pendingCount = todayAttendance.filter(
+      (a) => a.approvalStatus === "pending"
+    ).length;
+
+    const approvedCount = todayAttendance.filter(
+      (a) => a.approvalStatus === "approved" && a.checkInTime
+    ).length;
+
+    return res.status(200).json({
+      success: true,
+      message: "Users who have not checked in today",
+      summary: {
+        totalMembers,
+        checkedIn: checkedInCount,
+        pending: pendingCount,
+        approved: approvedCount,
+        notCheckedIn: notCheckedInCount,
+      },
+      date: today,
+      users: formattedUsers,
+    });
+  } catch (err) {
+    console.error("GetUsersNotCheckedIn Error:", err);
+    return res.status(500).json({
       success: false,
       message: err.message,
     });
