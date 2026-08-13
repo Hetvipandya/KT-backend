@@ -1006,8 +1006,8 @@ exports.getAttendanceStats = async (req, res) => {
 
     const absentCount = await Attendance.countDocuments({
       date: today,
-      checkInTime: null,
       approvalStatus: "approved",
+      status: "absent",
     });
 
     const halfDayCount = await Attendance.countDocuments({
@@ -1039,110 +1039,159 @@ exports.getUsersNotCheckedIn = async (req, res) => {
   try {
     const today = getToday();
 
-    // Get all members who should have attendance
-    const members = await User.find({
-      role: {
-        $in: ["employee", "intern", "teamlead"],
-      },
+    // ============================================
+    // 1. Get Employees + Interns from User
+    // ============================================
+    const users = await User.find({
+      role: { $in: ["employee", "intern"] },
     }).select("_id name uniqueID email role department");
 
-    // Get all attendance records for today
-    const todayAttendance = await Attendance.find({
-      date: today,
-    }).select("userId checkInTime checkOutTime approvalStatus");
+    // ============================================
+    // 2. Get Team Leads from Employee collection
+    // ============================================
+    const teamLeadEmployees = await Employee.find({
+      isTeamLead: true,
+    })
+      .populate({
+        path: "userId",
+        select: "_id name uniqueID email role department",
+      })
+      .lean();
 
-    // Create a map of user attendance status
-    const attendanceMap = new Map();
-    todayAttendance.forEach((attendance) => {
-      const userId = attendance.userId.toString();
-      
-      // Determine status
-      let status = "absent";
-      if (attendance.approvalStatus === "approved" && attendance.checkInTime) {
-        status = "present";
-      } else if (attendance.approvalStatus === "pending") {
-        status = "pending";
-      } else if (attendance.approvalStatus === "rejected") {
-        status = "rejected";
-      }
+    // ============================================
+    // 3. Merge Employees + Interns + Team Leads
+    // ============================================
+    const membersMap = new Map();
 
-      attendanceMap.set(userId, {
-        checkInTime: attendance.checkInTime || null,
-        checkOutTime: attendance.checkOutTime || null,
-        approvalStatus: attendance.approvalStatus,
-        status: status,
-      });
-    });
-
-    // Format ALL users with their attendance status
-    const formattedUsers = members.map((user) => {
-      const userId = user._id.toString();
-      const attendance = attendanceMap.get(userId);
-      
-      return {
+    // Employees + Interns
+    users.forEach((user) => {
+      membersMap.set(user._id.toString(), {
         _id: user._id,
         name: user.name,
         uniqueID: user.uniqueID,
         email: user.email,
         role: user.role,
         department: user.department || "N/A",
-        attendance: attendance ? {
-          status: attendance.status,
-          checkInTime: attendance.checkInTime,
-          checkOutTime: attendance.checkOutTime,
-          approvalStatus: attendance.approvalStatus,
-        } : {
-          status: "absent",
-          checkInTime: null,
-          checkOutTime: null,
-          approvalStatus: null,
-        }
-      };
+      });
     });
 
-    // Calculate statistics
+    // Team Leads
+    teamLeadEmployees.forEach((employee) => {
+      if (employee.userId) {
+        membersMap.set(employee.userId._id.toString(), {
+          _id: employee.userId._id,
+          name: employee.userId.name,
+          uniqueID: employee.userId.uniqueID,
+          email: employee.userId.email,
+          role: "teamlead",
+          department: employee.userId.department || "N/A",
+        });
+      }
+    });
+
+    const members = Array.from(membersMap.values());
+
+    // ============================================
+    // 4. Get today's attendance
+    // ============================================
+    const todayAttendance = await Attendance.find({
+      date: today,
+    }).select(
+      "userId checkInTime checkOutTime approvalStatus status"
+    );
+
+    // ============================================
+    // 5. Find users who checked in
+    // ============================================
+    const checkedInUserIds = new Set();
+
+    todayAttendance.forEach((attendance) => {
+      if (
+        (attendance.approvalStatus === "approved" &&
+          attendance.checkInTime) ||
+        attendance.approvalStatus === "pending"
+      ) {
+        checkedInUserIds.add(attendance.userId.toString());
+      }
+    });
+
+    // ============================================
+    // 6. Users who have NOT checked in
+    // ============================================
+    const notCheckedInUsers = members.filter(
+      (member) => !checkedInUserIds.has(member._id.toString())
+    );
+
+    // ============================================
+    // 7. Format response
+    // ============================================
+    const formattedUsers = notCheckedInUsers.map((user) => ({
+      _id: user._id,
+      name: user.name,
+      uniqueID: user.uniqueID,
+      email: user.email,
+      role: user.role,
+      department: user.department,
+    }));
+
+    // ============================================
+    // 8. Statistics
+    // ============================================
     const totalMembers = members.length;
-    const presentCount = todayAttendance.filter(
-      (a) => a.approvalStatus === "approved" && a.checkInTime
-    ).length;
+    const checkedInCount = checkedInUserIds.size;
+
     const pendingCount = todayAttendance.filter(
       (a) => a.approvalStatus === "pending"
     ).length;
-    const rejectedCount = todayAttendance.filter(
-      (a) => a.approvalStatus === "rejected"
+
+    const approvedCount = todayAttendance.filter(
+      (a) =>
+        a.approvalStatus === "approved" &&
+        a.checkInTime
     ).length;
-    const absentCount = totalMembers - (presentCount + pendingCount + rejectedCount);
 
-    // Filter users by status if query param provided
-    const { status } = req.query;
-    let filteredUsers = formattedUsers;
-    if (status) {
-      filteredUsers = formattedUsers.filter(
-        (user) => user.attendance.status === status
-      );
-    }
+    // ============================================
+    // 9. Role-wise absent count
+    // ============================================
+    const roleWise = {
+      employee: 0,
+      intern: 0,
+      teamlead: 0,
+    };
 
+    notCheckedInUsers.forEach((user) => {
+      if (user.role === "employee") {
+        roleWise.employee++;
+      } else if (user.role === "intern") {
+        roleWise.intern++;
+      } else if (user.role === "teamlead") {
+        roleWise.teamlead++;
+      }
+    });
+
+    // ============================================
+    // 10. Response
+    // ============================================
     return res.status(200).json({
       success: true,
-      message: "All users with today's attendance status",
+      message: "Users who have not checked in today",
+
       summary: {
         totalMembers,
-        present: presentCount,
+        checkedIn: checkedInCount,
         pending: pendingCount,
-        rejected: rejectedCount,
-        absent: absentCount,
-        // Role-wise breakdown
-        roleWise: {
-          employee: members.filter(m => m.role === "employee").length,
-          intern: members.filter(m => m.role === "intern").length,
-          teamlead: members.filter(m => m.role === "teamlead").length,
-        }
+        approved: approvedCount,
+        notCheckedIn: notCheckedInUsers.length,
+        roleWise,
       },
+
       date: today,
-      users: filteredUsers,
+
+      users: formattedUsers,
     });
   } catch (err) {
     console.error("GetUsersNotCheckedIn Error:", err);
+
     return res.status(500).json({
       success: false,
       message: err.message,
