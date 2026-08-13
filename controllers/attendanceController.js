@@ -1006,8 +1006,8 @@ exports.getAttendanceStats = async (req, res) => {
 
     const absentCount = await Attendance.countDocuments({
       date: today,
+      checkInTime: null,
       approvalStatus: "approved",
-      status: "absent",
     });
 
     const halfDayCount = await Attendance.countDocuments({
