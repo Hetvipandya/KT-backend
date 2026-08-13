@@ -106,7 +106,7 @@ router.get(
 );
 
 router.get(
-  "/not-checked-in/:dat",
+  "/not-checked-in/:date",
   getUsersNotCheckedIn
 )
 
