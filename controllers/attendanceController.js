@@ -923,13 +923,13 @@ exports.approveAttendance = async (req, res) => {
 
     if (isAbsentDueToLate) {
       message =
-        \`Attendance Approved, but employee is marked ABSENT because check-in was after 10:30 AM. (Checked in at \${formatISTTime(checkInTime)})\`;
+        "Attendance Approved, but employee is marked ABSENT because check-in was after 10:30 AM. (Checked in at " + formatISTTime(checkInTime) + ")";
     } else if (isLate) {
       message =
-        \`Attendance Approved by \${approver.role}. Employee checked in as Late. (Checked in at \${formatISTTime(checkInTime)})\`;
+        "Attendance Approved by " + approver.role + ". Employee checked in as Late. (Checked in at " + formatISTTime(checkInTime) + ")";
     } else {
       message =
-        \`Attendance Approved by \${approver.role}. Employee checked in successfully at \${formatISTTime(checkInTime)}.\`;
+        "Attendance Approved by " + approver.role + ". Employee checked in successfully at " + formatISTTime(checkInTime) + ".";
     }
 
     return res.status(200).json({
