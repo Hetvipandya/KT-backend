@@ -699,52 +699,39 @@ exports.startBreak = async (req, res) => {
 exports.endBreak = async (req, res) => {
   try {
     const { userId } = req.body;
-
-    if (!userId) {
-      return res.status(400).json({
-        success: false,
-        message: "userId is required",
-      });
-    }
-
-    const attendance = await Attendance.findOne({
-      userId,
-      date: getToday(),
-    });
-
-    if (!attendance) {
-      return res.status(404).json({
-        success: false,
-        message: "Attendance not found",
-      });
-    }
-
+    
+    // ... વેરિફિકેશન...
+    
     const activeBreak = attendance.breaks.find((b) => !b.endTime);
-
+    
     if (!activeBreak) {
       return res.status(400).json({
         success: false,
         message: "No active break found",
       });
     }
-
+    
+    // 📌 અહીં break end થાય છે
     const endTime = getISTNow();
     activeBreak.endTime = endTime;
-
+    
+    // Break ની duration calculate થાય છે
     const duration = (endTime - activeBreak.startTime) / (1000 * 60);
     activeBreak.duration = Number(duration.toFixed(2));
-
+    
+    // Total break time માં ઉમેરાય છે
     attendance.totalBreakTime = (attendance.totalBreakTime || 0) + Number(duration.toFixed(2));
-
+    
     await attendance.save();
-
+    
+    // ✅ કર્મચારી હવે working માં છે
     res.status(200).json({
       success: true,
       message: "Break ended successfully",
       totalBreakTime: attendance.totalBreakTime,
       data: formatAttendanceDocument(attendance),
     });
-
+    
   } catch (err) {
     console.error("EndBreak Error:", err);
     res.status(500).json({
