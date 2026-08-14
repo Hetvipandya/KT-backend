@@ -314,6 +314,9 @@ exports.checkIn = async (req, res) => {
       });
     }
 
+    // ============================================
+    // 1. Find User
+    // ============================================
     const user = await User.findById(userId);
 
     if (!user) {
@@ -326,41 +329,55 @@ exports.checkIn = async (req, res) => {
     const userType = user.role.trim().toLowerCase();
     const date = getToday();
 
-    // Make sure all today's members have attendance
+    // ============================================
+    // 2. Make sure today's attendance exists
+    // ============================================
     await ensureTodayAttendance();
 
-    // Find today's attendance
+    // ============================================
+    // 3. Find today's attendance
+    // ============================================
     let attendance = await Attendance.findOne({
       userId,
       date,
     });
 
-    // If somehow attendance doesn't exist, create it
+    // ============================================
+    // 4. If attendance doesn't exist, create it
+    // ============================================
     if (!attendance) {
       attendance = await Attendance.create({
         userId,
         userType,
         date,
+
         checkInTime: null,
-        checkOutTime: null,
         approvedCheckInTime: null,
+        checkOutTime: null,
+
         breaks: [],
         totalBreakTime: 0,
         totalWorkTime: 0,
+
         isLate: false,
+
         status: "absent",
         approvalStatus: "approved",
       });
     }
 
-    // Already checked in / request pending
+    // ============================================
+    // 5. Already checked in / pending request
+    // ============================================
+
     if (
       attendance.approvalStatus === "pending" &&
       attendance.checkInTime
     ) {
       return res.status(400).json({
         success: false,
-        message: "Your check-in request is already pending admin approval.",
+        message:
+          "Your check-in request is already pending admin approval.",
       });
     }
 
@@ -374,30 +391,116 @@ exports.checkIn = async (req, res) => {
       });
     }
 
-    // Convert today's absent record into check-in request
+    // ============================================
+    // 6. ACTUAL CHECK-IN TIME
+    // ============================================
+    // IMPORTANT:
+    // Check-in time is captured HERE,
+    // not when admin approves the request.
+    const checkInTime = getISTNow();
+
+    // ============================================
+    // 7. Create today's time limits
+    // ============================================
+
+    // 10:10 AM = Late Coming start
+    const officeStartTime = getISTDateFromParts({
+      ...getISTDateParts(checkInTime),
+      hour: "10",
+      minute: "10",
+      second: "00",
+    });
+
+    // 10:30 AM = Absent cutoff
+    const absentCutoffTime = getISTDateFromParts({
+      ...getISTDateParts(checkInTime),
+      hour: "10",
+      minute: "30",
+      second: "00",
+    });
+
+    // ============================================
+    // 8. Calculate Late / Absent
+    // ============================================
+
+    const checkInTimestamp = checkInTime.getTime();
+
+    const isLate =
+      checkInTimestamp > officeStartTime.getTime();
+
+    const isAbsentDueToLate =
+      checkInTimestamp > absentCutoffTime.getTime();
+
+    // ============================================
+    // 9. Update attendance
+    // ============================================
+
     attendance.userType = userType;
-    attendance.checkInTime = null;
-    attendance.checkOutTime = null;
+
+    // Save ACTUAL check-in time
+    attendance.checkInTime = checkInTime;
+
+    // Approval will set this later
     attendance.approvedCheckInTime = null;
+
+    attendance.checkOutTime = null;
 
     attendance.breaks = [];
     attendance.totalBreakTime = 0;
     attendance.totalWorkTime = 0;
 
-    attendance.isLate = false;
+    // Late flag
+    attendance.isLate = isLate;
 
-    // Check-in request
-    attendance.status = "absent";
+    // ============================================
+    // 10. Status
+    // ============================================
+
+    if (isAbsentDueToLate) {
+      // After 10:30 AM
+      attendance.status = "absent";
+    } else {
+      // 10:30 AM or before
+      attendance.status = "present";
+    }
+
+    // Request goes for admin/HR approval
     attendance.approvalStatus = "pending";
 
     await attendance.save();
 
+    // ============================================
+    // 11. Response message
+    // ============================================
+
+    let message;
+
+    if (isAbsentDueToLate) {
+      message =
+        `Check-in request sent. You are marked ABSENT because ` +
+        `you checked in after 10:30 AM. ` +
+        `(Check-in: ${formatISTTime(checkInTime)})`;
+    } else if (isLate) {
+      message =
+        `Check-in request sent. You are marked as LATE. ` +
+        `(Check-in: ${formatISTTime(checkInTime)})`;
+    } else {
+      message =
+        `Check-in request sent successfully. ` +
+        `(Check-in: ${formatISTTime(checkInTime)})`;
+    }
+
+    // ============================================
+    // 12. Response
+    // ============================================
+
     return res.status(201).json({
       success: true,
-      message:
-        "Check-in request has been sent to the admin. Please wait for approval.",
+      message,
+
       data: formatAttendanceDocument(attendance),
     });
+
   } catch (err) {
     console.error("CheckIn Error:", err);
 
@@ -789,6 +892,7 @@ exports.getPendingAttendance = async (req, res) => {
 };
 
 // ================= APPROVE ATTENDANCE =================
+// ================= APPROVE ATTENDANCE =================
 exports.approveAttendance = async (req, res) => {
   try {
     const { attendanceId, approvedBy } = req.body;
@@ -804,7 +908,7 @@ exports.approveAttendance = async (req, res) => {
     }
 
     // ============================================
-    // 2. Find approver
+    // 2. Check approver
     // ============================================
     const approver = await User.findById(approvedBy);
 
@@ -815,7 +919,9 @@ exports.approveAttendance = async (req, res) => {
       });
     }
 
-    // Only Admin or HR can approve
+    // ============================================
+    // 3. Only Admin / HR can approve
+    // ============================================
     if (!["admin", "hr"].includes(approver.role.toLowerCase())) {
       return res.status(403).json({
         success: false,
@@ -824,7 +930,7 @@ exports.approveAttendance = async (req, res) => {
     }
 
     // ============================================
-    // 3. Find attendance request
+    // 4. Find attendance request
     // ============================================
     const attendance = await Attendance.findById(attendanceId);
 
@@ -835,6 +941,9 @@ exports.approveAttendance = async (req, res) => {
       });
     }
 
+    // ============================================
+    // 5. Check current approval status
+    // ============================================
     if (attendance.approvalStatus === "approved") {
       return res.status(400).json({
         success: false,
@@ -850,7 +959,7 @@ exports.approveAttendance = async (req, res) => {
     }
 
     // ============================================
-    // 4. Get actual employee check-in time
+    // 6. Actual employee check-in time
     // ============================================
     const checkInTime = attendance.checkInTime;
 
@@ -861,21 +970,24 @@ exports.approveAttendance = async (req, res) => {
       });
     }
 
+    // ============================================
+    // 7. Approval time
+    // ============================================
     const approvalTime = getISTNow();
 
     // ============================================
-    // 5. Create time limits based on check-in date
+    // 8. Create time limits
     // ============================================
 
     // 10:10 AM = Late Coming
-    const officeTime = getISTDateFromParts({
+    const officeStartTime = getISTDateFromParts({
       ...getISTDateParts(checkInTime),
       hour: "10",
       minute: "10",
       second: "00",
     });
 
-    // 10:30 AM = Absent Cutoff
+    // 10:30 AM = Absent cutoff
     const absentCutoffTime = getISTDateFromParts({
       ...getISTDateParts(checkInTime),
       hour: "10",
@@ -884,59 +996,88 @@ exports.approveAttendance = async (req, res) => {
     });
 
     // ============================================
-    // 6. Attendance rules
+    // 9. Calculate status using ACTUAL check-in
     // ============================================
+
+    const checkInTimestamp =
+      new Date(checkInTime).getTime();
 
     const isLate =
-      new Date(checkInTime).getTime() > officeTime.getTime();
+      checkInTimestamp > officeStartTime.getTime();
 
     const isAbsentDueToLate =
-      new Date(checkInTime).getTime() > absentCutoffTime.getTime();
+      checkInTimestamp > absentCutoffTime.getTime();
 
     // ============================================
-    // 7. Approve attendance
+    // 10. Approve attendance
     // ============================================
 
     attendance.approvalStatus = "approved";
+
     attendance.approvedBy = approver._id;
+
     attendance.approvedAt = approvalTime;
 
-    // Keep original employee check-in time
+    // IMPORTANT:
+    // Do NOT replace checkInTime with approval time.
+    //
+    // Employee actual check-in time remains unchanged.
+    attendance.checkInTime = checkInTime;
+
+    // Store the same actual check-in time
+    // as approved check-in time.
     attendance.approvedCheckInTime = checkInTime;
 
     attendance.isLate = isLate;
 
-    // Status rule
+    // ============================================
+    // 11. Set final attendance status
+    // ============================================
+
     if (isAbsentDueToLate) {
+      // After 10:30 AM
       attendance.status = "absent";
     } else {
+      // 10:30 AM or before
       attendance.status = "present";
     }
 
     await attendance.save();
 
     // ============================================
-    // 8. Response message
+    // 12. Response message
     // ============================================
 
     let message;
 
     if (isAbsentDueToLate) {
       message =
-        "Attendance Approved, but employee is marked ABSENT because check-in was after 10:30 AM. (Checked in at " + formatISTTime(checkInTime) + ")";
+        `Attendance Approved, but employee is marked ABSENT ` +
+        `because check-in was after 10:30 AM. ` +
+        `(Checked in at ${formatISTTime(checkInTime)})`;
     } else if (isLate) {
       message =
-        "Attendance Approved by " + approver.role + ". Employee checked in as Late. (Checked in at " + formatISTTime(checkInTime) + ")";
+        `Attendance Approved by ${approver.role}. ` +
+        `Employee checked in as Late. ` +
+        `(Checked in at ${formatISTTime(checkInTime)})`;
     } else {
       message =
-        "Attendance Approved by " + approver.role + ". Employee checked in successfully at " + formatISTTime(checkInTime) + ".";
+        `Attendance Approved by ${approver.role}. ` +
+        `Employee checked in successfully. ` +
+        `(Checked in at ${formatISTTime(checkInTime)})`;
     }
+
+    // ============================================
+    // 13. Response
+    // ============================================
 
     return res.status(200).json({
       success: true,
       message,
+
       data: formatAttendanceDocument(attendance),
     });
+
   } catch (err) {
     console.error("ApproveAttendance Error:", err);
 
