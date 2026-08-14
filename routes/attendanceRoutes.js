@@ -106,7 +106,7 @@ router.get(
 );
 
 router.get(
-  "/absent/user/:userId",
+  "/absent/all",
   getUserAbsentAttendance
 )
 

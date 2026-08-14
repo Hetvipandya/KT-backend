@@ -1664,26 +1664,15 @@ exports.getAbsentAttendanceByDateRange = async (req, res) => {
 };
 
 // ================= GET USER'S ABSENT ATTENDANCE =================
-exports.getUserAbsentAttendance = async (req, res) => {
+// ================= GET ALL ABSENT ATTENDANCE =================
+exports.getAllAbsentAttendance = async (req, res) => {
   try {
-    const { userId } = req.params;
     const { date, month } = req.query;
 
     // ============================================
-    // 1. Validate userId
-    // ============================================
-    if (!userId) {
-      return res.status(400).json({
-        success: false,
-        message: "userId is required",
-      });
-    }
-
-    // ============================================
-    // 2. Build query
+    // 1. Build query
     // ============================================
     const query = {
-      userId,
       $or: [
         { 
           approvalStatus: "approved", 
@@ -1699,6 +1688,9 @@ exports.getUserAbsentAttendance = async (req, res) => {
     // Filter by specific date
     if (date) {
       query.date = date;
+    } else {
+      // Default to today's date
+      query.date = getToday();
     }
 
     // Filter by month (YYYY-MM)
@@ -1709,7 +1701,7 @@ exports.getUserAbsentAttendance = async (req, res) => {
     }
 
     // ============================================
-    // 3. Fetch absent attendance records
+    // 2. Fetch all absent attendance records
     // ============================================
     const absentRecords = await Attendance.find(query)
       .populate({
@@ -1720,10 +1712,10 @@ exports.getUserAbsentAttendance = async (req, res) => {
         path: "approvedBy",
         select: "name uniqueID role",
       })
-      .sort({ date: -1 });
+      .sort({ date: -1, createdAt: -1 });
 
     // ============================================
-    // 4. Format response
+    // 3. Format response
     // ============================================
     const formatted = absentRecords.map((item) => {
       const data = formatAttendanceDocument(item);
@@ -1789,7 +1781,7 @@ exports.getUserAbsentAttendance = async (req, res) => {
     });
 
     // ============================================
-    // 5. Statistics
+    // 4. Statistics
     // ============================================
     const totalAbsent = formatted.length;
     
@@ -1800,6 +1792,22 @@ exports.getUserAbsentAttendance = async (req, res) => {
     const approvedAbsent = formatted.filter(
       (record) => record.approvalStatus === "approved"
     ).length;
+
+    // Role-wise breakdown
+    const roleWise = {
+      employee: 0,
+      intern: 0,
+      teamlead: 0,
+      other: 0,
+    };
+
+    formatted.forEach((record) => {
+      const role = record.employee?.role?.toLowerCase() || "other";
+      if (role === "employee") roleWise.employee++;
+      else if (role === "intern") roleWise.intern++;
+      else if (role === "teamlead" || role === "team lead") roleWise.teamlead++;
+      else roleWise.other++;
+    });
 
     // Month-wise breakdown if month filter is not applied
     const monthWise = {};
@@ -1826,18 +1834,20 @@ exports.getUserAbsentAttendance = async (req, res) => {
     }
 
     // ============================================
-    // 6. Response
+    // 5. Response
     // ============================================
     return res.status(200).json({
       success: true,
-      message: `Absent attendance records for user`,
+      message: `All absent attendance records`,
       
       summary: {
         total: totalAbsent,
         pending: pendingAbsent,
         approved: approvedAbsent,
+        roleWise,
         ...(date && { date }),
         ...(month && { month }),
+        ...(!date && !month && { date: getToday() }),
       },
       
       ...(monthWise && Object.keys(monthWise).length > 0 && {
@@ -1848,7 +1858,7 @@ exports.getUserAbsentAttendance = async (req, res) => {
     });
 
   } catch (err) {
-    console.error("GetUserAbsentAttendance Error:", err);
+    console.error("GetAllAbsentAttendance Error:", err);
     
     return res.status(500).json({
       success: false,
