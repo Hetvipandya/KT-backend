@@ -16,7 +16,7 @@ const {
   getAttendanceByDate,
   getSingleAttendance,
   getMonthlyAttendance,
-  getUserAbsentAttendance
+  getAllAbsentAttendance
 } = require("../controllers/attendanceController");
 
 const { protect } = require("../middleware/authMiddleware");
@@ -107,7 +107,7 @@ router.get(
 
 router.get(
   "/absent/all",
-  getUserAbsentAttendance
+  getAllAbsentAttendance
 )
 
 module.exports = router;
