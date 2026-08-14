@@ -3,41 +3,112 @@ const User = require("../models/User");
 
 const pad = (value) => String(value).padStart(2, "0");
 
-const ensureTodayAttendance = async () => {
-  const date = getToday();
+const ensureTodayAttendance = async (date = getToday()) => {
+  try {
+    // ============================================
+    // 1. Get Employees + Interns from User
+    // ============================================
+    const users = await User.find({
+      role: {
+        $in: ["employee", "intern"],
+      },
+    }).select("_id role");
 
-  // Only these members should have attendance 
-  const members = await User.find({
-    role: {
-      $in: ["employee", "intern", "teamlead"],
-    },
-  }).select("_id role");
- 
-  for (const member of members) {
-    const existingAttendance = await Attendance.findOne({
-      userId: member._id,
-      date,
+    // ============================================
+    // 2. Get Team Leads from Employee collection
+    // ============================================
+    const Employee = require("../models/Employee");
+
+    const teamLeadEmployees = await Employee.find({
+      isTeamLead: true,
+    }).select("userId");
+
+    // ============================================
+    // 3. Create unique member map
+    // ============================================
+    const membersMap = new Map();
+
+    users.forEach((user) => {
+      membersMap.set(user._id.toString(), {
+        _id: user._id,
+        role: user.role,
+      });
     });
 
-    if (!existingAttendance) {
-      await Attendance.create({
-        userId: member._id,
-        userType: member.role.toLowerCase(),
-        date,
+    teamLeadEmployees.forEach((employee) => {
+      if (employee.userId) {
+        membersMap.set(employee.userId.toString(), {
+          _id: employee.userId,
+          role: "teamlead",
+        });
+      }
+    });
 
-        checkInTime: null,
-        approvedCheckInTime: null,
-        checkOutTime: null,
+    const members = Array.from(membersMap.values());
 
-        breaks: [],
-        totalBreakTime: 0,
-        totalWorkTime: 0,
+    // ============================================
+    // 4. Check existing attendance
+    // ============================================
+    const existingAttendance = await Attendance.find({
+      date,
+    }).select("userId");
 
-        isLate: false,
-        status: "absent",
-        approvalStatus: "approved",
-      });
+    const existingUserIds = new Set(
+      existingAttendance.map((attendance) =>
+        attendance.userId.toString()
+      )
+    );
+
+    // ============================================
+    // 5. Create ABSENT records
+    //    for users who have no attendance
+    // ============================================
+    const absentRecords = [];
+
+    for (const member of members) {
+      const userId = member._id.toString();
+
+      if (!existingUserIds.has(userId)) {
+        absentRecords.push({
+          userId: member._id,
+          userType: member.role.toLowerCase(),
+          date,
+
+          checkInTime: null,
+          approvedCheckInTime: null,
+          checkOutTime: null,
+
+          breaks: [],
+          totalBreakTime: 0,
+          totalWorkTime: 0,
+
+          isLate: false,
+
+          status: "absent",
+          approvalStatus: "approved",
+        });
+      }
     }
+
+    // ============================================
+    // 6. Insert absent records
+    // ============================================
+    if (absentRecords.length > 0) {
+      await Attendance.insertMany(absentRecords);
+    }
+
+    return {
+      success: true,
+      date,
+      created: absentRecords.length,
+    };
+  } catch (error) {
+    console.error(
+      "ensureTodayAttendance Error:",
+      error
+    );
+
+    throw error;
   }
 };
 
