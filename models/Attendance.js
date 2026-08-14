@@ -39,7 +39,7 @@ const attendanceSchema = new mongoose.Schema(
       required: true,
     },
 
-    checkInTime: Date,
+    checkInTime: Date, 
 
     checkOutTime: Date,
 
