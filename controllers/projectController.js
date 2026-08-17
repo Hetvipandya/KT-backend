@@ -876,40 +876,50 @@ exports.assignEmployees = async (req, res) => {
   try {
     const { employeeIds } = req.body;
 
-    if (!employeeIds || !Array.isArray(employeeIds) || employeeIds.length === 0) {
+    if (!Array.isArray(employeeIds)) {
       return res.status(400).json({
         success: false,
-        message: "employeeIds must be a non-empty array",
+        message: "employeeIds must be an array",
       });
     }
 
     const project = await Project.findByIdAndUpdate(
       req.params.id,
       {
-        $addToSet: {
-          employees: {
-            $each: employeeIds,
-          },
+        $set: {
+          employees: employeeIds,
         },
       },
-      { new: true }
-    ).populate("employees", "firstName lastName email");
+      {
+        new: true,
+        runValidators: true,
+      }
+    )
+      .populate("employees", "firstName lastName name email")
+      .populate("interns", "name email")
+      .populate("teamLeadUser", "name email")
+      .populate("teamLeadEmployee", "firstName lastName name email");
 
-    const freshProject = await Project.findById(req.params.id)
-      .populate("employees", "firstName lastName email")
-      .populate("interns", "name email");
+    if (!project) {
+      return res.status(404).json({
+        success: false,
+        message: "Project not found",
+      });
+    }
 
     await autoCreateProjectTasks({
-      project: freshProject || project,
+      project,
       assignedBy: req.user?._id || req.body.assignedBy || null,
     });
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       data: project,
     });
   } catch (error) {
-    res.status(500).json({
+    console.error("assignEmployees error:", error);
+
+    return res.status(500).json({
       success: false,
       message: error.message,
     });
