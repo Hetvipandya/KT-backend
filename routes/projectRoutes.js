@@ -10,7 +10,7 @@ const {
   getSingleProject, 
   getProjectMembers, 
   assignTeamLead, 
-  assignEmployees,
+  assignEmployees, 
   assignInterns,
   updateProjectStatus,
   deleteProject,
@@ -203,7 +203,7 @@ router.get(
 router.put(
   "/task/update/:id",
   updateTask
-);
+); 
 
 // Update Task Progress
 router.put(

@@ -10,7 +10,7 @@ const projectSchema = new mongoose.Schema(
 
     projectDescription: {
       type: String,
-      default: "", 
+      default: "",  
     },
  
     clientName: {

@@ -10,7 +10,7 @@ const {
 } = require("../controllers/holidayController");
 
 router.post("/create", addHoliday);
-router.get("/all", getAllHolidays);
+router.get("/all", getAllHolidays); 
 router.get(
   "/current-month",
   getCurrentMonthFestivalHolidays

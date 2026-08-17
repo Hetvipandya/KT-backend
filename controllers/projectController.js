@@ -983,22 +983,86 @@ exports.assignInterns = async (req, res) => {
 };
 
 // Update Project Status
-exports.updateProjectStatus = async (req, res) => {
+exports.updateProject = async (req, res) => {
   try {
-    const project = await Project.findByIdAndUpdate(
-      req.params.id,
-      {
-        status: req.body.status,
-      },
-      { new: true }
-    );
+    const { id } = req.params;
 
-    res.status(200).json({
+    const {
+      projectName,
+      projectDescription,
+      clientName,
+      clientEmail,
+      projectBudget,
+      startDate,
+      endDate,
+      priority,
+      progress,
+      status,
+      teamLeadUser,
+      teamLeadEmployee,
+      employees,
+      interns,
+      files,
+    } = req.body;
+
+    const updateData = {
+      projectName,
+      projectDescription,
+      clientName,
+      clientEmail,
+      projectBudget,
+      startDate: startDate || null,
+      endDate: endDate || null,
+      priority,
+      progress,
+      status,
+      teamLeadUser: teamLeadUser || null,
+      teamLeadEmployee: teamLeadEmployee || null,
+      employees: Array.isArray(employees) ? employees : [],
+      interns: Array.isArray(interns) ? interns : [],
+    };
+
+    // Files only update if frontend sends them
+    if (Array.isArray(files)) {
+      updateData.files = files;
+    }
+
+    // Remove undefined values
+    Object.keys(updateData).forEach((key) => {
+      if (updateData[key] === undefined) {
+        delete updateData[key];
+      }
+    });
+
+    const project = await Project.findByIdAndUpdate(
+      id,
+      { $set: updateData },
+      {
+        new: true,
+        runValidators: true,
+      }
+    )
+      .populate("teamLeadUser", "name email")
+      .populate("teamLeadEmployee", "name email")
+      .populate("employees", "name email")
+      .populate("interns", "name email");
+
+    if (!project) {
+      return res.status(404).json({
+        success: false,
+        message: "Project not found",
+      });
+    }
+
+    return res.status(200).json({
       success: true,
+      message: "Project updated successfully",
       data: project,
     });
   } catch (error) {
-    res.status(500).json({
+    console.error("Update Project Error:", error);
+
+    return res.status(500).json({
       success: false,
       message: error.message,
     });

@@ -9,7 +9,7 @@ const {
   endBreak, 
   getAttendanceById,
   getPendingAttendance,
-  getAllAttendanceForAdmin,
+  getAllAttendanceForAdmin, 
   approveAttendance, 
   rejectAttendance,
   getMyAttendanceHistory,

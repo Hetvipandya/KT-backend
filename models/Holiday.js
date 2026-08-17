@@ -9,7 +9,7 @@ const holidaySchema =
         required: true, 
       },
 
-      holidayDate: {
+      holidayDate: { 
         type: Date,
         required: true,
           unique: true,

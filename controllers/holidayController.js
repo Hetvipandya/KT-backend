@@ -7,7 +7,7 @@ exports.addHoliday =
     try {
       const {
         holidayName,
-        holidayDate,
+        holidayDate, 
       } = req.body;
 
       if ( 
