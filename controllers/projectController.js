@@ -1631,15 +1631,18 @@ exports.createMilestone = async (req, res) => {
 exports.updateMilestone = async (req, res) => {
   try {
     const { id } = req.params;
+
     const {
-      milestoneName,
+      title,
       description,
-      startDate,
-      endDate,
+      dueDate,
       status,
       progress,
+      reviewComment,
+      completedAt,
     } = req.body;
 
+    // Find milestone
     const milestone = await Milestone.findById(id);
 
     if (!milestone) {
@@ -1649,43 +1652,82 @@ exports.updateMilestone = async (req, res) => {
       });
     }
 
+    // ============================================
     // Update only fields which are provided
-    if (milestoneName !== undefined) {
-      milestone.milestoneName = milestoneName;
+    // ============================================
+
+    if (title !== undefined) {
+      milestone.title = title.trim();
     }
 
     if (description !== undefined) {
       milestone.description = description;
     }
 
-    if (startDate !== undefined) {
-      milestone.startDate = startDate;
-    }
-
-    if (endDate !== undefined) {
-      milestone.endDate = endDate;
+    if (dueDate !== undefined) {
+      milestone.dueDate = dueDate;
     }
 
     if (status !== undefined) {
       milestone.status = status;
     }
 
+    if (reviewComment !== undefined) {
+      milestone.reviewComment = reviewComment;
+    }
+
+    if (completedAt !== undefined) {
+      milestone.completedAt = completedAt;
+    }
+
+    // ============================================
+    // Validate Progress
+    // ============================================
+
     if (progress !== undefined) {
-      milestone.progress = progress;
+      let updatedProgress = Number(progress);
+
+      if (isNaN(updatedProgress)) {
+        return res.status(400).json({
+          success: false,
+          message: "Progress must be a valid number",
+        });
+      }
+
+      // Keep progress between 0 and 100
+      updatedProgress = Math.max(0, Math.min(100, updatedProgress));
+
+      milestone.progress = updatedProgress;
     }
 
-    // Validate progress
-    if (milestone.progress < 0) {
-      milestone.progress = 0;
+    // ============================================
+    // Auto completedAt based on progress/status
+    // ============================================
+
+    if (
+      milestone.progress === 100 ||
+      milestone.status?.toLowerCase() === "completed"
+    ) {
+      if (!milestone.completedAt) {
+        milestone.completedAt = new Date();
+      }
     }
 
-    if (milestone.progress > 100) {
-      milestone.progress = 100;
+    // If milestone is moved back from completed
+    if (
+      milestone.progress < 100 &&
+      milestone.status?.toLowerCase() !== "completed"
+    ) {
+      milestone.completedAt = null;
     }
 
+    // Save changes
     await milestone.save();
 
-    const updatedMilestone = await Milestone.findById(id);
+    // Get updated milestone
+    const updatedMilestone = await Milestone.findById(id).populate(
+      "projectId"
+    );
 
     return res.status(200).json({
       success: true,
@@ -1697,7 +1739,8 @@ exports.updateMilestone = async (req, res) => {
 
     return res.status(500).json({
       success: false,
-      message: error.message,
+      message: "Failed to update milestone",
+      error: error.message,
     });
   }
 };
