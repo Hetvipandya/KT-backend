@@ -931,40 +931,51 @@ exports.assignInterns = async (req, res) => {
   try {
     const { internIds } = req.body;
 
-    if (!internIds || !Array.isArray(internIds) || internIds.length === 0) {
+    // Empty array is allowed because user may remove all interns
+    if (!Array.isArray(internIds)) {
       return res.status(400).json({
         success: false,
-        message: "internIds must be a non-empty array",
+        message: "internIds must be an array",
       });
     }
 
     const project = await Project.findByIdAndUpdate(
       req.params.id,
       {
-        $addToSet: {
-          interns: {
-            $each: internIds,
-          },
+        $set: {
+          interns: internIds,
         },
       },
-      { new: true }
-    ).populate("interns", "name email");
+      {
+        new: true,
+        runValidators: true,
+      }
+    )
+      .populate("employees", "firstName lastName name email")
+      .populate("interns", "name email")
+      .populate("teamLeadUser", "name email")
+      .populate("teamLeadEmployee", "firstName lastName name email");
 
-    const freshProject = await Project.findById(req.params.id)
-      .populate("employees", "firstName lastName email")
-      .populate("interns", "name email");
+    if (!project) {
+      return res.status(404).json({
+        success: false,
+        message: "Project not found",
+      });
+    }
 
     await autoCreateProjectTasks({
-      project: freshProject || project,
+      project,
       assignedBy: req.user?._id || req.body.assignedBy || null,
     });
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       data: project,
     });
   } catch (error) {
-    res.status(500).json({
+    console.error("assignInterns error:", error);
+
+    return res.status(500).json({
       success: false,
       message: error.message,
     });
