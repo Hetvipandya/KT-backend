@@ -38,7 +38,6 @@ const milestoneSchema = new mongoose.Schema(
         "in_progress",
         "completed",
       ],
-      default: "pending",
     },
 
     reviewComment: {
