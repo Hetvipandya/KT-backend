@@ -12,7 +12,7 @@ const {
   assignTeamLead, 
   assignEmployees, 
   assignInterns,
-  updateProjectStatus,
+  updateProject,
   deleteProject,
 
   // Milestone
@@ -91,7 +91,7 @@ router.put(
 // Update Project Status
 router.put(
   "/project/status/:id",
-  updateProjectStatus
+  updateProject
 );
 
 // Delete Project
