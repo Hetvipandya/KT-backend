@@ -90,7 +90,7 @@ router.put(
 
 // Update Project Status
 router.put(
-  "/project/status/:id",
+  "/project/:id",
   updateProject
 );
 
