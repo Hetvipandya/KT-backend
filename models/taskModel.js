@@ -11,7 +11,6 @@ const taskSchema = new mongoose.Schema(
     milestoneId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Milestone",
-      default: null,
     },
 
     taskTitle: {
