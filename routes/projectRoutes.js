@@ -17,6 +17,8 @@ const {
 
   // Milestone
   createMilestone,
+  updateMilestone,
+  deleteMilestone,
   getProjectMilestones,
   completeMilestone,
   getAllMilestones,
@@ -112,6 +114,9 @@ router.post(
   "/milestones/create",
   createMilestone
 );
+
+router.put("/milestone/:id", updateMilestone);
+router.delete("/milestone/:id", deleteMilestone);
 
 // Get All Milestones
 router.get(

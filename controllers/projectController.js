@@ -1625,6 +1625,122 @@ exports.createMilestone = async (req, res) => {
   }
 };
 
+// ============================================
+// UPDATE MILESTONE
+// ============================================
+exports.updateMilestone = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const {
+      milestoneName,
+      description,
+      startDate,
+      endDate,
+      status,
+      progress,
+    } = req.body;
+
+    const milestone = await Milestone.findById(id);
+
+    if (!milestone) {
+      return res.status(404).json({
+        success: false,
+        message: "Milestone not found",
+      });
+    }
+
+    // Update only fields which are provided
+    if (milestoneName !== undefined) {
+      milestone.milestoneName = milestoneName;
+    }
+
+    if (description !== undefined) {
+      milestone.description = description;
+    }
+
+    if (startDate !== undefined) {
+      milestone.startDate = startDate;
+    }
+
+    if (endDate !== undefined) {
+      milestone.endDate = endDate;
+    }
+
+    if (status !== undefined) {
+      milestone.status = status;
+    }
+
+    if (progress !== undefined) {
+      milestone.progress = progress;
+    }
+
+    // Validate progress
+    if (milestone.progress < 0) {
+      milestone.progress = 0;
+    }
+
+    if (milestone.progress > 100) {
+      milestone.progress = 100;
+    }
+
+    await milestone.save();
+
+    const updatedMilestone = await Milestone.findById(id);
+
+    return res.status(200).json({
+      success: true,
+      message: "Milestone updated successfully",
+      data: updatedMilestone,
+    });
+  } catch (error) {
+    console.error("Update milestone error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+
+// ============================================
+// DELETE MILESTONE
+// ============================================
+exports.deleteMilestone = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const milestone = await Milestone.findById(id);
+
+    if (!milestone) {
+      return res.status(404).json({
+        success: false,
+        message: "Milestone not found",
+      });
+    }
+
+    // Delete milestone
+    await Milestone.findByIdAndDelete(id);
+
+    // Delete all tasks belonging to this milestone
+    await Task.deleteMany({
+      milestoneId: id,
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Milestone and related tasks deleted successfully",
+    });
+  } catch (error) {
+    console.error("Delete milestone error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
 // Get All Milestones
 exports.getAllMilestones = async (req, res) => {
   try {
