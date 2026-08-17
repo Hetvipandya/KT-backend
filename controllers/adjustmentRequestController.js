@@ -2,7 +2,7 @@ const Attendance = require("../models/Attendance");
 const Employee = require("../models/Employee");
 const User = require("../models/User");
 const TeamLead = require("../models/Team");
-const AdjustmentRequest = require("../models/AdjustmentRequest");
+const AdjustmentRequest = require("../models/AdjustmentRequest"); 
 
 // Helper function to parse time
 const parseTimeToDate = (dateStr, timeStr) => {
@@ -109,7 +109,7 @@ const getEmployeeName = async (employeeId) => {
 // Direct Adjustment - Immediate Attendance Update
 // ==========================================
 
-exports.createDirectAdjustment = async (req, res) => {
+exports.updateDirectAdjustment = async (req, res) => {
   try {
     const {
       employeeId,
@@ -217,16 +217,12 @@ try {
       date: attendanceDate,
     });
 
-    if (!attendance) {
-      attendance = new Attendance({
-        userId: employeeId,
-        userType,
-        date: attendanceDate,
-        status: "present",
-        approvalStatus: "approved",
-        breaks: [],
-      });
-    } else if (!attendance.userType) {
+   if (!attendance) {
+  return res.status(404).json({
+    success: false,
+    message: "Attendance record not found for this employee and date.",
+  });
+} else if (!attendance.userType) {
       attendance.userType = userType;
     }
 
@@ -298,29 +294,11 @@ try {
     // Save attendance
     await attendance.save();
 
-    const adjustmentRequest = new AdjustmentRequest({
-      userId: employeeId,
-      userType,
-      date: new Date(`${attendanceDate}T00:00:00.000Z`),
-      checkInTime: attendance.checkInTime || null,
-      checkOutTime: attendance.checkOutTime || null,
-      approvedCheckInTime: attendance.approvedCheckInTime || attendance.checkInTime || null,
-      totalBreakTime: attendance.totalBreakTime || 0,
-      totalWorkTime: attendance.totalWorkTime || 0,
-      status: attendance.status,
-      approvalStatus: "approved",
-      reason,
-      sessions: sessions || [],
-    });
-
-    await adjustmentRequest.save();
-
     res.status(200).json({
       success: true,
       message: "Attendance updated successfully and adjustment request created.",
       data: {
         attendance,
-        adjustmentRequest,
         employeeName,
       }
     });

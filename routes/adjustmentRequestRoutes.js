@@ -1,20 +1,22 @@
-
-
 const express = require("express");
 const router = express.Router();
+
 const {
-  createDirectAdjustment,
+  updateDirectAdjustment,
   getAdjustmentHistory,
-  testGetEmployeeName
+  testGetEmployeeName,
 } = require("../controllers/adjustmentRequestController");
 
-// Direct adjustment - immediately updates attendance
-router.post("/create", createDirectAdjustment);
+// Update existing attendance through adjustment
+router.patch("/update", updateDirectAdjustment);
+
+// Optional: PUT if you want full replacement/update
+router.put("/update", updateDirectAdjustment);
 
 // Get adjustment history
 router.get("/history", getAdjustmentHistory);
 
-// Test endpoint to debug employee name
+// Test employee name
 router.get("/test-name/:id", testGetEmployeeName);
 
 module.exports = router;
