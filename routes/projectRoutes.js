@@ -33,7 +33,7 @@ const {
   updateTask,
   deleteTask,
 
-  // Daily Update
+  // Daily Update 
   addDailyUpdate,
   getTaskUpdates,
 } = require("../controllers/projectController"); 

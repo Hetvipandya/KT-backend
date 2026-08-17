@@ -37,7 +37,7 @@ const isUserTeamLeadForProject = async (userId, projectId) => {
 /**
  * Get all team members (including team lead) for a project
  */
-const getAllProjectTeamMembers = async (projectId) => {
+const getAllProjectTeamMembers = async (projectId) => { 
   const project = await Project.findById(projectId)
     .populate('teamLeadUser', 'name email')
     .populate('teamLeadEmployee', 'firstName lastName email')

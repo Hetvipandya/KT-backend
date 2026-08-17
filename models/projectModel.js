@@ -89,7 +89,7 @@ const projectSchema = new mongoose.Schema(
     employees: [
       {
         type: mongoose.Schema.Types.ObjectId,
-        ref: "Employee",
+        ref: "User",
       },
     ],
 
