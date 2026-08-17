@@ -109,100 +109,17 @@ const getEmployeeName = async (employeeId) => {
 // Direct Adjustment - Immediate Attendance Update
 // ==========================================
 
-exports.updateDirectAdjustment = async (req, res) => {
+exports.patchAttendanceAdjustment = async (req, res) => {
   try {
-    const {
-      employeeId,
-      date,
-      sessions,
-      reason,
-    } = req.body;
+    const { employeeId, date, checkInTime, checkOutTime, reason } = req.body;
 
-    // Validate required fields
-    if (!employeeId || !date || !reason) {
+    if (!employeeId || !date) {
       return res.status(400).json({
         success: false,
-        message: "Employee, Date and Reason are required.",
+        message: "Employee and Date are required.",
       });
     }
 
-    // Check if any session has data
-    let hasAnyTime = false;
-    if (sessions && sessions.length > 0) {
-      for (const session of sessions) {
-        if (session.checkin || session.breakStart || session.breakEnd || session.checkout) {
-          hasAnyTime = true;
-          break;
-        }
-      }
-    }
-
-    if (!hasAnyTime) {
-      return res.status(400).json({
-        success: false,
-        message: "At least one time field is required.",
-      });
-    }
-
-    // Get employee name from any source
-    const employeeName = await getEmployeeName(employeeId);
-    
-    // Determine user type by checking which collection the employee belongs to
-// ======================================
-// Detect User Type
-// ======================================
-
-let userType = "employee";
-
-try {
-
-    // Employee collection
-    const employee = await Employee.findById(employeeId).lean();
-
-    if (employee) {
-
-        userType = "employee";
-
-    } else {
-
-        // User collection
-        const user = await User.findById(employeeId).lean();
-
-        if (user) {
-
-            if (user.role === "intern") {
-                userType = "intern";
-            }
-
-            else if (user.role === "admin") {
-                userType = "admin";
-            }
-
-            else if (user.role === "hr") {
-                userType = "admin";     // અથવા Attendance enum માં hr add કર
-            }
-
-            else {
-
-                // Team Collection માં check કર
-                const team = await TeamLead.findOne({
-                    teamLeadUser: user._id
-                }).lean();
-
-                if (team) {
-                    userType = "team lead"; // Attendance schema પ્રમાણે રાખજે
-                }
-            }
-        }
-    }
-
-} catch (err) {
-
-    console.error("User type error :", err);
-
-}
-
-    // Find or create attendance record
     const attendanceDate = normalizeAttendanceDate(date);
 
     if (!attendanceDate) {
@@ -212,74 +129,83 @@ try {
       });
     }
 
-    let attendance = await Attendance.findOne({
+    const attendance = await Attendance.findOne({
       userId: employeeId,
       date: attendanceDate,
     });
 
-   if (!attendance) {
-  return res.status(404).json({
-    success: false,
-    message: "Attendance record not found for this employee and date.",
-  });
-} else if (!attendance.userType) {
-      attendance.userType = userType;
+    if (!attendance) {
+      return res.status(404).json({
+        success: false,
+        message: "Attendance record not found.",
+      });
     }
 
-    if (sessions && sessions.length > 0) {
-      const firstSession = sessions[0];
-      const lastSession = sessions[sessions.length - 1];
+    // ==========================================
+    // Only update fields which are provided
+    // ==========================================
 
-      if (firstSession.checkin) {
-        const checkInTime = parseTimeToDate(attendanceDate, firstSession.checkin);
-        if (checkInTime) {
-          attendance.checkInTime = checkInTime;
-          attendance.approvedCheckInTime = checkInTime;
-        }
+    if (checkInTime !== undefined) {
+      const parsedCheckIn = parseTimeToDate(
+        attendanceDate,
+        checkInTime
+      );
+
+      if (!parsedCheckIn) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid check-in time.",
+        });
       }
 
-      if (lastSession.checkout) {
-        const checkOutTime = parseTimeToDate(attendanceDate, lastSession.checkout);
-        if (checkOutTime) {
-          attendance.checkOutTime = checkOutTime;
-        }
+      attendance.checkInTime = parsedCheckIn;
+      attendance.approvedCheckInTime = parsedCheckIn;
+    }
+
+    if (checkOutTime !== undefined) {
+      const parsedCheckOut = parseTimeToDate(
+        attendanceDate,
+        checkOutTime
+      );
+
+      if (!parsedCheckOut) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid check-out time.",
+        });
       }
 
-      attendance.breaks = [];
-      let totalBreakMinutes = 0;
+      attendance.checkOutTime = parsedCheckOut;
+    }
 
-      for (const session of sessions) {
-        if (session.breakStart && session.breakEnd) {
-          const breakStart = parseTimeToDate(attendanceDate, session.breakStart);
-          const breakEnd = parseTimeToDate(attendanceDate, session.breakEnd);
+    // Optional reason
+    if (reason !== undefined) {
+      attendance.adjustmentReason = reason;
+    }
 
-          if (breakStart && breakEnd) {
-            const duration = Number(
-              ((breakEnd.getTime() - breakStart.getTime()) / 60000).toFixed(2)
-            );
-            attendance.breaks.push({
-              startTime: breakStart,
-              endTime: breakEnd,
-              duration,
-            });
-            totalBreakMinutes += duration;
-          }
-        }
+    // ==========================================
+    // Recalculate work time
+    // ==========================================
+
+    if (attendance.checkInTime && attendance.checkOutTime) {
+      let totalMinutes =
+        (attendance.checkOutTime.getTime() -
+          attendance.checkInTime.getTime()) /
+        60000;
+
+      totalMinutes -= attendance.totalBreakTime || 0;
+
+      if (totalMinutes < 0) {
+        totalMinutes = 0;
       }
 
-      attendance.totalBreakTime = Math.min(totalBreakMinutes, 120);
+      attendance.totalWorkTime = Number(
+        (totalMinutes / 60).toFixed(2)
+      );
 
-      if (attendance.checkInTime && attendance.checkOutTime) {
-        let totalMinutes =
-          (attendance.checkOutTime.getTime() - attendance.checkInTime.getTime()) /
-          60000;
-
-        totalMinutes -= attendance.totalBreakTime;
-
-        if (totalMinutes < 0) totalMinutes = 0;
-
-        attendance.totalWorkTime = Number((totalMinutes / 60).toFixed(2));
-      }
+      // ==========================================
+      // Status
+      // ==========================================
 
       attendance.status =
         attendance.totalWorkTime >= 8
@@ -287,25 +213,242 @@ try {
           : attendance.totalWorkTime >= 4
           ? "half-day"
           : "absent";
-
-      attendance.approvalStatus = "approved";
     }
 
-    // Save attendance
+    attendance.approvalStatus = "approved";
+
     await attendance.save();
 
-    res.status(200).json({
+    const employeeName = await getEmployeeName(employeeId);
+
+    return res.status(200).json({
       success: true,
-      message: "Attendance updated successfully and adjustment request created.",
+      message: "Attendance partially updated successfully.",
       data: {
         attendance,
         employeeName,
-      }
+      },
+    });
+  } catch (error) {
+    console.error("PATCH attendance error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+exports.putAttendanceAdjustment = async (req, res) => {
+  try {
+    const {
+      employeeId,
+      date,
+      sessions,
+      reason,
+    } = req.body;
+
+    if (!employeeId || !date || !reason) {
+      return res.status(400).json({
+        success: false,
+        message: "Employee, Date and Reason are required.",
+      });
+    }
+
+    if (!Array.isArray(sessions) || sessions.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Sessions are required.",
+      });
+    }
+
+    const attendanceDate = normalizeAttendanceDate(date);
+
+    if (!attendanceDate) {
+      return res.status(400).json({
+        success: false,
+        message: "Valid date is required.",
+      });
+    }
+
+    const attendance = await Attendance.findOne({
+      userId: employeeId,
+      date: attendanceDate,
     });
 
+    if (!attendance) {
+      return res.status(404).json({
+        success: false,
+        message: "Attendance record not found.",
+      });
+    }
+
+    // ==========================================
+    // First session = Check In
+    // Last session = Check Out
+    // ==========================================
+
+    const firstSession = sessions[0];
+    const lastSession = sessions[sessions.length - 1];
+
+    // ==========================================
+    // Check In
+    // ==========================================
+
+    if (firstSession.checkin) {
+      const checkInTime = parseTimeToDate(
+        attendanceDate,
+        firstSession.checkin
+      );
+
+      if (!checkInTime) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid check-in time.",
+        });
+      }
+
+      attendance.checkInTime = checkInTime;
+      attendance.approvedCheckInTime = checkInTime;
+    } else {
+      attendance.checkInTime = null;
+      attendance.approvedCheckInTime = null;
+    }
+
+    // ==========================================
+    // Check Out
+    // ==========================================
+
+    if (lastSession.checkout) {
+      const checkOutTime = parseTimeToDate(
+        attendanceDate,
+        lastSession.checkout
+      );
+
+      if (!checkOutTime) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid check-out time.",
+        });
+      }
+
+      attendance.checkOutTime = checkOutTime;
+    } else {
+      attendance.checkOutTime = null;
+    }
+
+    // ==========================================
+    // Breaks
+    // ==========================================
+
+    attendance.breaks = [];
+
+    let totalBreakMinutes = 0;
+
+    for (const session of sessions) {
+      if (session.breakStart && session.breakEnd) {
+        const breakStart = parseTimeToDate(
+          attendanceDate,
+          session.breakStart
+        );
+
+        const breakEnd = parseTimeToDate(
+          attendanceDate,
+          session.breakEnd
+        );
+
+        if (!breakStart || !breakEnd) {
+          return res.status(400).json({
+            success: false,
+            message: "Invalid break time.",
+          });
+        }
+
+        let duration =
+          (breakEnd.getTime() - breakStart.getTime()) /
+          60000;
+
+        if (duration < 0) {
+          duration = 0;
+        }
+
+        duration = Number(duration.toFixed(2));
+
+        attendance.breaks.push({
+          startTime: breakStart,
+          endTime: breakEnd,
+          duration,
+        });
+
+        totalBreakMinutes += duration;
+      }
+    }
+
+    attendance.totalBreakTime = Math.min(
+      totalBreakMinutes,
+      120
+    );
+
+    // ==========================================
+    // Calculate Work Time
+    // ==========================================
+
+    if (
+      attendance.checkInTime &&
+      attendance.checkOutTime
+    ) {
+      let totalMinutes =
+        (attendance.checkOutTime.getTime() -
+          attendance.checkInTime.getTime()) /
+        60000;
+
+      totalMinutes -= attendance.totalBreakTime;
+
+      if (totalMinutes < 0) {
+        totalMinutes = 0;
+      }
+
+      attendance.totalWorkTime = Number(
+        (totalMinutes / 60).toFixed(2)
+      );
+    } else {
+      attendance.totalWorkTime = 0;
+    }
+
+    // ==========================================
+    // Status
+    // ==========================================
+
+    attendance.status =
+      attendance.totalWorkTime >= 8
+        ? "present"
+        : attendance.totalWorkTime >= 4
+        ? "half-day"
+        : "absent";
+
+    attendance.approvalStatus = "approved";
+
+    // Store reason if schema has this field
+    if (attendance.schema.path("adjustmentReason")) {
+      attendance.adjustmentReason = reason;
+    }
+
+    await attendance.save();
+
+    const employeeName = await getEmployeeName(employeeId);
+
+    return res.status(200).json({
+      success: true,
+      message: "Complete attendance updated successfully.",
+      data: {
+        attendance,
+        employeeName,
+      },
+    });
   } catch (error) {
-    console.error('Error in direct adjustment:', error);
-    res.status(500).json({
+    console.error("PUT attendance error:", error);
+
+    return res.status(500).json({
       success: false,
       message: error.message,
     });

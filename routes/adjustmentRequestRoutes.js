@@ -2,21 +2,23 @@ const express = require("express");
 const router = express.Router();
 
 const {
-  updateDirectAdjustment,
+  patchAttendanceAdjustment,
+  putAttendanceAdjustment,
   getAdjustmentHistory,
   testGetEmployeeName,
 } = require("../controllers/adjustmentRequestController");
 
-// Update existing attendance through adjustment
-router.patch("/update", updateDirectAdjustment);
 
-// Optional: PUT if you want full replacement/update
-router.put("/update", updateDirectAdjustment);
+// Partial update
+router.patch("/update/:employeeId/:date", patchAttendanceAdjustment);
 
-// Get adjustment history
+// Full update
+router.put("/update/:employeeId/:date", putAttendanceAdjustment);
+
+// History
 router.get("/history", getAdjustmentHistory);
 
 // Test employee name
-router.get("/test-name/:id", testGetEmployeeName);
+router.get("/test/:id", testGetEmployeeName);
 
 module.exports = router;
