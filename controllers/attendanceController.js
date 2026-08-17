@@ -700,8 +700,6 @@ exports.endBreak = async (req, res) => {
   try {
     const { userId } = req.body;
     
-    // ... વેરિફિકેશન...
-    
     const activeBreak = attendance.breaks.find((b) => !b.endTime);
     
     if (!activeBreak) {
@@ -711,7 +709,6 @@ exports.endBreak = async (req, res) => {
       });
     }
     
-    // 📌 અહીં break end થાય છે
     const endTime = getISTNow();
     activeBreak.endTime = endTime;
     
@@ -719,12 +716,10 @@ exports.endBreak = async (req, res) => {
     const duration = (endTime - activeBreak.startTime) / (1000 * 60);
     activeBreak.duration = Number(duration.toFixed(2));
     
-    // Total break time માં ઉમેરાય છે
     attendance.totalBreakTime = (attendance.totalBreakTime || 0) + Number(duration.toFixed(2));
     
     await attendance.save();
     
-    // ✅ કર્મચારી હવે working માં છે
     res.status(200).json({
       success: true,
       message: "Break ended successfully",
@@ -1651,46 +1646,32 @@ exports.getAbsentAttendanceByDateRange = async (req, res) => {
 };
 
 // ================= GET USER'S ABSENT ATTENDANCE =================
-// ================= GET ALL ABSENT ATTENDANCE =================
 exports.getAllAbsentAttendance = async (req, res) => {
   try {
     const { date, month } = req.query;
 
     // ============================================
-    // 1. Build query
+    // 1. Target Date
     // ============================================
-    const query = {
-      $or: [
-        { 
-          approvalStatus: "approved", 
-          status: "absent" 
-        },
-        { 
-          approvalStatus: "pending", 
-          status: "absent" 
-        }
-      ]
-    };
-
-    // Filter by specific date
-    if (date) {
-      query.date = date;
-    } else {
-      // Default to today's date
-      query.date = getToday();
-    }
-
-    // Filter by month (YYYY-MM)
-    if (month) {
-      query.date = {
-        $regex: `^${month}`,
-      };
-    }
+    const targetDate = date || getToday();
 
     // ============================================
-    // 2. Fetch all absent attendance records
+    // 2. Get all active employees/interns/teamleads
     // ============================================
-    const absentRecords = await Attendance.find(query)
+    const users = await User.find({
+      role: {
+        $in: ["employee", "intern", "teamlead"],
+      },
+    }).select(
+      "_id name uniqueID role email department phoneNumber"
+    );
+
+    // ============================================
+    // 3. Get attendance records for target date
+    // ============================================
+    const attendanceRecords = await Attendance.find({
+      date: targetDate,
+    })
       .populate({
         path: "userId",
         select: "name uniqueID role email department phoneNumber",
@@ -1699,88 +1680,201 @@ exports.getAllAbsentAttendance = async (req, res) => {
         path: "approvedBy",
         select: "name uniqueID role",
       })
-      .sort({ date: -1, createdAt: -1 });
+      .sort({ createdAt: -1 });
 
     // ============================================
-    // 3. Format response
+    // 4. Create attendance map by userId
     // ============================================
-    const formatted = absentRecords.map((item) => {
-      const data = formatAttendanceDocument(item);
+    const attendanceMap = new Map();
 
-      return {
-        _id: data._id,
-
-        employee: {
-          _id: data.userId?._id,
-          name: data.userId?.name || "",
-          uniqueID: data.userId?.uniqueID || "",
-          email: data.userId?.email || "",
-          department: data.userId?.department || "",
-          phoneNumber: data.userId?.phoneNumber || "",
-          role: data.userId?.role || data.userType,
-        },
-
-        date: data.date,
-        dateDisplay: data.dateDisplay,
-
-        checkInTime: data.checkInTime,
-        checkInTimeDisplay: data.checkInTimeDisplay,
-        checkInTimeFullDisplay: data.checkInTimeFullDisplay,
-
-        approvedCheckInTime: data.approvedCheckInTime,
-        approvedCheckInTimeDisplay: data.approvedCheckInTimeDisplay,
-        approvedCheckInTimeFullDisplay: data.approvedCheckInTimeFullDisplay,
-
-        checkOutTime: data.checkOutTime,
-        checkOutTimeDisplay: data.checkOutTimeDisplay,
-        checkOutTimeFullDisplay: data.checkOutTimeFullDisplay,
-
-        breaks: data.breaks,
-        totalBreakTime: data.totalBreakTime,
-        totalBreakTimeDisplay: data.totalBreakTimeDisplay,
-
-        totalWorkTime: data.totalWorkTime,
-        totalWorkTimeDisplay: data.totalWorkTimeDisplay,
-
-        isLate: data.isLate,
-        status: data.status,
-        approvalStatus: data.approvalStatus,
-
-        approvedAt: data.approvedAt,
-        approvedAtDisplay: data.approvedAtDisplay,
-        approvedAtFullDisplay: data.approvedAtFullDisplay,
-
-        approvedBy: data.approvedBy
-          ? {
-              _id: data.approvedBy._id,
-              name: data.approvedBy.name,
-              uniqueID: data.approvedBy.uniqueID,
-              role: data.approvedBy.role,
-            }
-          : null,
-
-        createdAt: data.createdAt,
-        createdAtDisplay: data.createdAtDisplay,
-
-        updatedAt: data.updatedAt,
-        updatedAtDisplay: data.updatedAtDisplay,
-      };
+    attendanceRecords.forEach((attendance) => {
+      if (attendance.userId?._id) {
+        attendanceMap.set(
+          attendance.userId._id.toString(),
+          attendance
+        );
+      }
     });
 
     // ============================================
-    // 4. Statistics
+    // 5. Find users who did NOT check in
     // ============================================
-    const totalAbsent = formatted.length;
-    
-    const pendingAbsent = formatted.filter(
-      (record) => record.approvalStatus === "pending"
-    ).length;
-    
-    const approvedAbsent = formatted.filter(
-      (record) => record.approvalStatus === "approved"
-    ).length;
+    const absentUsers = [];
 
-    // Role-wise breakdown
+    users.forEach((user) => {
+      const userId = user._id.toString();
+      const attendance = attendanceMap.get(userId);
+
+      // --------------------------------------------
+      // No attendance record = ABSENT
+      // --------------------------------------------
+      if (!attendance) {
+        absentUsers.push({
+          _id: null,
+
+          employee: {
+            _id: user._id,
+            name: user.name || "",
+            uniqueID: user.uniqueID || "",
+            email: user.email || "",
+            department: user.department || "",
+            phoneNumber: user.phoneNumber || "",
+            role: user.role || "",
+          },
+
+          date: targetDate,
+
+          dateDisplay: targetDate,
+
+          checkInTime: null,
+          checkInTimeDisplay: null,
+          checkInTimeFullDisplay: null,
+
+          approvedCheckInTime: null,
+          approvedCheckInTimeDisplay: null,
+          approvedCheckInTimeFullDisplay: null,
+
+          checkOutTime: null,
+          checkOutTimeDisplay: null,
+          checkOutTimeFullDisplay: null,
+
+          breaks: [],
+          totalBreakTime: 0,
+          totalBreakTimeDisplay: "0 minutes",
+
+          totalWorkTime: 0,
+          totalWorkTimeDisplay: "0 hours",
+
+          isLate: false,
+
+          status: "absent",
+
+          // No attendance record exists
+          approvalStatus: "not_checked_in",
+
+          approvedAt: null,
+          approvedAtDisplay: null,
+          approvedAtFullDisplay: null,
+
+          approvedBy: null,
+
+          createdAt: null,
+          createdAtDisplay: null,
+
+          updatedAt: null,
+          updatedAtDisplay: null,
+        });
+
+        return;
+      }
+
+      // --------------------------------------------
+      // Attendance exists but no check-in
+      // --------------------------------------------
+      const hasCheckIn =
+        attendance.checkInTime ||
+        attendance.approvedCheckInTime;
+
+      if (!hasCheckIn) {
+        const data = formatAttendanceDocument(attendance);
+
+        absentUsers.push({
+          _id: data._id,
+
+          employee: {
+            _id: data.userId?._id,
+            name: data.userId?.name || user.name || "",
+            uniqueID:
+              data.userId?.uniqueID || user.uniqueID || "",
+            email:
+              data.userId?.email || user.email || "",
+            department:
+              data.userId?.department || user.department || "",
+            phoneNumber:
+              data.userId?.phoneNumber ||
+              user.phoneNumber ||
+              "",
+            role:
+              data.userId?.role ||
+              data.userType ||
+              user.role ||
+              "",
+          },
+
+          date: data.date || targetDate,
+          dateDisplay: data.dateDisplay || targetDate,
+
+          checkInTime: data.checkInTime,
+          checkInTimeDisplay: data.checkInTimeDisplay,
+          checkInTimeFullDisplay: data.checkInTimeFullDisplay,
+
+          approvedCheckInTime: data.approvedCheckInTime,
+          approvedCheckInTimeDisplay:
+            data.approvedCheckInTimeDisplay,
+          approvedCheckInTimeFullDisplay:
+            data.approvedCheckInTimeFullDisplay,
+
+          checkOutTime: data.checkOutTime,
+          checkOutTimeDisplay: data.checkOutTimeDisplay,
+          checkOutTimeFullDisplay:
+            data.checkOutTimeFullDisplay,
+
+          breaks: data.breaks,
+          totalBreakTime: data.totalBreakTime,
+          totalBreakTimeDisplay:
+            data.totalBreakTimeDisplay,
+
+          totalWorkTime: data.totalWorkTime,
+          totalWorkTimeDisplay:
+            data.totalWorkTimeDisplay,
+
+          isLate: data.isLate,
+          status: "absent",
+          approvalStatus:
+            data.approvalStatus || "pending",
+
+          approvedAt: data.approvedAt,
+          approvedAtDisplay:
+            data.approvedAtDisplay,
+          approvedAtFullDisplay:
+            data.approvedAtFullDisplay,
+
+          approvedBy: data.approvedBy
+            ? {
+                _id: data.approvedBy._id,
+                name: data.approvedBy.name,
+                uniqueID: data.approvedBy.uniqueID,
+                role: data.approvedBy.role,
+              }
+            : null,
+
+          createdAt: data.createdAt,
+          createdAtDisplay:
+            data.createdAtDisplay,
+
+          updatedAt: data.updatedAt,
+          updatedAtDisplay:
+            data.updatedAtDisplay,
+        });
+      }
+    });
+
+    // ============================================
+    // 6. Month filter
+    // ============================================
+    let finalData = absentUsers;
+
+    if (month) {
+      finalData = absentUsers.filter(
+        (record) =>
+          record.date &&
+          record.date.startsWith(month)
+      );
+    }
+
+    // ============================================
+    // 7. Role-wise breakdown
+    // ============================================
     const roleWise = {
       employee: 0,
       intern: 0,
@@ -1788,65 +1882,76 @@ exports.getAllAbsentAttendance = async (req, res) => {
       other: 0,
     };
 
-    formatted.forEach((record) => {
-      const role = record.employee?.role?.toLowerCase() || "other";
-      if (role === "employee") roleWise.employee++;
-      else if (role === "intern") roleWise.intern++;
-      else if (role === "teamlead" || role === "team lead") roleWise.teamlead++;
-      else roleWise.other++;
+    finalData.forEach((record) => {
+      const role =
+        record.employee?.role?.toLowerCase() || "other";
+
+      if (role === "employee") {
+        roleWise.employee++;
+      } else if (role === "intern") {
+        roleWise.intern++;
+      } else if (
+        role === "teamlead" ||
+        role === "team lead"
+      ) {
+        roleWise.teamlead++;
+      } else {
+        roleWise.other++;
+      }
     });
 
-    // Month-wise breakdown if month filter is not applied
-    const monthWise = {};
-    
-    if (!month) {
-      formatted.forEach((record) => {
-        const monthKey = record.date.substring(0, 7); // YYYY-MM
-        if (!monthWise[monthKey]) {
-          monthWise[monthKey] = {
-            month: monthKey,
-            count: 0,
-            pending: 0,
-            approved: 0,
-          };
-        }
-        monthWise[monthKey].count++;
-        
-        if (record.approvalStatus === "pending") {
-          monthWise[monthKey].pending++;
-        } else if (record.approvalStatus === "approved") {
-          monthWise[monthKey].approved++;
-        }
-      });
-    }
+    // ============================================
+    // 8. Pending / Approved
+    // ============================================
+    const pendingAbsent = finalData.filter(
+      (record) =>
+        record.approvalStatus === "pending"
+    ).length;
+
+    const approvedAbsent = finalData.filter(
+      (record) =>
+        record.approvalStatus === "approved"
+    ).length;
+
+    const notCheckedIn = finalData.filter(
+      (record) =>
+        record.approvalStatus === "not_checked_in"
+    ).length;
 
     // ============================================
-    // 5. Response
+    // 9. Response
     // ============================================
     return res.status(200).json({
       success: true,
-      message: `All absent attendance records`,
-      
-      summary: {
-        total: totalAbsent,
-        pending: pendingAbsent,
-        approved: approvedAbsent,
-        roleWise,
-        ...(date && { date }),
-        ...(month && { month }),
-        ...(!date && !month && { date: getToday() }),
-      },
-      
-      ...(monthWise && Object.keys(monthWise).length > 0 && {
-        monthWiseBreakdown: Object.values(monthWise).sort((a, b) => b.month.localeCompare(a.month)),
-      }),
-      
-      data: formatted,
-    });
 
+      message: "Date-wise absent attendance records",
+
+      summary: {
+        total: finalData.length,
+
+        pending: pendingAbsent,
+
+        approved: approvedAbsent,
+
+        notCheckedIn: notCheckedIn,
+
+        roleWise,
+
+        date: targetDate,
+
+        ...(month && {
+          month,
+        }),
+      },
+
+      data: finalData,
+    });
   } catch (err) {
-    console.error("GetAllAbsentAttendance Error:", err);
-    
+    console.error(
+      "GetAllAbsentAttendance Error:",
+      err
+    );
+
     return res.status(500).json({
       success: false,
       message: err.message,
