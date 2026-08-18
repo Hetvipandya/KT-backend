@@ -1,7 +1,271 @@
 const Attendance = require("../models/Attendance");
 const User = require("../models/User");
 
-const pad = (value) => String(value).padStart(2, "0");
+const pad = (value) => String(value).padStart(2, "0"); 
+
+// ============================================================
+// GET ALL ATTENDANCE MEMBERS FOR A SPECIFIC DATE
+// ============================================================
+const getDateWiseAttendance = async (date) => {
+  const Employee = require("../models/Employee");
+
+  // ----------------------------------------------------------
+  // 1. Employees + Interns + Team Leads from User collection
+  // ----------------------------------------------------------
+  const users = await User.find({
+    role: {
+      $in: ["employee", "intern", "teamlead"],
+    },
+  }).select(
+    "_id name uniqueID role email department phoneNumber"
+  );
+
+  // ----------------------------------------------------------
+  // 2. Team Leads which are marked from Employee collection
+  // ----------------------------------------------------------
+  const teamLeadEmployees = await Employee.find({
+    isTeamLead: true,
+  }).select("userId");
+
+  const teamLeadIds = new Set(
+    teamLeadEmployees
+      .filter((item) => item.userId)
+      .map((item) => item.userId.toString())
+  );
+
+  // ----------------------------------------------------------
+  // 3. Create members map
+  // ----------------------------------------------------------
+  const membersMap = new Map();
+
+  users.forEach((user) => {
+    let role = user.role?.toLowerCase();
+
+    if (teamLeadIds.has(user._id.toString())) {
+      role = "teamlead";
+    }
+
+    membersMap.set(user._id.toString(), {
+      user,
+      role,
+    });
+  });
+
+  // ----------------------------------------------------------
+  // 4. Fetch attendance for selected date
+  // ----------------------------------------------------------
+  const attendanceRecords = await Attendance.find({
+    date,
+  })
+    .populate({
+      path: "userId",
+      select:
+        "name uniqueID role email department phoneNumber",
+    })
+    .populate({
+      path: "approvedBy",
+      select: "name uniqueID role",
+    })
+    .sort({
+      createdAt: -1,
+    });
+
+  // ----------------------------------------------------------
+  // 5. Attendance map
+  // ----------------------------------------------------------
+  const attendanceMap = new Map();
+
+  attendanceRecords.forEach((attendance) => {
+    if (attendance.userId?._id) {
+      attendanceMap.set(
+        attendance.userId._id.toString(),
+        attendance
+      );
+    }
+  });
+
+  // ----------------------------------------------------------
+  // 6. Create final date-wise list
+  // ----------------------------------------------------------
+  const result = [];
+
+  for (const member of membersMap.values()) {
+    const user = member.user;
+    const userId = user._id.toString();
+
+    const attendance = attendanceMap.get(userId);
+
+    // --------------------------------------------------------
+    // No attendance = ABSENT / NOT CHECKED IN
+    // --------------------------------------------------------
+    if (!attendance) {
+      result.push({
+        _id: null,
+
+        employee: {
+          _id: user._id,
+          name: user.name || "",
+          uniqueID: user.uniqueID || "",
+          email: user.email || "",
+          department: user.department || "",
+          phoneNumber: user.phoneNumber || "",
+          role: member.role || user.role || "",
+        },
+
+        date,
+
+        dateDisplay: date,
+
+        checkInTime: null,
+        checkInTimeDisplay: null,
+        checkInTimeFullDisplay: null,
+
+        approvedCheckInTime: null,
+        approvedCheckInTimeDisplay: null,
+        approvedCheckInTimeFullDisplay: null,
+
+        checkOutTime: null,
+        checkOutTimeDisplay: null,
+        checkOutTimeFullDisplay: null,
+
+        breaks: [],
+
+        totalBreakTime: 0,
+        totalBreakTimeDisplay: "0h 0m",
+
+        totalWorkTime: 0,
+        totalWorkTimeDisplay: "0h 0m",
+        totalWorkTimeHours: "0.00 hours",
+
+        isLate: false,
+
+        status: "absent",
+
+        approvalStatus: "not_checked_in",
+
+        approvedAt: null,
+        approvedAtDisplay: null,
+        approvedAtFullDisplay: null,
+
+        approvedBy: null,
+
+        createdAt: null,
+        createdAtDisplay: null,
+
+        updatedAt: null,
+        updatedAtDisplay: null,
+      });
+
+      continue;
+    }
+
+    // --------------------------------------------------------
+    // Attendance exists
+    // --------------------------------------------------------
+    const data = formatAttendanceDocument(attendance);
+
+    result.push({
+      _id: data._id,
+
+      employee: {
+        _id: data.userId?._id || user._id,
+        name:
+          data.userId?.name ||
+          user.name ||
+          "",
+        uniqueID:
+          data.userId?.uniqueID ||
+          user.uniqueID ||
+          "",
+        email:
+          data.userId?.email ||
+          user.email ||
+          "",
+        department:
+          data.userId?.department ||
+          user.department ||
+          "",
+        phoneNumber:
+          data.userId?.phoneNumber ||
+          user.phoneNumber ||
+          "",
+        role:
+          member.role ||
+          data.userId?.role ||
+          user.role ||
+          "",
+      },
+
+      date: data.date || date,
+      dateDisplay: data.dateDisplay || date,
+
+      checkInTime: data.checkInTime || null,
+      checkInTimeDisplay:
+        data.checkInTimeDisplay || null,
+      checkInTimeFullDisplay:
+        data.checkInTimeFullDisplay || null,
+
+      approvedCheckInTime:
+        data.approvedCheckInTime || null,
+      approvedCheckInTimeDisplay:
+        data.approvedCheckInTimeDisplay || null,
+      approvedCheckInTimeFullDisplay:
+        data.approvedCheckInTimeFullDisplay || null,
+
+      checkOutTime: data.checkOutTime || null,
+      checkOutTimeDisplay:
+        data.checkOutTimeDisplay || null,
+      checkOutTimeFullDisplay:
+        data.checkOutTimeFullDisplay || null,
+
+      breaks: data.breaks || [],
+
+      totalBreakTime:
+        data.totalBreakTime || 0,
+      totalBreakTimeDisplay:
+        data.totalBreakTimeDisplay || "0h 0m",
+
+      totalWorkTime:
+        data.totalWorkTime || 0,
+      totalWorkTimeDisplay:
+        data.totalWorkTimeDisplay || "0h 0m",
+      totalWorkTimeHours:
+        data.totalWorkTimeHours || "0.00 hours",
+
+      isLate: data.isLate || false,
+
+      status: data.status || "absent",
+
+      approvalStatus:
+        data.approvalStatus || "pending",
+
+      approvedAt: data.approvedAt || null,
+      approvedAtDisplay:
+        data.approvedAtDisplay || null,
+      approvedAtFullDisplay:
+        data.approvedAtFullDisplay || null,
+
+      approvedBy: data.approvedBy
+        ? {
+            _id: data.approvedBy._id,
+            name: data.approvedBy.name,
+            uniqueID: data.approvedBy.uniqueID,
+            role: data.approvedBy.role,
+          }
+        : null,
+
+      createdAt: data.createdAt || null,
+      createdAtDisplay:
+        data.createdAtDisplay || null,
+
+      updatedAt: data.updatedAt || null,
+      updatedAtDisplay:
+        data.updatedAtDisplay || null,
+    });
+  }
+
+  return result;
+};
 
 const ensureTodayAttendance = async (date = getToday()) => {
   try {
@@ -512,106 +776,122 @@ exports.checkIn = async (req, res) => {
   }
 };
 
+// ================= GET DATE-WISE ATTENDANCE FOR ADMIN =================
 exports.getAllAttendanceForAdmin = async (req, res) => {
   try {
-    // Fetch only attendance records where user has actually checked in
-    // (either pending approval or already approved with check-in time)
-    const attendance = await Attendance.find({
-      $or: [
-        { approvalStatus: "pending" },
-        { 
-          approvalStatus: "approved",
-          checkInTime: { $ne: null }
-        }
-      ]
-    })
-    .populate({
-      path: "userId",
-      select: "name uniqueID role email department",
-    })
-    .populate({
-      path: "approvedBy",
-      select: "name uniqueID role",
-    })
-    .sort({ createdAt: -1 });
+    const requestedDate = req.query.date;
 
-    const formatted = attendance.map((item) => {
-      const data = formatAttendanceDocument(item);
+    // Default = today
+    const date = requestedDate || getToday();
 
-      return {
-        _id: data._id,
+    // Validate YYYY-MM-DD
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      return res.status(400).json({
+        success: false,
+        message: "date must be in YYYY-MM-DD format",
+      });
+    }
 
-        employee: {
-          _id: data.userId?._id,
-          name: data.userId?.name || "",
-          uniqueID: data.userId?.uniqueID || "",
-          email: data.userId?.email || "",
-          department: data.userId?.department || "",
-          role: data.userId?.role || data.userType,
-        },
+    const attendance = await getDateWiseAttendance(date);
 
-        date: data.date,
-        dateDisplay: data.dateDisplay,
+    // ----------------------------------------------------------
+    // Statistics
+    // ----------------------------------------------------------
+    const present = attendance.filter(
+      (item) =>
+        item.status === "present"
+    ).length;
 
-        checkInTime: data.checkInTime,
-        checkInTimeDisplay: data.checkInTimeDisplay,
-        checkInTimeFullDisplay: data.checkInTimeFullDisplay,
+    const late = attendance.filter(
+      (item) =>
+        item.isLate === true &&
+        item.status !== "absent"
+    ).length;
 
-        approvedCheckInTime: data.approvedCheckInTime,
-        approvedCheckInTimeDisplay:
-          data.approvedCheckInTimeDisplay,
-        approvedCheckInTimeFullDisplay:
-          data.approvedCheckInTimeFullDisplay,
+    const halfDay = attendance.filter(
+      (item) =>
+        item.status === "half-day"
+    ).length;
 
-        checkOutTime: data.checkOutTime,
-        checkOutTimeDisplay: data.checkOutTimeDisplay,
-        checkOutTimeFullDisplay: data.checkOutTimeFullDisplay,
+    const absent = attendance.filter(
+      (item) =>
+        item.status === "absent"
+    ).length;
 
-        breaks: data.breaks,
+    const notCheckedIn = attendance.filter(
+      (item) =>
+        item.approvalStatus === "not_checked_in"
+    ).length;
 
-        totalBreakTime: data.totalBreakTime,
-        totalBreakTimeDisplay:
-          data.totalBreakTimeDisplay,
+    const pending = attendance.filter(
+      (item) =>
+        item.approvalStatus === "pending"
+    ).length;
 
-        totalWorkTime: data.totalWorkTime,
-        totalWorkTimeDisplay:
-          data.totalWorkTimeDisplay,
+    const approved = attendance.filter(
+      (item) =>
+        item.approvalStatus === "approved"
+    ).length;
 
-        isLate: data.isLate,
+    // ----------------------------------------------------------
+    // Role-wise
+    // ----------------------------------------------------------
+    const roleWise = {
+      employee: 0,
+      intern: 0,
+      teamlead: 0,
+      other: 0,
+    };
 
-        status: data.status,
+    attendance.forEach((item) => {
+      const role =
+        item.employee?.role
+          ?.toLowerCase()
+          ?.trim() || "other";
 
-        approvalStatus: data.approvalStatus,
-
-        approvedAt: data.approvedAt,
-        approvedAtDisplay: data.approvedAtDisplay,
-        approvedAtFullDisplay:
-          data.approvedAtFullDisplay,
-
-        approvedBy: data.approvedBy
-          ? {
-              _id: data.approvedBy._id,
-              name: data.approvedBy.name,
-              uniqueID: data.approvedBy.uniqueID,
-              role: data.approvedBy.role,
-            }
-          : null,
-
-        createdAt: data.createdAt,
-        createdAtDisplay: data.createdAtDisplay,
-
-        updatedAt: data.updatedAt,
-        updatedAtDisplay: data.updatedAtDisplay,
-      };
+      if (role === "employee") {
+        roleWise.employee++;
+      } else if (role === "intern") {
+        roleWise.intern++;
+      } else if (
+        role === "teamlead" ||
+        role === "team lead"
+      ) {
+        roleWise.teamlead++;
+      } else {
+        roleWise.other++;
+      }
     });
 
     return res.status(200).json({
       success: true,
-      count: formatted.length,
-      attendance: formatted,
+
+      date,
+
+      count: attendance.length,
+
+      summary: {
+        total: attendance.length,
+
+        present,
+        late,
+        halfDay,
+        absent,
+
+        pending,
+        approved,
+        notCheckedIn,
+
+        roleWise,
+      },
+
+      attendance,
     });
   } catch (err) {
-    console.log(err);
+    console.error(
+      "GetAllAttendanceForAdmin Error:",
+      err
+    );
 
     return res.status(500).json({
       success: false,
@@ -696,40 +976,94 @@ exports.startBreak = async (req, res) => {
 };
 
 // ================= BREAK END =================
+// ================= BREAK END =================
 exports.endBreak = async (req, res) => {
   try {
     const { userId } = req.body;
-    
-    const activeBreak = attendance.breaks.find((b) => !b.endTime);
-    
+
+    if (!userId) {
+      return res.status(400).json({
+        success: false,
+        message: "userId is required",
+      });
+    }
+
+    const attendance = await Attendance.findOne({
+      userId,
+      date: getToday(),
+    });
+
+    if (!attendance) {
+      return res.status(404).json({
+        success: false,
+        message: "Attendance not found. Please check in first.",
+      });
+    }
+
+    if (attendance.approvalStatus !== "approved") {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Your check-in request is not approved yet. Please wait for admin approval.",
+      });
+    }
+
+    if (!attendance.checkInTime) {
+      return res.status(400).json({
+        success: false,
+        message: "Please check in first.",
+      });
+    }
+
+    if (attendance.checkOutTime) {
+      return res.status(400).json({
+        success: false,
+        message: "Already checked out.",
+      });
+    }
+
+    const activeBreak = attendance.breaks.find(
+      (breakItem) => !breakItem.endTime
+    );
+
     if (!activeBreak) {
       return res.status(400).json({
         success: false,
-        message: "No active break found",
+        message: "No active break found.",
       });
     }
-    
+
     const endTime = getISTNow();
+
     activeBreak.endTime = endTime;
-    
-    // Break ની duration calculate થાય છે
-    const duration = (endTime - activeBreak.startTime) / (1000 * 60);
-    activeBreak.duration = Number(duration.toFixed(2));
-    
-    attendance.totalBreakTime = (attendance.totalBreakTime || 0) + Number(duration.toFixed(2));
-    
+
+    const duration =
+      (endTime.getTime() - new Date(activeBreak.startTime).getTime()) /
+      (1000 * 60);
+
+    activeBreak.duration = Number(
+      Math.max(0, duration).toFixed(2)
+    );
+
+    attendance.totalBreakTime = Number(
+      (
+        (attendance.totalBreakTime || 0) +
+        Math.max(0, duration)
+      ).toFixed(2)
+    );
+
     await attendance.save();
-    
-    res.status(200).json({
+
+    return res.status(200).json({
       success: true,
       message: "Break ended successfully",
       totalBreakTime: attendance.totalBreakTime,
       data: formatAttendanceDocument(attendance),
     });
-    
   } catch (err) {
     console.error("EndBreak Error:", err);
-    res.status(500).json({
+
+    return res.status(500).json({
       success: false,
       message: err.message,
     });
@@ -1646,235 +1980,25 @@ exports.getAbsentAttendanceByDateRange = async (req, res) => {
 };
 
 // ================= GET USER'S ABSENT ATTENDANCE =================
+// ================= GET DATE-WISE ABSENT ATTENDANCE =================
 exports.getAllAbsentAttendance = async (req, res) => {
   try {
-    const { date, month } = req.query;
+    const date = req.query.date || getToday();
 
-    // ============================================
-    // 1. Target Date
-    // ============================================
-    const targetDate = date || getToday();
-
-    // ============================================
-    // 2. Get all active employees/interns/teamleads
-    // ============================================
-    const users = await User.find({
-      role: {
-        $in: ["employee", "intern", "teamlead"],
-      },
-    }).select(
-      "_id name uniqueID role email department phoneNumber"
-    );
-
-    // ============================================
-    // 3. Get attendance records for target date
-    // ============================================
-    const attendanceRecords = await Attendance.find({
-      date: targetDate,
-    })
-      .populate({
-        path: "userId",
-        select: "name uniqueID role email department phoneNumber",
-      })
-      .populate({
-        path: "approvedBy",
-        select: "name uniqueID role",
-      })
-      .sort({ createdAt: -1 });
-
-    // ============================================
-    // 4. Create attendance map by userId
-    // ============================================
-    const attendanceMap = new Map();
-
-    attendanceRecords.forEach((attendance) => {
-      if (attendance.userId?._id) {
-        attendanceMap.set(
-          attendance.userId._id.toString(),
-          attendance
-        );
-      }
-    });
-
-    // ============================================
-    // 5. Find users who did NOT check in
-    // ============================================
-    const absentUsers = [];
-
-    users.forEach((user) => {
-      const userId = user._id.toString();
-      const attendance = attendanceMap.get(userId);
-
-      // --------------------------------------------
-      // No attendance record = ABSENT
-      // --------------------------------------------
-      if (!attendance) {
-        absentUsers.push({
-          _id: null,
-
-          employee: {
-            _id: user._id,
-            name: user.name || "",
-            uniqueID: user.uniqueID || "",
-            email: user.email || "",
-            department: user.department || "",
-            phoneNumber: user.phoneNumber || "",
-            role: user.role || "",
-          },
-
-          date: targetDate,
-
-          dateDisplay: targetDate,
-
-          checkInTime: null,
-          checkInTimeDisplay: null,
-          checkInTimeFullDisplay: null,
-
-          approvedCheckInTime: null,
-          approvedCheckInTimeDisplay: null,
-          approvedCheckInTimeFullDisplay: null,
-
-          checkOutTime: null,
-          checkOutTimeDisplay: null,
-          checkOutTimeFullDisplay: null,
-
-          breaks: [],
-          totalBreakTime: 0,
-          totalBreakTimeDisplay: "0 minutes",
-
-          totalWorkTime: 0,
-          totalWorkTimeDisplay: "0 hours",
-
-          isLate: false,
-
-          status: "absent",
-
-          // No attendance record exists
-          approvalStatus: "not_checked_in",
-
-          approvedAt: null,
-          approvedAtDisplay: null,
-          approvedAtFullDisplay: null,
-
-          approvedBy: null,
-
-          createdAt: null,
-          createdAtDisplay: null,
-
-          updatedAt: null,
-          updatedAtDisplay: null,
-        });
-
-        return;
-      }
-
-      // --------------------------------------------
-      // Attendance exists but no check-in
-      // --------------------------------------------
-      const hasCheckIn =
-        attendance.checkInTime ||
-        attendance.approvedCheckInTime;
-
-      if (!hasCheckIn) {
-        const data = formatAttendanceDocument(attendance);
-
-        absentUsers.push({
-          _id: data._id,
-
-          employee: {
-            _id: data.userId?._id,
-            name: data.userId?.name || user.name || "",
-            uniqueID:
-              data.userId?.uniqueID || user.uniqueID || "",
-            email:
-              data.userId?.email || user.email || "",
-            department:
-              data.userId?.department || user.department || "",
-            phoneNumber:
-              data.userId?.phoneNumber ||
-              user.phoneNumber ||
-              "",
-            role:
-              data.userId?.role ||
-              data.userType ||
-              user.role ||
-              "",
-          },
-
-          date: data.date || targetDate,
-          dateDisplay: data.dateDisplay || targetDate,
-
-          checkInTime: data.checkInTime,
-          checkInTimeDisplay: data.checkInTimeDisplay,
-          checkInTimeFullDisplay: data.checkInTimeFullDisplay,
-
-          approvedCheckInTime: data.approvedCheckInTime,
-          approvedCheckInTimeDisplay:
-            data.approvedCheckInTimeDisplay,
-          approvedCheckInTimeFullDisplay:
-            data.approvedCheckInTimeFullDisplay,
-
-          checkOutTime: data.checkOutTime,
-          checkOutTimeDisplay: data.checkOutTimeDisplay,
-          checkOutTimeFullDisplay:
-            data.checkOutTimeFullDisplay,
-
-          breaks: data.breaks,
-          totalBreakTime: data.totalBreakTime,
-          totalBreakTimeDisplay:
-            data.totalBreakTimeDisplay,
-
-          totalWorkTime: data.totalWorkTime,
-          totalWorkTimeDisplay:
-            data.totalWorkTimeDisplay,
-
-          isLate: data.isLate,
-          status: "absent",
-          approvalStatus:
-            data.approvalStatus || "pending",
-
-          approvedAt: data.approvedAt,
-          approvedAtDisplay:
-            data.approvedAtDisplay,
-          approvedAtFullDisplay:
-            data.approvedAtFullDisplay,
-
-          approvedBy: data.approvedBy
-            ? {
-                _id: data.approvedBy._id,
-                name: data.approvedBy.name,
-                uniqueID: data.approvedBy.uniqueID,
-                role: data.approvedBy.role,
-              }
-            : null,
-
-          createdAt: data.createdAt,
-          createdAtDisplay:
-            data.createdAtDisplay,
-
-          updatedAt: data.updatedAt,
-          updatedAtDisplay:
-            data.updatedAtDisplay,
-        });
-      }
-    });
-
-    // ============================================
-    // 6. Month filter
-    // ============================================
-    let finalData = absentUsers;
-
-    if (month) {
-      finalData = absentUsers.filter(
-        (record) =>
-          record.date &&
-          record.date.startsWith(month)
-      );
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      return res.status(400).json({
+        success: false,
+        message: "date must be in YYYY-MM-DD format",
+      });
     }
 
-    // ============================================
-    // 7. Role-wise breakdown
-    // ============================================
+    const attendance = await getDateWiseAttendance(date);
+
+    const absentRecords = attendance.filter(
+      (item) =>
+        item.status === "absent"
+    );
+
     const roleWise = {
       employee: 0,
       intern: 0,
@@ -1882,9 +2006,11 @@ exports.getAllAbsentAttendance = async (req, res) => {
       other: 0,
     };
 
-    finalData.forEach((record) => {
+    absentRecords.forEach((record) => {
       const role =
-        record.employee?.role?.toLowerCase() || "other";
+        record.employee?.role
+          ?.toLowerCase()
+          ?.trim() || "other";
 
       if (role === "employee") {
         roleWise.employee++;
@@ -1900,51 +2026,37 @@ exports.getAllAbsentAttendance = async (req, res) => {
       }
     });
 
-    // ============================================
-    // 8. Pending / Approved
-    // ============================================
-    const pendingAbsent = finalData.filter(
-      (record) =>
-        record.approvalStatus === "pending"
+    const notCheckedIn = absentRecords.filter(
+      (item) =>
+        item.approvalStatus ===
+        "not_checked_in"
     ).length;
 
-    const approvedAbsent = finalData.filter(
-      (record) =>
-        record.approvalStatus === "approved"
+    const checkedInAbsent = absentRecords.filter(
+      (item) =>
+        item.approvalStatus !==
+        "not_checked_in"
     ).length;
 
-    const notCheckedIn = finalData.filter(
-      (record) =>
-        record.approvalStatus === "not_checked_in"
-    ).length;
-
-    // ============================================
-    // 9. Response
-    // ============================================
     return res.status(200).json({
       success: true,
 
-      message: "Date-wise absent attendance records",
+      message:
+        `Absent attendance records for ${date}`,
 
       summary: {
-        total: finalData.length,
+        date,
 
-        pending: pendingAbsent,
+        total: absentRecords.length,
 
-        approved: approvedAbsent,
+        notCheckedIn,
 
-        notCheckedIn: notCheckedIn,
+        checkedInAbsent,
 
         roleWise,
-
-        date: targetDate,
-
-        ...(month && {
-          month,
-        }),
       },
 
-      data: finalData,
+      data: absentRecords,
     });
   } catch (err) {
     console.error(
