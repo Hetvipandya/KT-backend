@@ -9,7 +9,7 @@ const {
   deleteHoliday, 
 } = require("../controllers/holidayController");
 
-router.post("/create", addHoliday);
+router.post("/create", addHoliday); 
 router.get("/all", getAllHolidays); 
 router.get(
   "/current-month",

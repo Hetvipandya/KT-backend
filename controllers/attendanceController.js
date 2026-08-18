@@ -566,7 +566,6 @@ const getWorkingHours = (checkIn, checkOut, breakTime = 0) => {
 const OFFICE_START_TIME = "10:10";
 
 // ================= CHECK IN =================
-// ================= CHECK IN =================
 exports.checkIn = async (req, res) => {
   try {
     const { userId } = req.body;
