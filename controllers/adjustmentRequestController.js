@@ -12,6 +12,26 @@ const parseTimeToDate = (dateStr, timeStr) => {
   return new Date(Date.UTC(year, month - 1, day, hour - 5, minute - 30, 0));
 };
 
+const applyCheckInStatus = (attendance) => {
+  if (!attendance.checkInTime) {
+    attendance.isLate = false;
+    return;
+  }
+
+  const istCheckIn = new Date(
+    attendance.checkInTime.getTime() + 5.5 * 60 * 60 * 1000
+  );
+  const checkInMinutes =
+    istCheckIn.getUTCHours() * 60 + istCheckIn.getUTCMinutes();
+
+  attendance.isLate =
+    checkInMinutes > 10 * 60 + 10 && checkInMinutes <= 10 * 60 + 30;
+
+  if (checkInMinutes > 10 * 60 + 30) {
+    attendance.status = "absent";
+  }
+};
+
 const normalizeAttendanceDate = (value) => {
   if (!value) return null;
 
@@ -214,6 +234,8 @@ exports.patchAttendanceAdjustment = async (req, res) => {
           ? "half-day"
           : "absent";
     }
+
+    applyCheckInStatus(attendance);
 
     attendance.approvalStatus = "approved";
 
@@ -426,6 +448,8 @@ exports.putAttendanceAdjustment = async (req, res) => {
         ? "half-day"
         : "absent";
 
+    applyCheckInStatus(attendance);
+
     attendance.approvalStatus = "approved";
 
     // Store reason if schema has this field
@@ -445,7 +469,7 @@ exports.putAttendanceAdjustment = async (req, res) => {
         employeeName,
       },
     });
-  } catch (error) {
+  } catch (error) { 
     console.error("PUT attendance error:", error);
 
     return res.status(500).json({
