@@ -9,7 +9,7 @@ const EmployeeDocument =
 const EmployeeHistory = 
   require(
     "../models/EmployeeHistory"
-  );
+  ); 
   const User = require("../models/User");
   const Team = require("../models/Team");
 const { syncEmployeeToUser } = require("../utils/userEmployeeSync");

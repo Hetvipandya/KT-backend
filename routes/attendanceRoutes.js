@@ -14,7 +14,7 @@ const {
   rejectAttendance,
   getMyAttendanceHistory,
   getAttendanceByDate,
-  getSingleAttendance,
+  getSingleAttendance, 
   getMonthlyAttendance,
   getAllAbsentAttendance
 } = require("../controllers/attendanceController");
