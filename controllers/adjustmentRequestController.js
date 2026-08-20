@@ -19,44 +19,37 @@ const applyCheckInStatus = (attendance) => {
   }
 
   const istCheckIn = new Date(
-    attendance.checkInTime.getTime() + 5.5 * 60 * 60 * 1000
+    attendance.checkInTime.getTime() +
+      5.5 * 60 * 60 * 1000
   );
 
   const checkInMinutes =
     istCheckIn.getUTCHours() * 60 +
     istCheckIn.getUTCMinutes();
 
-  const officeStart = 10 * 60 + 10; // 10:10
-  const absentAfter = 10 * 60 + 30; // 10:30
+  const OFFICE_START = 10 * 60 + 10; // 10:10
+  const ABSENT_AFTER = 10 * 60 + 30; // 10:30
 
-  // ==========================================
-  // BEFORE / AT 10:10 = PRESENT
-  // ==========================================
-  if (checkInMinutes <= officeStart) {
+  // 10:10 or before
+  if (checkInMinutes <= OFFICE_START) {
     attendance.isLate = false;
     attendance.status = "present";
     return;
   }
 
-  // ==========================================
-  // 10:10 - 10:30 = LATE COMING
-  // ==========================================
+  // 10:10 to 10:30
   if (
-    checkInMinutes > officeStart &&
-    checkInMinutes <= absentAfter
+    checkInMinutes > OFFICE_START &&
+    checkInMinutes <= ABSENT_AFTER
   ) {
     attendance.isLate = true;
     attendance.status = "present";
     return;
   }
 
-  // ==========================================
-  // AFTER 10:30 = ABSENT
-  // ==========================================
-  if (checkInMinutes > absentAfter) {
-    attendance.isLate = false;
-    attendance.status = "absent";
-  }
+  // After 10:30
+  attendance.isLate = false;
+  attendance.status = "absent";
 };
 
 const normalizeAttendanceDate = (value) => {
@@ -155,43 +148,60 @@ const getEmployeeName = async (employeeId) => {
 const createOrUpdateAdjustmentHistory = async ({
   employeeId,
   attendanceDate,
-  checkInTime,
-  checkOutTime,
-  sessions,
   reason,
   attendance,
+  sessions = [],
 }) => {
   try {
     const adjustmentData = {
       userId: employeeId,
-      date: attendanceDate,
+
+      // AdjustmentRequest.date is Date
+      date: parseTimeToDate(attendanceDate, "00:00"),
+
+      // These are Date fields
+      checkInTime: attendance.checkInTime || null,
+      checkOutTime: attendance.checkOutTime || null,
+      approvedCheckInTime:
+        attendance.approvedCheckInTime || null,
+
+      totalBreakTime:
+        attendance.totalBreakTime || 0,
+
+      totalWorkTime:
+        attendance.totalWorkTime || 0,
+
       reason: reason || "Attendance adjusted",
-      status: "approved",
+
+      // Use attendance's final status
+      status: attendance.status || "absent",
+
       approvalStatus: "approved",
 
-      checkInTime: checkInTime || null,
-      checkOutTime: checkOutTime || null,
-
-      sessions: sessions || [],
-
-      totalBreakTime: attendance.totalBreakTime || 0,
-      totalWorkTime: attendance.totalWorkTime || 0,
+      // These fields are String in schema
+      sessions: sessions.map((session) => ({
+        checkin: session.checkin || "",
+        breakStart: session.breakStart || "",
+        breakEnd: session.breakEnd || "",
+        checkout: session.checkout || "",
+      })),
     };
 
-    const adjustment = await AdjustmentRequest.findOneAndUpdate(
-      {
-        userId: employeeId,
-        date: attendanceDate,
-      },
-      {
-        $set: adjustmentData,
-      },
-      {
-        new: true,
-        upsert: true,
-        setDefaultsOnInsert: true,
-      }
-    );
+    const adjustment =
+      await AdjustmentRequest.findOneAndUpdate(
+        {
+          userId: employeeId,
+          date: adjustmentData.date,
+        },
+        {
+          $set: adjustmentData,
+        },
+        {
+          new: true,
+          upsert: true,
+          setDefaultsOnInsert: true,
+        }
+      );
 
     return adjustment;
   } catch (error) {
@@ -356,21 +366,22 @@ exports.patchAttendanceAdjustment = async (req, res) => {
     // ==========================================
     // SAVE ADJUSTMENT HISTORY
     // ==========================================
+const adjustment =
+  await createOrUpdateAdjustmentHistory({
+    employeeId,
+    attendanceDate,
+    reason,
+    attendance,
 
-    const adjustment = await createOrUpdateAdjustmentHistory({
-      employeeId,
-      attendanceDate,
-      checkInTime: checkInTime || null,
-      checkOutTime: checkOutTime || null,
-      sessions: [
-        {
-          checkin: checkInTime || "",
-          checkout: checkOutTime || "",
-        },
-      ],
-      reason,
-      attendance,
-    });
+    sessions: [
+      {
+        checkin: checkInTime || "",
+        breakStart: "",
+        breakEnd: "",
+        checkout: checkOutTime || "",
+      },
+    ],
+  });
 
     const employeeName =
       await getEmployeeName(employeeId);
@@ -605,13 +616,9 @@ const adjustment =
   await createOrUpdateAdjustmentHistory({
     employeeId,
     attendanceDate,
-    checkInTime:
-      firstSession.checkin || null,
-    checkOutTime:
-      lastSession.checkout || null,
-    sessions,
     reason,
     attendance,
+    sessions,
   });
 
 const employeeName =
