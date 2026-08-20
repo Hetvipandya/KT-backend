@@ -21,13 +21,40 @@ const applyCheckInStatus = (attendance) => {
   const istCheckIn = new Date(
     attendance.checkInTime.getTime() + 5.5 * 60 * 60 * 1000
   );
+
   const checkInMinutes =
-    istCheckIn.getUTCHours() * 60 + istCheckIn.getUTCMinutes();
+    istCheckIn.getUTCHours() * 60 +
+    istCheckIn.getUTCMinutes();
 
-  attendance.isLate =
-    checkInMinutes > 10 * 60 + 10 && checkInMinutes <= 10 * 60 + 30;
+  const officeStart = 10 * 60 + 10; // 10:10
+  const absentAfter = 10 * 60 + 30; // 10:30
 
-  if (checkInMinutes > 10 * 60 + 30) {
+  // ==========================================
+  // BEFORE / AT 10:10 = PRESENT
+  // ==========================================
+  if (checkInMinutes <= officeStart) {
+    attendance.isLate = false;
+    attendance.status = "present";
+    return;
+  }
+
+  // ==========================================
+  // 10:10 - 10:30 = LATE COMING
+  // ==========================================
+  if (
+    checkInMinutes > officeStart &&
+    checkInMinutes <= absentAfter
+  ) {
+    attendance.isLate = true;
+    attendance.status = "present";
+    return;
+  }
+
+  // ==========================================
+  // AFTER 10:30 = ABSENT
+  // ==========================================
+  if (checkInMinutes > absentAfter) {
+    attendance.isLate = false;
     attendance.status = "absent";
   }
 };
@@ -125,13 +152,71 @@ const getEmployeeName = async (employeeId) => {
   }
 };
 
+const createOrUpdateAdjustmentHistory = async ({
+  employeeId,
+  attendanceDate,
+  checkInTime,
+  checkOutTime,
+  sessions,
+  reason,
+  attendance,
+}) => {
+  try {
+    const adjustmentData = {
+      userId: employeeId,
+      date: attendanceDate,
+      reason: reason || "Attendance adjusted",
+      status: "approved",
+      approvalStatus: "approved",
+
+      checkInTime: checkInTime || null,
+      checkOutTime: checkOutTime || null,
+
+      sessions: sessions || [],
+
+      totalBreakTime: attendance.totalBreakTime || 0,
+      totalWorkTime: attendance.totalWorkTime || 0,
+    };
+
+    const adjustment = await AdjustmentRequest.findOneAndUpdate(
+      {
+        userId: employeeId,
+        date: attendanceDate,
+      },
+      {
+        $set: adjustmentData,
+      },
+      {
+        new: true,
+        upsert: true,
+        setDefaultsOnInsert: true,
+      }
+    );
+
+    return adjustment;
+  } catch (error) {
+    console.error(
+      "Adjustment history save error:",
+      error
+    );
+
+    throw error;
+  }
+};
+
 // ==========================================
 // Direct Adjustment - Immediate Attendance Update
 // ==========================================
 
 exports.patchAttendanceAdjustment = async (req, res) => {
   try {
-    const { employeeId, date, checkInTime, checkOutTime, reason } = req.body;
+    const {
+      employeeId,
+      date,
+      checkInTime,
+      checkOutTime,
+      reason,
+    } = req.body;
 
     if (!employeeId || !date) {
       return res.status(400).json({
@@ -162,56 +247,76 @@ exports.patchAttendanceAdjustment = async (req, res) => {
     }
 
     // ==========================================
-    // Only update fields which are provided
+    // CHECK-IN
     // ==========================================
 
     if (checkInTime !== undefined) {
-      const parsedCheckIn = parseTimeToDate(
-        attendanceDate,
-        checkInTime
-      );
+      if (!checkInTime) {
+        attendance.checkInTime = null;
+        attendance.approvedCheckInTime = null;
+      } else {
+        const parsedCheckIn = parseTimeToDate(
+          attendanceDate,
+          checkInTime
+        );
 
-      if (!parsedCheckIn) {
-        return res.status(400).json({
-          success: false,
-          message: "Invalid check-in time.",
-        });
+        if (!parsedCheckIn) {
+          return res.status(400).json({
+            success: false,
+            message: "Invalid check-in time.",
+          });
+        }
+
+        attendance.checkInTime = parsedCheckIn;
+        attendance.approvedCheckInTime = parsedCheckIn;
       }
-
-      attendance.checkInTime = parsedCheckIn;
-      attendance.approvedCheckInTime = parsedCheckIn;
     }
+
+    // ==========================================
+    // CHECK-OUT
+    // ==========================================
 
     if (checkOutTime !== undefined) {
-      const parsedCheckOut = parseTimeToDate(
-        attendanceDate,
-        checkOutTime
-      );
+      if (!checkOutTime) {
+        attendance.checkOutTime = null;
+      } else {
+        const parsedCheckOut = parseTimeToDate(
+          attendanceDate,
+          checkOutTime
+        );
 
-      if (!parsedCheckOut) {
-        return res.status(400).json({
-          success: false,
-          message: "Invalid check-out time.",
-        });
+        if (!parsedCheckOut) {
+          return res.status(400).json({
+            success: false,
+            message: "Invalid check-out time.",
+          });
+        }
+
+        attendance.checkOutTime = parsedCheckOut;
       }
-
-      attendance.checkOutTime = parsedCheckOut;
     }
 
-    // Optional reason
+    // ==========================================
+    // REASON
+    // ==========================================
+
     if (reason !== undefined) {
       attendance.adjustmentReason = reason;
     }
 
     // ==========================================
-    // Recalculate work time
+    // WORK TIME
     // ==========================================
 
-    if (attendance.checkInTime && attendance.checkOutTime) {
+    if (
+      attendance.checkInTime &&
+      attendance.checkOutTime
+    ) {
       let totalMinutes =
-        (attendance.checkOutTime.getTime() -
-          attendance.checkInTime.getTime()) /
-        60000;
+        (
+          attendance.checkOutTime.getTime() -
+          attendance.checkInTime.getTime()
+        ) / 60000;
 
       totalMinutes -= attendance.totalBreakTime || 0;
 
@@ -223,36 +328,69 @@ exports.patchAttendanceAdjustment = async (req, res) => {
         (totalMinutes / 60).toFixed(2)
       );
 
-      // ==========================================
-      // Status
-      // ==========================================
-
-      attendance.status =
-        attendance.totalWorkTime >= 8
-          ? "present"
-          : attendance.totalWorkTime >= 4
-          ? "half-day"
-          : "absent";
+      // Work-hour based status
+      if (attendance.totalWorkTime >= 8) {
+        attendance.status = "present";
+      } else if (attendance.totalWorkTime >= 4) {
+        attendance.status = "half-day";
+      } else {
+        attendance.status = "absent";
+      }
     }
 
+    // ==========================================
+    // CHECK-IN BASED STATUS
+    // IMPORTANT
+    // ==========================================
+
     applyCheckInStatus(attendance);
+
+    // ==========================================
+    // APPROVED
+    // ==========================================
 
     attendance.approvalStatus = "approved";
 
     await attendance.save();
 
-    const employeeName = await getEmployeeName(employeeId);
+    // ==========================================
+    // SAVE ADJUSTMENT HISTORY
+    // ==========================================
+
+    const adjustment = await createOrUpdateAdjustmentHistory({
+      employeeId,
+      attendanceDate,
+      checkInTime: checkInTime || null,
+      checkOutTime: checkOutTime || null,
+      sessions: [
+        {
+          checkin: checkInTime || "",
+          checkout: checkOutTime || "",
+        },
+      ],
+      reason,
+      attendance,
+    });
+
+    const employeeName =
+      await getEmployeeName(employeeId);
 
     return res.status(200).json({
       success: true,
-      message: "Attendance partially updated successfully.",
+      message:
+        "Attendance adjustment updated successfully.",
       data: {
         attendance,
+        adjustment,
         employeeName,
       },
     });
+
   } catch (error) {
-    console.error("PATCH attendance error:", error);
+    console.error(
+      "PATCH attendance error:",
+      error
+    );
 
     return res.status(500).json({
       success: false,
@@ -457,18 +595,38 @@ exports.putAttendanceAdjustment = async (req, res) => {
       attendance.adjustmentReason = reason;
     }
 
-    await attendance.save();
+   await attendance.save();
 
-    const employeeName = await getEmployeeName(employeeId);
+// ==========================================
+// SAVE / UPDATE ADJUSTMENT HISTORY
+// ==========================================
 
-    return res.status(200).json({
-      success: true,
-      message: "Complete attendance updated successfully.",
-      data: {
-        attendance,
-        employeeName,
-      },
-    });
+const adjustment =
+  await createOrUpdateAdjustmentHistory({
+    employeeId,
+    attendanceDate,
+    checkInTime:
+      firstSession.checkin || null,
+    checkOutTime:
+      lastSession.checkout || null,
+    sessions,
+    reason,
+    attendance,
+  });
+
+const employeeName =
+  await getEmployeeName(employeeId);
+
+return res.status(200).json({
+  success: true,
+  message:
+    "Complete attendance updated successfully.",
+  data: {
+    attendance,
+    adjustment,
+    employeeName,
+  },
+});
   } catch (error) { 
     console.error("PUT attendance error:", error);
 
