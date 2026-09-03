@@ -2121,6 +2121,8 @@ exports.registerUser = async (req, res) => {
             mobile:
               phoneNumber,
 
+            gender,
+
             dob,
 
             bloodGroup,
@@ -2132,10 +2134,10 @@ exports.registerUser = async (req, res) => {
               address,
 
             designation:
-              normalizedRole ===
-              "team lead"
+              designation ||
+              (normalizedRole === "team lead"
                 ? "Team Lead"
-                : "Employee",
+                : "Employee"),
 
             department,
 

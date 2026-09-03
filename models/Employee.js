@@ -47,6 +47,7 @@ const employeeSchema =
 
       gender: {
         type: String, 
+        required: true,
         enum: [
           "Male",
           "Female",

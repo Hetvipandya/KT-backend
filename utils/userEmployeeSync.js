@@ -70,6 +70,8 @@ exports.syncEmployeeToUser = async ({ employee, role, userData = {} }) => {
       employee.address ||
       "",
     department: userData.department || employee.department || "",
+    designation: userData.designation || employee.designation || "",
+    gender: userData.gender || employee.gender || "",
     bloodGroup: userData.bloodGroup || employee.bloodGroup || "",
     role: finalRole,
     isApproved: userData.isApproved ?? true,

@@ -597,6 +597,7 @@ exports.addEmployee = async (req, res) => {
       mobile,
       department,
       designation,
+      gender,
       teamLead,
       dob,
       bloodGroup,
@@ -612,6 +613,7 @@ exports.addEmployee = async (req, res) => {
       !email ||
       !mobile ||
       !designation ||
+      !gender ||
       !dob ||
       !address ||
       !department ||
@@ -620,7 +622,7 @@ exports.addEmployee = async (req, res) => {
       return res.status(400).json({
         success: false,
         message:
-          "First name, email, mobile, date of birth, address, department, blood group and designation are required",
+          "First name, email, mobile, gender, date of birth, address, department, blood group and designation are required",
       });
     }
 
@@ -667,6 +669,8 @@ exports.addEmployee = async (req, res) => {
       req.body.address ||
       "",
     department: req.body.department,
+    designation: req.body.designation || employee.designation,
+    gender: req.body.gender || employee.gender,
     bloodGroup: req.body.bloodGroup,
     role: employeeRole,
     isApproved: true,
