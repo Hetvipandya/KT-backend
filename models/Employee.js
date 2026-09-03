@@ -1,0 +1,195 @@
+const mongoose =
+  require("mongoose");
+
+const employeeSchema =
+  new mongoose.Schema(
+    {
+      employeeID: {
+        type: String, 
+        unique: true, 
+      },  
+
+      uniqueID: {
+  type: String,
+  unique: true,
+  sparse: true,
+  trim: true,
+},
+
+      userID: {
+        type:
+          mongoose.Schema.Types.ObjectId, 
+        ref: "User",
+      },  
+
+      // PERSONAL DETAILS 
+      firstName: {
+        type: String,
+        required: true,
+        trim: true, 
+      },
+
+      lastName: {
+        type: String,
+        trim: true,
+      },
+
+      email: {
+        type: String,
+        required: true,
+        unique: true,
+      },
+
+      mobile: {
+        type: String,
+        required: true,
+      },
+
+      gender: {
+        type: String, 
+        enum: [
+          "Male",
+          "Female",
+          "Other",
+        ],
+      },
+ 
+      dob: {
+        type: Date, 
+      },
+
+      bloodGroup: {
+        type: String,
+      },
+
+      profileImage: {
+        type: String,
+        default: "",
+      },
+
+      // ADDRESS DETAILS
+     address: {
+  type: String,
+  default: "",
+},
+
+
+      // EMERGENCY CONTACT
+      emergencyContact: {
+        name: String,
+        relation: String,
+        phone: String,
+      },
+
+      // EDUCATION
+      education: [
+        {
+          degree: String,
+          institute: String,
+          passingYear: String,
+          percentage: String,
+        },
+      ],
+
+      // EXPERIENCE
+      experience: [
+        {
+          companyName: String,
+          designation: String,
+          fromDate: Date,
+          toDate: Date,
+        },
+      ],
+
+      // SKILLS
+        skills: {
+        type: [String],
+        default: [],
+      },
+
+      // SALARY STRUCTURE
+      salaryStructure: {
+        basicSalary: {
+          type: Number,
+          default: 0,
+        },
+
+        hra: {
+          type: Number,
+          default: 0,
+        },
+ 
+        allowances: {
+          type: Number,
+          default: 0,
+        },
+
+        deductions: {
+          type: Number,
+          default: 0,
+        },
+
+        grossSalary: {
+          type: Number,
+          default: 0,
+        },
+      },
+
+      // DESIGNATION
+designation: {
+  type: String,
+  required: true,
+  trim: true, 
+},
+
+isTeamLead: {
+  type: Boolean,
+  default: false
+},
+
+
+      department: {
+   type: String,
+  required: true,
+  trim: true,
+},
+
+    
+
+      joiningDate: {
+        type: Date,
+        default: Date.now,
+      },
+
+      employeeStatus: {
+        type: String,
+        enum: [
+          "Active",
+          "Inactive",
+          "Resigned",
+          "Terminated",
+        ],
+        default: "Active",
+      },
+      currentAction: {
+  type: String,
+  enum: [
+    "created",
+    "probation",
+    "confirmation",
+    "resignation",
+    "exit",
+  ],
+  default: "created",
+},
+    },
+    {
+      timestamps: true,
+    }
+  );
+
+module.exports =
+  mongoose.model(
+    "Employee",
+    employeeSchema
+  );

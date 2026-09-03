@@ -1,0 +1,1025 @@
+const Employee =
+  require("../models/Employee");
+const Department = require("../models/Department");
+
+const EmployeeDocument =
+  require(
+    "../models/EmployeeDocument" 
+  );  
+ 
+const EmployeeHistory =  
+  require(
+    "../models/EmployeeHistory"
+  ); 
+  const User = require("../models/User");
+  const Team = require("../models/Team");
+const { syncEmployeeToUser } = require("../utils/userEmployeeSync");
+  const generateEmployeeID = require("../utils/employeeId");
+
+const resolveDepartmentName = async (departmentValue) => {
+  if (!departmentValue) return "";
+
+  if (typeof departmentValue === "object") {
+    return departmentValue.departmentName || departmentValue.name || "";
+  }
+
+  const departmentString = String(departmentValue);
+
+  if (/^[0-9a-fA-F]{24}$/.test(departmentString)) {
+    const department = await Department.findById(departmentString).select("departmentName");
+    return department?.departmentName || departmentString;
+  }
+
+  return departmentString;
+};
+
+
+// ================= GENERATE EMPLOYEE ID =================
+// ================= GENERATE EMPLOYEE ID =================
+exports.assignTeamLead = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    let employee = await Employee.findById(id);
+    let user = null;
+
+    if (!employee) {
+      employee = await Employee.findOne({ userID: id });
+    }
+
+    if (!employee) {
+      user = await User.findById(id);
+      if (user) {
+        employee = await Employee.findOne({ email: user.email });
+      }
+    }
+
+    if (!employee && !user) {
+      return res.status(404).json({
+        success: false,
+        message: "Employee or User not found",
+      });
+    }
+
+    if (employee) {
+      employee.isTeamLead = true;
+      await employee.save();
+    }
+
+    if (employee) {
+      const employeeData = employee.toObject();
+      user = await syncEmployeeToUser({
+        employee: {
+          ...employeeData,
+          isTeamLead: true,
+        },
+        role: "team lead",
+        userData: {
+          role: "team lead",
+        },
+      });
+    }
+
+    if (user) {
+      user.role = "team lead";
+      await user.save();
+      await User.findByIdAndUpdate(user._id, { role: "team lead" });
+    }
+
+    if (employee && user && !employee.userID) {
+      employee.userID = user._id;
+      await employee.save();
+    }
+
+    // Ensure record exists/is inserted in Team collection
+    const empId = employee?._id;
+    const userId = user?._id;
+
+    let team = await Team.findOne({
+      $or: [
+        ...(empId ? [{ teamLeadEmployee: empId }] : []),
+        ...(userId ? [{ teamLeadUser: userId }] : [])
+      ]
+    });
+
+    const leadName = employee
+      ? `${employee.firstName || ""} ${employee.lastName || ""}`.trim()
+      : user?.name || "Team Lead";
+
+    if (!team) {
+      team = await Team.create({
+        name: leadName ? `${leadName} Team` : "New Team",
+        teamLeadEmployee: empId || null,
+        teamLeadUser: userId || null,
+        employees: [],
+        interns: [],
+      });
+    } else {
+      if (empId) team.teamLeadEmployee = empId;
+      if (userId) team.teamLeadUser = userId;
+      await team.save();
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Assigned as Team Lead successfully",
+      employee,
+      user,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+// ================= EDIT EMPLOYEE =================
+exports.editEmployee = async (req, res) => {
+  try {
+    const employeeId = req.params.id;
+
+    // Find employee
+    const employee = await Employee.findById(employeeId);
+
+    if (!employee) {
+      return res.status(404).json({
+        success: false,
+        message: "Employee not found",
+      });
+    }
+
+    // ==========================================
+    // UPDATE EMPLOYEE DATA
+    // ==========================================
+    const updateData = { 
+      ...req.body,
+    };
+
+    // These fields should not be directly changed
+    delete updateData.employeeID;
+    delete updateData.userID;
+
+    // Remove fields that are not Employee model fields if needed
+    delete updateData.action;
+
+    const updatedEmployee = await Employee.findByIdAndUpdate(
+      employeeId,
+      updateData,
+      {
+        new: true,
+        runValidators: true,
+      }
+    );
+
+    // ==========================================
+    // DETERMINE USER ROLE
+    // ==========================================
+    const rawRole = req.body.role
+      ? String(req.body.role)
+          .trim()
+          .toLowerCase()
+          .replace(/[_\s]+/g, "")
+      : "";
+
+    let roleValue = null;
+
+    if (
+      rawRole === "teamlead" ||
+      rawRole === "teamleader" ||
+      req.body.isTeamLead === true ||
+      req.body.isTeamLead === "true"
+    ) {
+      roleValue = "team lead";
+    } else if (
+      req.body.isTeamLead === false ||
+      req.body.isTeamLead === "false"
+    ) {
+      roleValue = "employee";
+    }
+
+    // ==========================================
+    // SYNC EMPLOYEE -> USER
+    // ==========================================
+    if (roleValue) {
+      await syncEmployeeToUser({
+        employee: {
+          ...updatedEmployee.toObject(),
+          isTeamLead: roleValue === "team lead",
+        },
+        role: roleValue,
+        userData: {
+          name: `${updatedEmployee.firstName || ""} ${
+            updatedEmployee.lastName || ""
+          }`.trim(),
+
+          email: updatedEmployee.email,
+
+          phoneNumber: updatedEmployee.mobile,
+
+          address:
+            updatedEmployee.currentAddress ||
+            updatedEmployee.permanentAddress ||
+            updatedEmployee.address ||
+            "",
+
+          department: updatedEmployee.department,
+
+          bloodGroup: updatedEmployee.bloodGroup,
+
+          role: roleValue,
+        },
+      });
+    } else {
+      // Even if role is not changed,
+      // sync normal employee information
+      await syncEmployeeToUser({
+        employee: updatedEmployee,
+        role: updatedEmployee.isTeamLead
+          ? "team lead"
+          : "employee",
+        userData: {
+          name: `${updatedEmployee.firstName || ""} ${
+            updatedEmployee.lastName || ""
+          }`.trim(),
+
+          email: updatedEmployee.email,
+
+          phoneNumber: updatedEmployee.mobile,
+
+          address:
+            updatedEmployee.currentAddress ||
+            updatedEmployee.permanentAddress ||
+            updatedEmployee.address ||
+            "",
+
+          department: updatedEmployee.department,
+
+          bloodGroup: updatedEmployee.bloodGroup,
+        },
+      });
+    }
+
+    // ==========================================
+    // FILE / DOCUMENT UPDATE
+    // ==========================================
+    const files = req.files || {};
+
+    let employeeDocument = await EmployeeDocument.findOne({
+      employeeID: employeeId,
+    });
+
+    if (!employeeDocument) {
+      employeeDocument = new EmployeeDocument({
+        employeeID: employeeId,
+      });
+    }
+
+    if (files?.aadharCard?.[0]?.path) {
+      employeeDocument.aadharCard =
+        files.aadharCard[0].path;
+    }
+
+    if (files?.panCard?.[0]?.path) {
+      employeeDocument.panCard =
+        files.panCard[0].path;
+    }
+
+    if (files?.resume?.[0]?.path) {
+      employeeDocument.resume =
+        files.resume[0].path;
+    }
+
+    if (files?.offerLetter?.[0]?.path) {
+      employeeDocument.offerLetter =
+        files.offerLetter[0].path;
+    }
+
+    if (files?.joiningLetter?.[0]?.path) {
+      employeeDocument.joiningLetter =
+        files.joiningLetter[0].path;
+    }
+
+    if (files?.certificates?.length) {
+      employeeDocument.certificates =
+        files.certificates.map(
+          (file) => file.path
+        );
+    }
+
+    await employeeDocument.save();
+
+    // ==========================================
+    // HISTORY
+    // ==========================================
+    await EmployeeHistory.create({
+      employeeID: employeeId,
+      action: "updated",
+      message: `${updatedEmployee.firstName || ""} ${
+        updatedEmployee.lastName || ""
+      } employee details updated`,
+    });
+
+    // ==========================================
+    // RESPONSE
+    // ==========================================
+    res.status(200).json({
+      success: true,
+      message: "Employee updated successfully",
+      employee: updatedEmployee,
+      documents: employeeDocument,
+    });
+  } catch (error) {
+    console.error("Edit Employee Error:", error);
+
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+// ================= DELETE EMPLOYEE =================
+exports.deleteEmployee = async (req, res) => {
+  try {
+    const employeeId = req.params.id;
+
+    // ==========================================
+    // FIND EMPLOYEE
+    // ==========================================
+    const employee = await Employee.findById(employeeId);
+
+    if (!employee) {
+      return res.status(404).json({
+        success: false,
+        message: "Employee not found",
+      });
+    }
+
+    // ==========================================
+    // FIND RELATED USER
+    // ==========================================
+    let user = null;
+
+    if (employee.userID) {
+      user = await User.findById(employee.userID);
+    }
+
+    // Fallback: find user using email
+    if (!user && employee.email) {
+      user = await User.findOne({
+        email: employee.email,
+      });
+    }
+
+    // ==========================================
+    // DELETE EMPLOYEE DOCUMENTS
+    // ==========================================
+    await EmployeeDocument.deleteMany({
+      employeeID: employeeId,
+    });
+
+    // ==========================================
+    // DELETE TEAM / TEAM LEAD REFERENCES
+    // ==========================================
+    await Team.deleteMany({
+      $or: [
+        {
+          teamLeadEmployee: employee._id,
+        },
+        ...(user
+          ? [
+              {
+                teamLeadUser: user._id,
+              },
+            ]
+          : []),
+      ],
+    });
+
+    // If employee is inside another team's employees/interns
+    await Team.updateMany(
+      {},
+      {
+        $pull: {
+          employees: employee._id,
+          interns: employee._id,
+        },
+      }
+    );
+
+    // ==========================================
+    // HISTORY
+    // ==========================================
+    await EmployeeHistory.create({
+      employeeID: employeeId,
+      action: "deleted",
+      message: `${employee.firstName || ""} ${
+        employee.lastName || ""
+      } employee deleted from company`,
+    });
+
+    // ==========================================
+    // DELETE EMPLOYEE
+    // ==========================================
+    await Employee.findByIdAndDelete(employeeId);
+
+    // ==========================================
+    // DELETE RELATED USER
+    // ==========================================
+    if (user) {
+      await User.findByIdAndDelete(user._id);
+    }
+
+    // ==========================================
+    // RESPONSE
+    // ==========================================
+    res.status(200).json({
+      success: true,
+      message: "Employee deleted successfully",
+      deletedEmployeeId: employeeId,
+      deletedUserId: user?._id || null,
+    });
+  } catch (error) {
+    console.error("Delete Employee Error:", error);
+
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+exports.removeTeamLead = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    let employee = await Employee.findById(id);
+    let user = null;
+
+    if (!employee) {
+      employee = await Employee.findOne({ userID: id });
+    }
+
+    if (!employee) {
+      user = await User.findById(id);
+      if (user) {
+        employee = await Employee.findOne({ email: user.email });
+      }
+    }
+
+    if (!employee && !user) {
+      return res.status(404).json({
+        success: false,
+        message: "Employee or User not found",
+      });
+    }
+
+    if (employee) {
+      employee.isTeamLead = false;
+      await employee.save();
+    }
+
+    if (employee) {
+      const employeeData = employee.toObject();
+      user = await syncEmployeeToUser({
+        employee: {
+          ...employeeData,
+          isTeamLead: false,
+        },
+        role: "employee",
+        userData: {
+          role: "employee",
+        },
+      });
+    }
+
+    if (user) {
+      user.role = "employee";
+      await user.save();
+      await User.findByIdAndUpdate(user._id, { role: "employee" });
+    }
+
+    if (employee && user && !employee.userID) {
+      employee.userID = user._id;
+      await employee.save();
+    }
+
+    // Remove from Team collection when TL access is removed
+    const empId = employee?._id;
+    const userId = user?._id;
+
+    await Team.deleteMany({
+      $or: [
+        ...(empId ? [{ teamLeadEmployee: empId }] : []),
+        ...(userId ? [{ teamLeadUser: userId }] : [])
+      ]
+    });
+
+    res.status(200).json({
+      success: true,
+      message: "Team Lead removed successfully",
+      employee,
+      user,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+// ================= GET ALL EMPLOYEE DOCUMENTS =================
+exports.getAllEmployeeDocuments = async (req, res) => {
+  try {
+    const documents = await EmployeeDocument.find()
+      .populate(
+        "employeeID",
+        "employeeID firstName lastName email mobile designation department"
+      )
+      .sort({ createdAt: -1 });
+
+    res.status(200).json({
+      success: true,
+      total: documents.length,
+      documents,
+    });
+  } catch (error) {
+    console.log(error);
+
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+// ================= GET SINGLE EMPLOYEE DOCUMENT =================
+exports.getEmployeeDocuments = async (req, res) => {
+  try {
+    const { employeeId } = req.params;
+
+    const documents = await EmployeeDocument.findOne({
+      employeeID: employeeId,
+    }).populate(
+      "employeeID",
+      "employeeID firstName lastName email mobile designation department"
+    );
+
+    if (!documents) {
+      return res.status(404).json({
+        success: false,
+        message: "Documents not found",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      documents,
+    });
+  } catch (error) {
+    console.log(error);
+
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+// ================= ADD EMPLOYEE =================
+exports.addEmployee = async (req, res) => {
+  try {
+    const {
+      firstName,
+      lastName,
+      email,
+      mobile,
+      department,
+      designation,
+      teamLead,
+      dob,
+      bloodGroup,
+    } = req.body;
+
+    const address =
+      req.body.currentAddress ||
+      req.body.permanentAddress ||
+      req.body.address;
+
+    if (
+      !firstName ||
+      !email ||
+      !mobile ||
+      !designation ||
+      !dob ||
+      !address ||
+      !department ||
+      !bloodGroup
+    ) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "First name, email, mobile, date of birth, address, department, blood group and designation are required",
+      });
+    }
+
+    // CHECK EMPLOYEE EXISTS
+    const existEmployee = await Employee.findOne({ email });
+    if (existEmployee) {
+      return res.status(400).json({
+        success: false,
+        message: "Employee already exists",
+      });
+    }
+
+    // GENERATE EMPLOYEE ID
+    const employeeID = await generateEmployeeID(Employee);
+
+    // DETERMINE ROLE
+    const rawRole = req.body.role ? String(req.body.role).trim().toLowerCase().replace(/[_\s]+/g, "") : "";
+    const employeeRole =
+      rawRole === "teamlead" || rawRole === "teamleader" || Boolean(req.body.isTeamLead)
+        ? "team lead"
+        : "employee";
+
+    // ✅ CREATE EMPLOYEE
+    const employee = await Employee.create({
+      ...req.body,
+      employeeID,
+      currentAction: "created",
+      isTeamLead: employeeRole === "team lead",
+    });
+
+    // ✅ SYNC TO USER (Employee thi User create/update)
+    let syncedUser = null;
+    if (employeeRole === "employee" || employeeRole === "team lead") {
+      syncedUser = await syncEmployeeToUser({
+  employee: employee,
+  role: employeeRole,
+  userData: {
+    name: `${firstName} ${lastName}`.trim(),
+    email,
+    phoneNumber: mobile,
+    address:
+      req.body.currentAddress ||
+      req.body.permanentAddress ||
+      req.body.address ||
+      "",
+    department: req.body.department,
+    bloodGroup: req.body.bloodGroup,
+    role: employeeRole,
+    isApproved: true,
+    isFirstLogin: false,
+
+    // IMPORTANT
+    uniqueID: employee.employeeID,
+  },
+});
+    }
+
+    // ✅ Employee ma userID update karo (syncEmployeeToUser internally kare che, pan confirm mate)
+    if (syncedUser && syncedUser._id) {
+      // syncEmployeeToUser already employee.userID set kare che
+      // but ensure kari lo
+      if (!employee.userID) {
+        employee.userID = syncedUser._id;
+        await employee.save();
+      }
+    }
+
+    // ✅ FILES
+    const files = req.files || {};
+
+    // ✅ CREATE DOCUMENTS
+    const employeeDocuments = await EmployeeDocument.create({
+      employeeID: employee._id,
+      aadharCard: files?.aadharCard?.[0]?.path || "",
+      panCard: files?.panCard?.[0]?.path || "",
+      resume: files?.resume?.[0]?.path || "",
+      offerLetter: files?.offerLetter?.[0]?.path || "",
+      joiningLetter: files?.joiningLetter?.[0]?.path || "",
+      certificates: files?.certificates?.map((file) => file.path) || [],
+    });
+
+    // ✅ CREATE HISTORY
+    await EmployeeHistory.create({
+      employeeID: employee._id,
+      action: "created",
+      message: `${firstName} ${lastName} added`,
+    });
+
+    res.status(201).json({
+      success: true,
+      message: "Employee added successfully",
+      employee,
+      documents: employeeDocuments,
+      user: syncedUser, // optional - user details pan response ma moklo
+    });
+  } catch (error) {
+    console.error("Add Employee Error:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+  exports.getAllEmployeeHistory = async (req, res) => {
+  try {
+    const history = await EmployeeHistory.find()
+      .populate("employeeID")
+      .populate("actionBy", "name email")
+      .sort({ createdAt: -1 });
+
+    res.status(200).json({
+      success: true,
+      count: history.length,
+      data: history,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+
+
+// ================= EMPLOYEE LIST =================
+// ================= EMPLOYEE LIST =================
+exports.getEmployeeList = async (req, res) => {
+  try {
+    const employees = await Employee.find().sort({ createdAt: -1 });
+
+    const employeesWithDepartmentName = await Promise.all(
+      employees.map(async (employee) => {
+        const employeeData = employee.toObject();
+        const departmentName = await resolveDepartmentName(employeeData.department);
+
+        return {
+          ...employeeData,
+          department: departmentName,
+        };
+      })
+    );
+
+    res.status(200).json({
+      success: true,
+      employees: employeesWithDepartmentName,
+    });
+  } catch (error) {
+    console.error("Get Employee List Error:", error);
+
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+// ================= EMPLOYEE PROFILE =================
+exports.getEmployeeProfile =
+  async (req, res) => {
+    try {
+      const employee =
+        await Employee.findById(
+          req.params.id
+        );
+
+      if (
+        !employee
+      ) {
+        return res
+          .status(404)
+          .json({
+            success: false,
+            message:
+              "Employee not found",
+          });
+      }
+
+      const departmentName = await resolveDepartmentName(employee.department);
+
+      const documents =
+        await EmployeeDocument.findOne(
+          {
+            employeeID:
+              req.params.id,
+          }
+        );
+
+      const history =
+        await EmployeeHistory.find(
+          {
+            employeeID:
+              req.params.id,
+          }
+        ).sort({
+          createdAt: -1,
+        });
+
+      res.status(200).json({
+        success: true,
+        employee: {
+          ...employee.toObject(),
+          department: departmentName,
+        },
+        documents,
+        history,
+      });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        message:
+          error.message,
+      });
+    }
+  };
+
+// ================= UPDATE EMPLOYEE =================
+exports.updateEmployee = async (req, res) => {
+  try {
+    const employeeId = req.params.id;
+    const actionType =
+      req.body.action?.trim();
+
+    const updateData = {
+      ...req.body,
+    };
+
+    // action update only if passed
+    if (actionType) {
+      updateData.currentAction =
+        actionType;
+    }
+
+    delete updateData.action;
+
+    const employee =
+      await Employee.findByIdAndUpdate(
+        employeeId,
+        updateData,
+        { new: true }
+      );
+
+    const rawUpdateRole = req.body.role ? String(req.body.role).trim().toLowerCase().replace(/[_\s]+/g, "") : "";
+    const roleValue =
+      rawUpdateRole === "teamlead" || rawUpdateRole === "teamleader" || req.body.isTeamLead === true
+        ? "team lead"
+        : (req.body.isTeamLead === false ? "employee" : null);
+
+    if (roleValue) {
+      await syncEmployeeToUser({
+        employee: {
+          ...employee.toObject(),
+          isTeamLead: roleValue === "team lead",
+        },
+        role: roleValue,
+        userData: {
+          role: roleValue,
+          name: `${employee.firstName} ${employee.lastName}`.trim(),
+          email: employee.email,
+          phoneNumber: employee.mobile,
+          address: employee.currentAddress || employee.permanentAddress || "",
+          department: employee.department,
+          bloodGroup: employee.bloodGroup,
+        },
+      });
+    }
+
+    if (!employee) {
+      return res.status(404).json({
+        success: false,
+        message: "Employee not found",
+      });
+    }
+
+    const files = req.files || {};
+
+    let employeeDocument =
+      await EmployeeDocument.findOne({
+        employeeID: employeeId,
+      });
+
+    if (employeeDocument) {
+      employeeDocument.aadharCard =
+        files?.aadharCard?.[0]?.path  ||
+        employeeDocument.aadharCard;
+
+      employeeDocument.panCard =
+        files?.panCard?.[0]?.path  ||
+        employeeDocument.panCard;
+
+      employeeDocument.resume =
+        files?.resume?.[0]?.path  ||
+        employeeDocument.resume;
+
+      employeeDocument.offerLetter =
+        files?.offerLetter?.[0]?.path  ||
+        employeeDocument.offerLetter;
+
+      employeeDocument.joiningLetter =
+        files?.joiningLetter?.[0]?.path  ||
+        employeeDocument.joiningLetter;
+
+      if (files?.certificates?.length) {
+        employeeDocument.certificates =
+          files.certificates.map(
+            (file) => file.path
+          );
+      }
+
+      await employeeDocument.save();
+    }
+
+    let history = null;
+
+    if (actionType) {
+      history =
+        await EmployeeHistory.create({
+          employeeID: employeeId,
+          action: actionType,
+          message:
+            `Employee moved to ${actionType}`,
+        });
+    }
+
+    res.status(200).json({
+      success: true,
+      message:
+        "Employee updated successfully",
+      employee,
+      documents: employeeDocument,
+      history,
+    });
+  } catch (error) {
+    console.log(error);
+
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+// ================= REMOVE EMPLOYEE =================
+exports.removeEmployee =
+  async (req, res) => {
+    try {
+      const employeeId =
+        req.params.id;
+
+      const employee =
+        await Employee.findById(
+          employeeId
+        );
+
+      if (
+        !employee
+      ) {
+        return res
+          .status(404)
+          .json({
+            success: false,
+            message:
+              "Employee not found",
+          });
+      }
+
+      // DELETE DOCUMENTS
+      await EmployeeDocument.deleteOne(
+        {
+          employeeID:
+            employeeId,
+        }
+      );
+
+      // HISTORY
+     await EmployeeHistory.create({
+  employeeID: employeeId,
+  action: "exit",
+  message: `${employee.firstName} ${employee.lastName} removed from company`,
+});
+
+      // DELETE EMPLOYEE
+      await Employee.findByIdAndDelete(
+        employeeId
+      );
+
+      res.status(200).json({
+        success: true,
+        message:
+          "Employee removed successfully",
+      });
+    } catch (error) {
+      console.log(error);
+
+      res.status(500).json({
+        success: false,
+        message:
+          error.message,
+      });
+    }
+  };
