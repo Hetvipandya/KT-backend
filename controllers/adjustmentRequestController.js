@@ -56,8 +56,7 @@ const applyCheckInStatus = (attendance) => {
   if (
     attendance.checkOutTime &&
     attendance.totalWorkTime > 0 &&
-    attendance.totalWorkTime < 8 &&
-    attendance.status === "present"
+    attendance.totalWorkTime < 8
   ) {
     attendance.status = "half-day";
   }

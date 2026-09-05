@@ -2684,6 +2684,21 @@ exports.loginUser = async (req, res) => {
       });
     }
 
+    // ================= EXACT CASE MATCH CHECK =================
+    const trimmedLogin = login.trim();
+    const isExactMatch =
+      user.email === trimmedLogin ||
+      user.name === trimmedLogin ||
+      user.uniqueID === trimmedLogin;
+
+    if (!isExactMatch) {
+      return res.status(400).json({
+        success: false,
+
+        message: "Invalid Email or Password",
+      });
+    }
+
     // ================= APPROVAL CHECK =================
     if (
       user.role !== "admin" &&
