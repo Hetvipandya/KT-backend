@@ -443,23 +443,28 @@ exports.getEmployeeAttendanceTimeline = async (req, res) => {
 // ============================================================
 exports.startAttendanceSession = async (req, res) => {
   try {
-    const userId = req.user._id;
-    const today = getTodayIST();
-
-    const user = await User.findById(userId);
+    let targetUserId = req.user._id;
+    let user = await User.findById(targetUserId);
+    if (!user) {
+      const emp = await Employee.findById(targetUserId);
+      if (emp && (emp.userID || emp.userId)) {
+        targetUserId = emp.userID || emp.userId;
+        user = await User.findById(targetUserId);
+      }
+    }
     if (!user)
       return res
         .status(404)
         .json({ success: false, message: "User not found" });
 
-    let attendance = await Attendance.findOne({ userId, date: today });
+    let attendance = await Attendance.findOne({ userId: targetUserId, date: today });
     const now = new Date();
     const checkInMins = now.getHours() * 60 + now.getMinutes();
     const initialStatus = checkInMins > 15 * 60 ? "absent" : checkInMins > 10 * 60 + 30 ? "half-day" : "present";
 
     if (!attendance) {
       attendance = await Attendance.create({
-        userId,
+        userId: targetUserId,
         userType: user.role.toLowerCase(),
         date: today,
         checkInTime: now,

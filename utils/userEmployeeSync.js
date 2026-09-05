@@ -3,7 +3,10 @@ const User = require("../models/User");
 const normalizeRole = (role) => {
   if (!role) return "employee";
 
-  const normalized = String(role).trim().toLowerCase().replace(/[_\s]+/g, "");
+  const normalized = String(role)
+    .trim()
+    .toLowerCase()
+    .replace(/[_\s]+/g, "");
 
   if (normalized === "teamlead" || normalized === "teamleader") {
     return "team lead";
@@ -32,7 +35,7 @@ const formatDob = (value) => {
     }
 
     return trimmed;
-  } 
+  }
 
   return "";
 };
@@ -58,10 +61,7 @@ exports.syncEmployeeToUser = async ({ employee, role, userData = {} }) => {
     name,
     email: userData.email || employee.email || "",
     phoneNumber:
-      userData.phoneNumber ||
-      employee.mobile ||
-      employee.phoneNumber ||
-      "",
+      userData.phoneNumber || employee.mobile || employee.phoneNumber || "",
     dob: formatDob(userData.dob || employee.dob),
     address:
       userData.address ||

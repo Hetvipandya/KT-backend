@@ -2850,18 +2850,22 @@ const getDateWiseAttendance =
     const teamLeadEmployees =
       await Employee.find({
         isTeamLead: true,
-      }).select("userId");
+      }).select("userID userId");
 
-    const teamLeadIds =
-      new Set(
-        teamLeadEmployees
-          .filter(
-            (item) => item.userId
-          )
-          .map((item) =>
-            item.userId.toString()
-          )
-      );
+    const teamLeadIds = new Set();
+    teamLeadEmployees.forEach((item) => {
+      const id = item.userID || item.userId;
+      if (id) teamLeadIds.add(id.toString());
+    });
+
+    const allEmployees = await Employee.find({}).select("_id userID userId");
+    const empToUserMap = new Map();
+    allEmployees.forEach((emp) => {
+      const uId = emp.userID || emp.userId;
+      if (uId) {
+        empToUserMap.set(emp._id.toString(), uId.toString());
+      }
+    });
 
     const membersMap =
       new Map();
@@ -2911,22 +2915,26 @@ const getDateWiseAttendance =
 
     attendanceRecords.forEach(
       (attendance) => {
-        if (
-          attendance.userId?._id
-        ) {
-          const userId =
-            attendance.userId._id.toString();
+        let matchedUserId = attendance.userId?._id
+          ? attendance.userId._id.toString()
+          : attendance.userId
+          ? attendance.userId.toString()
+          : null;
 
-          if (
-            !attendanceMap.has(
-              userId
-            )
-          ) {
-            attendanceMap.set(
-              userId,
-              attendance
-            );
-          }
+        if (matchedUserId && empToUserMap.has(matchedUserId)) {
+          matchedUserId = empToUserMap.get(matchedUserId);
+        }
+
+        if (
+          matchedUserId &&
+          !attendanceMap.has(
+            matchedUserId
+          )
+        ) {
+          attendanceMap.set(
+            matchedUserId,
+            attendance
+          );
         }
       }
     );
