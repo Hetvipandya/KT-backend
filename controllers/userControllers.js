@@ -2488,6 +2488,9 @@ exports.approveEmployee = async (req, res) => {
         mobile:
           user.phoneNumber || "",
 
+        gender:
+          user.gender || "Other",
+
         dob:
           user.dob || "",
 
