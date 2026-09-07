@@ -1932,32 +1932,30 @@ exports.registerUser = async (req, res) => {
     } = req.body;
 
     // ==================================================
-    // VALIDATION
+    // NORMALIZE ROLE & VALIDATION
     // ==================================================
+    const normalizedRole = (role || "").trim().toLowerCase();
+    const isAdminUser = normalizedRole === "admin";
+
     if (
       !name ||
       !email ||
-      !phoneNumber ||
-      !dob ||
-      !address ||
-      !department ||
-      !gender ||
-      !designation ||
-      !bloodGroup ||
-      !role
+      (!isAdminUser &&
+        (!phoneNumber ||
+          !dob ||
+          !address ||
+          !department ||
+          !gender ||
+          !designation ||
+          !bloodGroup))
     ) {
       return res.status(400).json({
         success: false,
-        message: "All fields are required",
+        message: isAdminUser
+          ? "Name and Email are required for admin"
+          : "All fields are required",
       });
     }
-
-    // ==================================================
-    // NORMALIZE ROLE
-    // ==================================================
-    const normalizedRole = role
-      .trim()
-      .toLowerCase();
 
     const allowedRoles = [
       "employee",
