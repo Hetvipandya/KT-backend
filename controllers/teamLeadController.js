@@ -496,7 +496,7 @@ exports.createOrUpdateTeam = async (req, res) => {
             email: user.email,
             mobile: user.phoneNumber || "",
             department: user.department || null,
-            designation: user.role === "team lead" ? "Team Lead" : "Employee",
+            designation: user.designation || (user.role === "team lead" ? "Team Lead" : "Employee"),
             isTeamLead: false,
           });
 

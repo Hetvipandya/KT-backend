@@ -8,9 +8,13 @@ const notificationController = require("../controllers/notificarionController");
 // ===============================
 router.post("/create", notificationController.createNotification);
 
-router.get("/user/:userId", notificationController.getUserNotifications);
+// Admin Unified Notifications
+router.get("/admin/all", notificationController.getAdminNotifications);
+router.put("/read-all", notificationController.markAllAsRead);
 
-router.put("/read/:id", notificationController.markAsRead); 
+router.get("/user/:userId", notificationController.getUserNotifications);
+router.put("/read/:id", notificationController.markAsRead);
+router.delete("/:id", notificationController.deleteNotification);
 
 // ===============================
 // ANNOUNCEMENT ROUTES

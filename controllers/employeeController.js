@@ -770,22 +770,29 @@ exports.getEmployeeList = async (req, res) => {
         const employeeData = employee.toObject();
         const departmentName = await resolveDepartmentName(employeeData.department);
 
+        let linkedUser = null;
+        if (employeeData.userID) {
+          linkedUser = await User.findById(employeeData.userID);
+        } else if (employeeData.email) {
+          linkedUser = await User.findOne({ email: employeeData.email });
+        }
+
         let finalRole = employeeData.role;
         if (!finalRole || finalRole === "employee") {
-          let linkedUser = null;
-          if (employeeData.userID) {
-            linkedUser = await User.findById(employeeData.userID);
-          } else if (employeeData.email) {
-            linkedUser = await User.findOne({ email: employeeData.email });
-          }
           if (linkedUser?.role) {
             finalRole = linkedUser.role;
           }
         }
 
+        let finalDesignation = employeeData.designation;
+        if ((!finalDesignation || finalDesignation === "Employee") && linkedUser?.designation) {
+          finalDesignation = linkedUser.designation;
+        }
+
         return {
           ...employeeData,
           role: finalRole || (employeeData.isTeamLead ? "team lead" : "employee"),
+          designation: finalDesignation || employeeData.designation || "Employee",
           department: departmentName,
         };
       })

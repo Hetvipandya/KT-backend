@@ -2502,9 +2502,10 @@ exports.approveEmployee = async (req, res) => {
           user.address || "",
 
         designation:
-          user.role === "team lead"
+          user.designation ||
+          (user.role === "team lead"
             ? "Team Lead"
-            : "Employee",
+            : "Employee"),
 
         department:
           user.department || "",
