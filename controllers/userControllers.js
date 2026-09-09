@@ -1534,21 +1534,10 @@ const generateEmployeeID = require("../utils/employeeId");
 
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
-const nodemailer = require("nodemailer");
 const axios = require("axios");
 
 const { syncEmployeeToUser } = require("../utils/userEmployeeSync");
-const { sendRegistrationEmail, sendForgotPasswordEmail } = require("../utils/mailer");
-
-// ================= EMAIL CONFIG =================
-const transporter = nodemailer.createTransport({
-  service: "gmail",
-
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS,
-  },
-});
+const { sendRegistrationEmail, sendForgotPasswordEmail, sendCustomEmail } = require("../utils/mailer");
 
 // ================= JWT TOKEN =================
 const generateToken = (userId) => {
@@ -2260,85 +2249,25 @@ exports.registerUser = async (req, res) => {
     }
 
     // ==================================================
-    // SEND NOTIFICATION EMAIL TO ADMIN (OPTIONAL/BACKGROUND)
+    // SEND NOTIFICATION EMAIL TO ADMIN (NON-BLOCKING VIA BREVO)
     // ==================================================
-    try {
-      if (process.env.ADMIN_EMAIL && process.env.EMAIL_USER) {
-        await transporter.sendMail({
-          from:
-            process.env.EMAIL_USER,
-
-          to:
-            process.env.ADMIN_EMAIL,
-
-          subject:
-            "New Employee Registration",
-
-          html: `
-            <h2>
-              New Employee Registration
-            </h2>
-
-            <p>
-              <b>Name:</b>
-              ${name}
-            </p>
-
-            <p>
-              <b>Email:</b>
-              ${normalizedEmail}
-            </p>
-
-            <p>
-              <b>Phone:</b>
-              ${phoneNumber}
-            </p>
-
-            <p>
-              <b>Department:</b>
-              ${department}
-            </p>
-
-            <p>
-              <b>Role:</b>
-              ${normalizedRole}
-            </p>
-
-            <p>
-              <b>Unique ID:</b>
-              ${uniqueID}
-            </p>
-
-            ${
-              employee
-                ? `
-                  <p>
-                    <b>Employee ID:</b>
-                    ${employee.employeeID}
-                  </p>
-                `
-                : ""
-            }
-
-            <hr />
-
-            <p>
-              Please approve this employee
-              from the admin panel.
-            </p>
-          `,
-        });
-
-        console.log(
-          "✅ Admin registration email sent successfully"
-        );
-      }
-    } catch (emailError) {
-      // Email error should NOT delete user/employee
-      console.log(
-        "❌ Admin Email Error:",
-        emailError.message
-      );
+    if (process.env.ADMIN_EMAIL) {
+      sendCustomEmail({
+        to: process.env.ADMIN_EMAIL,
+        subject: "New Employee Registration",
+        htmlContent: `
+          <h2>New Employee Registration</h2>
+          <p><b>Name:</b> ${name}</p>
+          <p><b>Email:</b> ${normalizedEmail}</p>
+          <p><b>Phone:</b> ${phoneNumber}</p>
+          <p><b>Department:</b> ${department}</p>
+          <p><b>Role:</b> ${normalizedRole}</p>
+          <p><b>Unique ID:</b> ${uniqueID}</p>
+          ${employee ? `<p><b>Employee ID:</b> ${employee.employeeID}</p>` : ""}
+          <hr />
+          <p>Please approve this employee from the admin panel.</p>
+        `,
+      }).catch((err) => console.log("Admin email notification:", err.message));
     }
 
     // ==================================================
@@ -2926,32 +2855,16 @@ exports.sendOTP = async (req, res) => {
 
     await user.save();
 
-    await transporter.sendMail({
-      from: process.env.EMAIL_USER,
-
+    sendCustomEmail({
       to: email,
-
-      subject:
-        "OTP Verification",
-
-      html: `
-        <h2>
-          OTP Verification
-        </h2>
-
-        <p>
-          Your OTP is:
-        </p>
-
-        <h1>
-          ${otp}
-        </h1>
-
-        <p>
-          OTP valid for 5 minutes.
-        </p>
+      subject: "OTP Verification",
+      htmlContent: `
+        <h2>OTP Verification</h2>
+        <p>Your OTP is:</p>
+        <h1>${otp}</h1>
+        <p>OTP valid for 5 minutes.</p>
       `,
-    });
+    }).catch((err) => console.log("OTP email error:", err.message));
 
     return res.json({
       success: true,

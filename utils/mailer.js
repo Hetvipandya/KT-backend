@@ -184,8 +184,82 @@ const sendForgotPasswordEmail = async ({ name, email, password }) => {
   }
 };
 
+/**
+ * Send custom transactional email using Brevo API (v3)
+ *
+ * @param {Object} params
+ * @param {string} params.to - Recipient email address
+ * @param {string} [params.name] - Recipient name
+ * @param {string} params.subject - Email subject
+ * @param {string} params.htmlContent - HTML body content
+ * @returns {Promise<{success: boolean, messageId?: string, error?: any}>}
+ */
+const sendCustomEmail = async ({ to, name, subject, htmlContent }) => {
+  try {
+    const apiKey = process.env.BREVO_API_KEY;
+
+    if (!apiKey) {
+      const errorMsg = "BREVO_API_KEY is not configured in environment variables";
+      console.error(`❌ [Brevo Mailer]: ${errorMsg}`);
+      return { success: false, error: errorMsg };
+    }
+
+    if (!to || typeof to !== "string" || !to.trim()) {
+      const errorMsg = "Recipient email address is required";
+      console.error(`❌ [Brevo Mailer]: ${errorMsg}`);
+      return { success: false, error: errorMsg };
+    }
+
+    const payload = {
+      sender: {
+        name: process.env.BREVO_SENDER_NAME || "Kevalon Technology",
+        email: process.env.BREVO_SENDER_EMAIL || "hr@kevalontechnology.in",
+      },
+      to: [
+        {
+          email: to.trim(),
+          name: name ? name.trim() : to.trim(),
+        },
+      ],
+      subject: subject || "Notification",
+      htmlContent: htmlContent,
+    };
+
+    const response = await axios.post(
+      "https://api.brevo.com/v3/smtp/email",
+      payload,
+      {
+        headers: {
+          "api-key": apiKey,
+          "Content-Type": "application/json",
+          "Accept": "application/json",
+        },
+      }
+    );
+
+    const messageId = response.data && response.data.messageId;
+    console.log(`Custom email sent successfully via Brevo to: ${to}`);
+
+    return {
+      success: true,
+      messageId,
+    };
+  } catch (error) {
+    const errorDetails =
+      (error.response && error.response.data) || error.message || "Unknown error";
+    console.error("❌ [Brevo Custom Mailer Error]:", errorDetails);
+
+    return {
+      success: false,
+      error: errorDetails,
+    };
+  }
+};
+
 module.exports = {
   sendRegistrationEmail,
   sendForgotPasswordEmail,
+  sendCustomEmail,
 };
+
 

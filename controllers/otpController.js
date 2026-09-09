@@ -1,126 +1,53 @@
-const User =
-  require("../models/User");
-
-const nodemailer =
-  require("nodemailer");
-
-// ================= EMAIL CONFIG =================
-const transporter =
-  nodemailer.createTransport(
-    {
-      service:
-        "gmail",
-
-      auth: {
-        user:
-          process.env
-            .EMAIL_USER,
-
-        pass:
-          process.env
-            .EMAIL_PASS,
-      },
-    }
-  );
+const User = require("../models/User");
+const { sendCustomEmail } = require("../utils/mailer");
 
 // ================= GENERATE OTP =================
-const generateOTP =
-  () =>
-    Math.floor(
-      100000 +
-        Math.random() *
-          900000
-    ).toString();
+const generateOTP = () =>
+  Math.floor(100000 + Math.random() * 900000).toString();
 
 // ================= SEND OTP =================
-exports.sendOTP =
-  async (req, res) => {
-    try {
-      const {
-        email,
-      } = req.body;
+exports.sendOTP = async (req, res) => {
+  try {
+    const { email } = req.body;
 
-      if (!email) {
-        return res
-          .status(400)
-          .json({
-            success:
-              false,
-            message:
-              "Email required",
-          });
-      }
-
-      const user =
-        await User.findOne(
-          { email }
-        );
-
-      if (!user) {
-        return res
-          .status(404)
-          .json({
-            success:
-              false,
-            message:
-              "User not found",
-          });
-      }
-
-      const otp =
-        generateOTP();
-
-      user.forgotPasswordOTP =
-        otp;
-
-      user.otpExpireTime =
-        new Date(
-          Date.now() +
-            5 *
-              60 *
-              1000
-        );
-
-      await user.save();
-
-      await transporter.sendMail(
-        {
-          from:
-            process.env
-              .EMAIL_USER,
-
-          to:
-            email,
-
-          subject:
-            "OTP Verification",
-
-          html: `
-            <h2>
-              OTP Verification
-            </h2>
-
-            <p>
-              Your OTP:
-            </p>
-
-            <h1>
-              ${otp}
-            </h1>
-
-            <p>
-              Valid for 5 mins
-            </p>
-          `,
-        }
-      );
-
-      res.json({
-        success:
-          true,
-        message:
-          "OTP sent successfully",
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        message: "Email required",
       });
+    }
+
+    const user = await User.findOne({ email });
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    const otp = generateOTP();
+
+    user.forgotPasswordOTP = otp;
+    user.otpExpireTime = new Date(Date.now() + 5 * 60 * 1000);
+
+    await user.save();
+
+    sendCustomEmail({
+      to: email,
+      subject: "OTP Verification",
+      htmlContent: `
+        <h2>OTP Verification</h2>
+        <p>Your OTP:</p>
+        <h1>${otp}</h1>
+        <p>Valid for 5 mins</p>
+      `,
+    }).catch((err) => console.log("OTP send error:", err.message));
+
+    res.json({
+      success: true,
+      message: "OTP sent successfully",
+    });
     } catch (
       error
     ) {
