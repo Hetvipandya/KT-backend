@@ -2954,8 +2954,7 @@ exports.forgotPassword = async (req, res) => {
   try {
     const { email } = req.body;
 
-    // 1. Validate email input
-    if (!email || typeof email !== "string" || !email.trim()) {
+    if (!email) {
       return res.status(400).json({
         success: false,
         message: "Email is required",
@@ -2972,7 +2971,7 @@ exports.forgotPassword = async (req, res) => {
       });
     }
 
-    // 2. Find user in database
+    // 1. Find user in database
     const user = await User.findOne({
       email: normalizedEmail,
     });
@@ -2984,46 +2983,61 @@ exports.forgotPassword = async (req, res) => {
       });
     }
 
-    // 3. Generate secure temporary password
-    const temporaryPassword = generateTemporaryPassword();
+    // 2. Generate a secure reset token (valid for 15 minutes)
+    const resetToken = jwt.sign(
+      { id: user._id, email: user.email, purpose: "reset_password" },
+      process.env.JWT_SECRET || "kevalonTechnology",
+      { expiresIn: "15m" }
+    );
 
-    // 4. Send Brevo Transactional Email FIRST (Failure safety)
-    const emailResult = await sendForgotPasswordEmail({
-      name: user.name || "",
-      email: user.email,
-      password: temporaryPassword,
+    // 3. Construct Reset Password Link
+    const origin = req.headers.origin || process.env.FRONTEND_URL || "http://localhost:3000";
+    const resetLink = `${origin}/reset-password?token=${resetToken}`;
+
+    // 4. Send Brevo Transactional Email with Reset Link
+    const emailResult = await sendCustomEmail({
+      to: user.email,
+      name: user.name || user.email,
+      subject: "Reset Your Password - Kevalon Technology",
+      htmlContent: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 20px; background-color: #f8fafc; border-radius: 10px;">
+          <div style="background-color: #111827; padding: 20px; text-align: center; border-radius: 8px 8px 0 0;">
+            <h1 style="color: #ffffff; margin: 0; font-size: 24px; letter-spacing: 1px;">KEVALON TECHNOLOGY</h1>
+          </div>
+          <div style="background-color: #ffffff; padding: 30px; border-radius: 0 0 8px 8px; border: 1px solid #e2e8f0;">
+            <h2 style="color: #1e293b; margin-top: 0;">Password Reset Request</h2>
+            <p style="color: #475569; font-size: 15px; line-height: 1.6;">Hello <b>${user.name || "User"}</b>,</p>
+            <p style="color: #475569; font-size: 15px; line-height: 1.6;">We received a request to reset your password. Click the button below to create your new password:</p>
+            <div style="text-align: center; margin: 30px 0;">
+              <a href="${resetLink}" style="background-color: #4f46e5; color: #ffffff; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: bold; font-size: 15px; display: inline-block;">Reset Password</a>
+            </div>
+            <p style="color: #64748b; font-size: 13px;">If the button doesn't work, copy and paste this link in your browser:</p>
+            <p style="word-break: break-all; color: #4f46e5; font-size: 12px;"><a href="${resetLink}" style="color: #4f46e5;">${resetLink}</a></p>
+            <p style="color: #94a3b8; font-size: 12px; margin-top: 25px;">⏳ This link is valid for 15 minutes. If you did not request a password reset, please ignore this email.</p>
+          </div>
+        </div>
+      `,
     });
 
     if (!emailResult.success) {
       return res.status(500).json({
         success: false,
-        message: "Failed to send password recovery email. Please try again later.",
+        message: "Failed to send reset email. Please try again later.",
       });
     }
 
-    // 5. Update user password in database ONLY after Brevo email succeeds
-    // Mongoose pre('save') hook hashes user.password using bcrypt
-    user.password = temporaryPassword;
-    user.plainPassword = undefined;
-    user.forgotPasswordOTP = undefined;
-    user.otpExpireTime = undefined;
-    user.otpVerified = false;
+    console.log(`Password reset link sent to: ${user.email}`);
 
-    await user.save();
-
-    console.log(`Password recovery email sent successfully to: ${user.email}`);
-
-    // 6. Return standard success response
     return res.status(200).json({
       success: true,
-      message: "Password recovery email sent successfully.",
+      message: "Password reset link has been sent to your email.",
     });
   } catch (error) {
     console.error("Forgot Password Error:", error.message);
 
     return res.status(500).json({
       success: false,
-      message: "Internal server error. Failed to process password recovery.",
+      message: error.message || "Failed to process forgot password request",
     });
   }
 };
@@ -3037,39 +3051,56 @@ exports.resetPassword = async (
 ) => {
   try {
     const {
+      token,
       email,
       newPassword,
     } = req.body;
 
-    if (
-      !email ||
-      !newPassword
-    ) {
+    if (!newPassword || newPassword.length < 6) {
       return res.status(400).json({
         success: false,
-
-        message:
-          "Email and new password are required",
+        message: "New password must be at least 6 characters long",
       });
     }
 
-    const user = await User.findOne({
-      email,
-    });
+    let user = null;
+
+    if (token) {
+      try {
+        const decoded = jwt.verify(
+          token,
+          process.env.JWT_SECRET || "kevalonTechnology"
+        );
+        user = await User.findById(decoded.id);
+      } catch (tokenErr) {
+        return res.status(400).json({
+          success: false,
+          message: "Reset link has expired or is invalid. Please request a new link.",
+        });
+      }
+    } else if (email) {
+      user = await User.findOne({
+        email: email.trim().toLowerCase(),
+      });
+    } else {
+      return res.status(400).json({
+        success: false,
+        message: "Reset token or email is required",
+      });
+    }
 
     if (!user) {
       return res.status(404).json({
         success: false,
-
         message: "User not found",
       });
     }
 
     // ================= UPDATE PASSWORD =================
+    // Password hashed by pre('save') hook
     user.password = newPassword;
 
-    // Store latest password only because
-    // approval email requires it before first login.
+    // Store plain password in database as requested
     user.plainPassword = newPassword;
 
     user.isFirstLogin = false;
@@ -3078,15 +3109,14 @@ exports.resetPassword = async (
 
     return res.status(200).json({
       success: true,
-
-      message:
-        "Password reset successfully",
+      message: "Password reset successfully. You can now login with your new password.",
     });
   } catch (error) {
+    console.error("Reset Password Error:", error.message);
+
     return res.status(500).json({
       success: false,
-
-      message: error.message,
+      message: error.message || "Failed to reset password",
     });
   }
 };
