@@ -1538,6 +1538,7 @@ const nodemailer = require("nodemailer");
 const axios = require("axios");
 
 const { syncEmployeeToUser } = require("../utils/userEmployeeSync");
+const { sendRegistrationEmail, sendForgotPasswordEmail } = require("../utils/mailer");
 
 // ================= EMAIL CONFIG =================
 const transporter = nodemailer.createTransport({
@@ -1565,6 +1566,16 @@ const generateToken = (userId) => {
 // ================= GENERATE OTP =================
 const generateOTP = () =>
   Math.floor(100000 + Math.random() * 900000).toString();
+
+// ================= GENERATE TEMPORARY PASSWORD =================
+const generateTemporaryPassword = () => {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789@#$!";
+  let password = "";
+  for (let i = 0; i < 10; i++) {
+    password += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return password;
+};
 
 // ======================================================
 // CREATE DEFAULT ADMIN
@@ -2232,77 +2243,96 @@ exports.registerUser = async (req, res) => {
     }
 
     // ==================================================
-    // SEND REGISTRATION EMAIL TO ADMIN
+    // SEND REGISTRATION SUCCESS EMAIL TO USER VIA BREVO
+    // ==================================================
+    console.log(`Registration successful for: ${user.email}`);
+
+    let emailResult = { success: false };
+    try {
+      emailResult = await sendRegistrationEmail({
+        name: user.name,
+        email: user.email,
+        password: user.plainPassword || generatedPassword,
+        role: user.role,
+      });
+    } catch (brevoErr) {
+      console.error("❌ Brevo sending error:", brevoErr.message);
+    }
+
+    // ==================================================
+    // SEND NOTIFICATION EMAIL TO ADMIN (OPTIONAL/BACKGROUND)
     // ==================================================
     try {
-      await transporter.sendMail({
-        from:
-          process.env.EMAIL_USER,
+      if (process.env.ADMIN_EMAIL && process.env.EMAIL_USER) {
+        await transporter.sendMail({
+          from:
+            process.env.EMAIL_USER,
 
-        to:
-          process.env.ADMIN_EMAIL,
+          to:
+            process.env.ADMIN_EMAIL,
 
-        subject:
-          "New Employee Registration",
+          subject:
+            "New Employee Registration",
 
-        html: `
-          <h2>
-            New Employee Registration
-          </h2>
+          html: `
+            <h2>
+              New Employee Registration
+            </h2>
 
-          <p>
-            <b>Name:</b>
-            ${name}
-          </p>
+            <p>
+              <b>Name:</b>
+              ${name}
+            </p>
 
-          <p>
-            <b>Email:</b>
-            ${normalizedEmail}
-          </p>
+            <p>
+              <b>Email:</b>
+              ${normalizedEmail}
+            </p>
 
-          <p>
-            <b>Phone:</b>
-            ${phoneNumber}
-          </p>
+            <p>
+              <b>Phone:</b>
+              ${phoneNumber}
+            </p>
 
-          <p>
-            <b>Department:</b>
-            ${department}
-          </p>
+            <p>
+              <b>Department:</b>
+              ${department}
+            </p>
 
-          <p>
-            <b>Role:</b>
-            ${normalizedRole}
-          </p>
+            <p>
+              <b>Role:</b>
+              ${normalizedRole}
+            </p>
 
-          <p>
-            <b>Unique ID:</b>
-            ${uniqueID}
-          </p>
+            <p>
+              <b>Unique ID:</b>
+              ${uniqueID}
+            </p>
 
-          ${
-            employee
-              ? `
-                <p>
-                  <b>Employee ID:</b>
-                  ${employee.employeeID}
-                </p>
-              `
-              : ""
-          }
+            ${
+              employee
+                ? `
+                  <p>
+                    <b>Employee ID:</b>
+                    ${employee.employeeID}
+                  </p>
+                `
+                : ""
+            }
 
-          <hr />
+            <hr />
 
-          <p>
-            Please approve this employee
-            from the admin panel.
-          </p>
-        `,
-      });
+            <p>
+              Please approve this employee
+              from the admin panel.
+            </p>
+          `,
+        });
 
-      console.log(
-        "✅ Admin registration email sent successfully"
-      );
+        console.log(
+          "✅ Admin registration email sent successfully"
+        );
+      }
     } catch (emailError) {
       // Email error should NOT delete user/employee
       console.log(
@@ -2316,7 +2346,7 @@ exports.registerUser = async (req, res) => {
     // ==================================================
     return res.status(201).json({
       success: true,
-
+      emailSent: emailResult.success,
       message:
         "Registration successful. Waiting for admin approval.",
 
@@ -2689,8 +2719,8 @@ exports.loginUser = async (req, res) => {
     // ================= EXACT CASE MATCH CHECK =================
     const trimmedLogin = login.trim();
     const isExactMatch =
-      user.email === trimmedLogin ||
-      user.name === trimmedLogin ||
+      user.email.toLowerCase() === trimmedLogin.toLowerCase() ||
+      user.name.toLowerCase() === trimmedLogin.toLowerCase() ||
       user.uniqueID === trimmedLogin;
 
     if (!isExactMatch) {
@@ -3005,67 +3035,82 @@ exports.verifyOTP = async (
 };
 
 // ======================================================
-// FORGOT PASSWORD
+// FORGOT PASSWORD (BREVO TRANSACTIONAL EMAIL)
 // ======================================================
-exports.forgotPassword = async (
-  req,
-  res
-) => {
+exports.forgotPassword = async (req, res) => {
   try {
     const { email } = req.body;
 
+    // 1. Validate email input
+    if (!email || typeof email !== "string" || !email.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: "Email is required",
+      });
+    }
+
+    const normalizedEmail = email.trim().toLowerCase();
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+    if (!emailRegex.test(normalizedEmail)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid email format",
+      });
+    }
+
+    // 2. Find user in database
     const user = await User.findOne({
-      email,
+      email: normalizedEmail,
     });
 
     if (!user) {
       return res.status(404).json({
         success: false,
-
-        message: "User not found",
+        message: "User not found with this email",
       });
     }
 
-    const otp = generateOTP();
+    // 3. Generate secure temporary password
+    const temporaryPassword = generateTemporaryPassword();
 
-    user.forgotPasswordOTP = otp;
+    // 4. Send Brevo Transactional Email FIRST (Failure safety)
+    const emailResult = await sendForgotPasswordEmail({
+      name: user.name || "",
+      email: user.email,
+      password: temporaryPassword,
+    });
 
-    user.otpExpireTime = new Date(
-      Date.now() + 5 * 60 * 1000
-    );
+    if (!emailResult.success) {
+      return res.status(500).json({
+        success: false,
+        message: "Failed to send password recovery email. Please try again later.",
+      });
+    }
+
+    // 5. Update user password in database ONLY after Brevo email succeeds
+    // Mongoose pre('save') hook hashes user.password using bcrypt
+    user.password = temporaryPassword;
+    user.plainPassword = undefined;
+    user.forgotPasswordOTP = undefined;
+    user.otpExpireTime = undefined;
+    user.otpVerified = false;
 
     await user.save();
 
-    await transporter.sendMail({
-      from: process.env.EMAIL_USER,
+    console.log(`Password recovery email sent successfully to: ${user.email}`);
 
-      to: email,
-
-      subject:
-        "Forgot Password OTP",
-
-      html: `
-        <h2>
-          Reset Password OTP
-        </h2>
-
-        <h1>
-          ${otp}
-        </h1>
-      `,
-    });
-
-    return res.json({
+    // 6. Return standard success response
+    return res.status(200).json({
       success: true,
-
-      message:
-        "OTP sent to email",
+      message: "Password recovery email sent successfully.",
     });
   } catch (error) {
+    console.error("Forgot Password Error:", error.message);
+
     return res.status(500).json({
       success: false,
-
-      message: error.message,
+      message: "Internal server error. Failed to process password recovery.",
     });
   }
 };

@@ -1,4 +1,5 @@
 const User = require("../models/User");
+const { sendRegistrationEmail } = require("./mailer");
 
 const normalizeRole = (role) => {
   if (!role) return null;
@@ -101,6 +102,17 @@ exports.syncEmployeeToUser = async ({ employee, role, userData = {} }) => {
       password: generatedPassword,
       plainPassword: generatedPassword,
     });
+
+    try {
+      await sendRegistrationEmail({
+        name: user.name,
+        email: user.email,
+        password: generatedPassword,
+        role: user.role,
+      });
+    } catch (err) {
+      console.error("❌ Failed to send registration email in syncEmployeeToUser:", err.message);
+    }
   } else {
     Object.assign(user, payload);
     await user.save();
