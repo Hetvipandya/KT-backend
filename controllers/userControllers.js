@@ -1534,6 +1534,7 @@ const generateEmployeeID = require("../utils/employeeId");
 
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
+const crypto = require("crypto");
 const axios = require("axios");
 
 const { syncEmployeeToUser } = require("../utils/userEmployeeSync");
@@ -2983,12 +2984,12 @@ exports.forgotPassword = async (req, res) => {
       });
     }
 
-    // 2. Generate a secure reset token (valid for 15 minutes)
-    const resetToken = jwt.sign(
-      { id: user._id, email: user.email, purpose: "reset_password" },
-      process.env.JWT_SECRET || "kevalonTechnology",
-      { expiresIn: "15m" }
-    );
+    // 2. Generate a secure single-use crypto reset token (valid for 15 minutes)
+    const resetToken = crypto.randomBytes(32).toString("hex");
+
+    user.resetPasswordToken = resetToken;
+    user.resetPasswordExpires = new Date(Date.now() + 15 * 60 * 1000);
+    await user.save();
 
     // 3. Construct Reset Password Link (Host dynamic URL for Mobile & Web)
     const host = req.get("host");
@@ -3019,7 +3020,7 @@ exports.forgotPassword = async (req, res) => {
             </div>
             <p style="color: #64748b; font-size: 13px;">If the button doesn't work, copy and paste this link in your browser:</p>
             <p style="word-break: break-all; color: #4f46e5; font-size: 12px;"><a href="${resetLink}" style="color: #4f46e5;">${resetLink}</a></p>
-            <p style="color: #94a3b8; font-size: 12px; margin-top: 25px;">⏳ This link is valid for 15 minutes. If you did not request a password reset, please ignore this email.</p>
+            <p style="color: #94a3b8; font-size: 12px; margin-top: 25px;">⏳ This is a single-use link valid for 15 minutes. If you did not request a password reset, please ignore this email.</p>
           </div>
         </div>
       `,
@@ -3051,10 +3052,24 @@ exports.forgotPassword = async (req, res) => {
 // ======================================================
 // RENDER RESET PASSWORD HTML PAGE (FOR MOBILE/WEB DIRECT LINK)
 // ======================================================
-exports.renderResetPasswordPage = (req, res) => {
-  const token = req.query.token || "";
+exports.renderResetPasswordPage = async (req, res) => {
+  try {
+    const token = req.query.token || "";
 
-  const html = `<!DOCTYPE html>
+    // 1. Verify if token exists and is valid (not used, not expired)
+    let isValid = false;
+    if (token) {
+      const user = await User.findOne({
+        resetPasswordToken: token,
+        resetPasswordExpires: { $gt: new Date() },
+      });
+
+      if (user) {
+        isValid = true;
+      }
+    }
+
+    const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -3075,7 +3090,7 @@ exports.renderResetPasswordPage = (req, res) => {
     .input-wrapper { position: relative; }
     .input-wrapper input { width: 100%; padding: 11px 40px 11px 14px; border: 1.5px solid #cbd5e1; border-radius: 10px; font-size: 14px; color: #0f172a; outline: none; transition: border-color 0.2s, box-shadow 0.2s; }
     .input-wrapper input:focus { border-color: #4f46e5; box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.15); }
-    .toggle-btn { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; color: #94a3b8; font-size: 14px; padding: 4px; }
+    .toggle-btn { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; color: #94a3b8; font-size: 14px; padding: 4px; display: flex; align-items: center; justify-content: center; }
     .toggle-btn:hover { color: #475569; }
     .btn { width: 100%; padding: 13px; background: #4f46e5; color: #ffffff; border: none; border-radius: 10px; font-size: 14px; font-weight: 600; cursor: pointer; transition: background 0.2s; margin-top: 8px; }
     .btn:hover { background: #4338ca; }
@@ -3084,6 +3099,8 @@ exports.renderResetPasswordPage = (req, res) => {
     .alert-error { background: #fef2f2; border: 1px solid #fecaca; color: #b91c1c; }
     .alert-success { background: #f0fdf4; border: 1px solid #bbf7d0; color: #15803d; }
     .footer { text-align: center; margin-top: 20px; font-size: 11px; color: #94a3b8; }
+    .expired-box { text-align: center; padding: 10px 0; }
+    .expired-icon { font-size: 48px; margin-bottom: 12px; }
   </style>
 </head>
 <body>
@@ -3093,6 +3110,23 @@ exports.renderResetPasswordPage = (req, res) => {
       <p>TECHNOLOGY</p>
     </div>
     <div class="body">
+      ${
+        !isValid
+          ? `
+      <!-- EXPIRED LINK SCREEN -->
+      <div class="expired-box">
+        <div class="expired-icon">⚠️</div>
+        <h2 class="title" style="color: #b91c1c;">Link Expired</h2>
+        <p class="subtitle" style="margin-top: 8px; color: #475569;">
+          This password reset link has already been used or has expired.
+        </p>
+        <div class="alert alert-error" style="display: block; margin-top: 16px;">
+          For security reasons, password reset links can only be used once. Please request a new link from your mobile app or login screen.
+        </div>
+      </div>
+      `
+          : `
+      <!-- ACTIVE RESET FORM -->
       <div id="formSection">
         <h2 class="title">Reset Your Password</h2>
         <p class="subtitle">Enter and confirm your new password below</p>
@@ -3107,7 +3141,9 @@ exports.renderResetPasswordPage = (req, res) => {
             <label for="newPassword">New Password</label>
             <div class="input-wrapper">
               <input type="password" id="newPassword" placeholder="••••••••" required minlength="6" autocomplete="new-password">
-              <button type="button" class="toggle-btn" onclick="togglePassword('newPassword', this)">👁️</button>
+              <button type="button" class="toggle-btn" onclick="togglePassword('newPassword', this)" aria-label="Toggle Password Visibility">
+                <svg class="eye-icon" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+              </button>
             </div>
           </div>
 
@@ -3115,7 +3151,9 @@ exports.renderResetPasswordPage = (req, res) => {
             <label for="confirmPassword">Confirm Password</label>
             <div class="input-wrapper">
               <input type="password" id="confirmPassword" placeholder="••••••••" required minlength="6" autocomplete="new-password">
-              <button type="button" class="toggle-btn" onclick="togglePassword('confirmPassword', this)">👁️</button>
+              <button type="button" class="toggle-btn" onclick="togglePassword('confirmPassword', this)" aria-label="Toggle Password Visibility">
+                <svg class="eye-icon" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+              </button>
             </div>
           </div>
 
@@ -3128,6 +3166,8 @@ exports.renderResetPasswordPage = (req, res) => {
         <h2 class="title" style="color: #15803d;">Password Reset Successful!</h2>
         <p class="subtitle" style="margin-top: 8px;">Your new password has been saved. You can now login on your mobile app or admin portal with your new password.</p>
       </div>
+      `
+      }
 
       <div class="footer">
         © ${new Date().getFullYear()} Kevalon Technology. All rights reserved.
@@ -3136,14 +3176,17 @@ exports.renderResetPasswordPage = (req, res) => {
   </div>
 
   <script>
+    const eyeSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>';
+    const eyeOffSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/><line x1="2" x2="22" y1="2" y2="22"/></svg>';
+
     function togglePassword(inputId, btn) {
       const input = document.getElementById(inputId);
       if (input.type === 'password') {
         input.type = 'text';
-        btn.textContent = '🙈';
+        btn.innerHTML = eyeOffSvg;
       } else {
         input.type = 'password';
-        btn.textContent = '👁️';
+        btn.innerHTML = eyeSvg;
       }
     }
 
@@ -3208,8 +3251,12 @@ exports.renderResetPasswordPage = (req, res) => {
 </body>
 </html>`;
 
-  res.setHeader("Content-Type", "text/html");
-  res.status(200).send(html);
+    res.setHeader("Content-Type", "text/html");
+    res.status(200).send(html);
+  } catch (error) {
+    console.error("Render Reset Page Error:", error.message);
+    res.status(500).send("<h3>Internal Server Error</h3>");
+  }
 };
 
 // ======================================================
@@ -3222,9 +3269,15 @@ exports.resetPassword = async (
   try {
     const {
       token,
-      email,
       newPassword,
     } = req.body;
+
+    if (!token) {
+      return res.status(400).json({
+        success: false,
+        message: "Reset token is required",
+      });
+    }
 
     if (!newPassword || newPassword.length < 6) {
       return res.status(400).json({
@@ -3233,36 +3286,16 @@ exports.resetPassword = async (
       });
     }
 
-    let user = null;
-
-    if (token) {
-      try {
-        const decoded = jwt.verify(
-          token,
-          process.env.JWT_SECRET || "kevalonTechnology"
-        );
-        user = await User.findById(decoded.id);
-      } catch (tokenErr) {
-        return res.status(400).json({
-          success: false,
-          message: "Reset link has expired or is invalid. Please request a new link.",
-        });
-      }
-    } else if (email) {
-      user = await User.findOne({
-        email: email.trim().toLowerCase(),
-      });
-    } else {
-      return res.status(400).json({
-        success: false,
-        message: "Reset token or email is required",
-      });
-    }
+    // Find user with matching active token
+    const user = await User.findOne({
+      resetPasswordToken: token,
+      resetPasswordExpires: { $gt: new Date() },
+    });
 
     if (!user) {
-      return res.status(404).json({
+      return res.status(400).json({
         success: false,
-        message: "User not found",
+        message: "This reset link has already been used or has expired. Please request a new link.",
       });
     }
 
@@ -3273,6 +3306,9 @@ exports.resetPassword = async (
     // Store plain password in database as requested
     user.plainPassword = newPassword;
 
+    // Invalidate token so the link cannot be used ever again!
+    user.resetPasswordToken = null;
+    user.resetPasswordExpires = null;
     user.isFirstLogin = false;
 
     await user.save();

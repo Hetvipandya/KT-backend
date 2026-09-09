@@ -144,6 +144,17 @@ const userSchema =
         default: null,
       },
 
+      // ================= PASSWORD RESET TOKEN =================
+      resetPasswordToken: {
+        type: String,
+        default: null,
+      },
+
+      resetPasswordExpires: {
+        type: Date,
+        default: null,
+      },
+
       // ================= DEVICE TRACKING =================
       deviceId: {
         type: String,
