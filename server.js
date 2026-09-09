@@ -421,6 +421,11 @@ app.get("/", (req, res) => {
   });
 });
 
+app.get(
+  "/reset-password",
+  require("./controllers/userControllers").renderResetPasswordPage
+);
+
 // ================= DATABASE CONNECTION =================
 
 mongoose

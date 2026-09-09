@@ -2990,9 +2990,15 @@ exports.forgotPassword = async (req, res) => {
       { expiresIn: "15m" }
     );
 
-    // 3. Construct Reset Password Link
-    const origin = req.headers.origin || process.env.FRONTEND_URL || "http://localhost:3000";
-    const resetLink = `${origin}/reset-password?token=${resetToken}`;
+    // 3. Construct Reset Password Link (Host dynamic URL for Mobile & Web)
+    const host = req.get("host");
+    const isHttps =
+      req.protocol === "https" ||
+      req.headers["x-forwarded-proto"] === "https" ||
+      host.includes("onrender.com");
+    const protocol = isHttps ? "https" : "http";
+    const baseUrl = process.env.BACKEND_URL || `${protocol}://${host}`;
+    const resetLink = `${baseUrl}/reset-password?token=${resetToken}`;
 
     // 4. Send Brevo Transactional Email with Reset Link
     const emailResult = await sendCustomEmail({
@@ -3009,7 +3015,7 @@ exports.forgotPassword = async (req, res) => {
             <p style="color: #475569; font-size: 15px; line-height: 1.6;">Hello <b>${user.name || "User"}</b>,</p>
             <p style="color: #475569; font-size: 15px; line-height: 1.6;">We received a request to reset your password. Click the button below to create your new password:</p>
             <div style="text-align: center; margin: 30px 0;">
-              <a href="${resetLink}" style="background-color: #4f46e5; color: #ffffff; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: bold; font-size: 15px; display: inline-block;">Reset Password</a>
+              <a href="${resetLink}" style="background-color: #4f46e5; color: #ffffff; padding: 13px 32px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 15px; display: inline-block;">Reset Password</a>
             </div>
             <p style="color: #64748b; font-size: 13px;">If the button doesn't work, copy and paste this link in your browser:</p>
             <p style="word-break: break-all; color: #4f46e5; font-size: 12px;"><a href="${resetLink}" style="color: #4f46e5;">${resetLink}</a></p>
@@ -3040,6 +3046,170 @@ exports.forgotPassword = async (req, res) => {
       message: error.message || "Failed to process forgot password request",
     });
   }
+};
+
+// ======================================================
+// RENDER RESET PASSWORD HTML PAGE (FOR MOBILE/WEB DIRECT LINK)
+// ======================================================
+exports.renderResetPasswordPage = (req, res) => {
+  const token = req.query.token || "";
+
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Reset Password - Kevalon Technology</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; }
+    body { background: #f1f5f9; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px; }
+    .card { background: #ffffff; width: 100%; max-width: 420px; border-radius: 16px; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.08), 0 8px 10px -6px rgba(0,0,0,0.04); border: 1px solid #e2e8f0; overflow: hidden; }
+    .header { background: #111827; padding: 26px 20px; text-align: center; }
+    .header h1 { color: #ffffff; font-size: 20px; font-weight: 700; letter-spacing: 1.5px; }
+    .header p { color: #94a3b8; font-size: 11px; margin-top: 4px; letter-spacing: 1px; }
+    .body { padding: 30px 24px; }
+    .title { font-size: 18px; font-weight: 700; color: #0f172a; text-align: center; margin-bottom: 6px; }
+    .subtitle { font-size: 13px; color: #64748b; text-align: center; margin-bottom: 24px; }
+    .form-group { margin-bottom: 18px; }
+    .form-group label { display: block; font-size: 12px; font-weight: 600; color: #334155; margin-bottom: 6px; }
+    .input-wrapper { position: relative; }
+    .input-wrapper input { width: 100%; padding: 11px 40px 11px 14px; border: 1.5px solid #cbd5e1; border-radius: 10px; font-size: 14px; color: #0f172a; outline: none; transition: border-color 0.2s, box-shadow 0.2s; }
+    .input-wrapper input:focus { border-color: #4f46e5; box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.15); }
+    .toggle-btn { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; color: #94a3b8; font-size: 14px; padding: 4px; }
+    .toggle-btn:hover { color: #475569; }
+    .btn { width: 100%; padding: 13px; background: #4f46e5; color: #ffffff; border: none; border-radius: 10px; font-size: 14px; font-weight: 600; cursor: pointer; transition: background 0.2s; margin-top: 8px; }
+    .btn:hover { background: #4338ca; }
+    .btn:disabled { background: #94a3b8; cursor: not-allowed; }
+    .alert { padding: 12px; border-radius: 10px; font-size: 13px; font-weight: 500; margin-bottom: 18px; display: none; }
+    .alert-error { background: #fef2f2; border: 1px solid #fecaca; color: #b91c1c; }
+    .alert-success { background: #f0fdf4; border: 1px solid #bbf7d0; color: #15803d; }
+    .footer { text-align: center; margin-top: 20px; font-size: 11px; color: #94a3b8; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="header">
+      <h1>KEVALON</h1>
+      <p>TECHNOLOGY</p>
+    </div>
+    <div class="body">
+      <div id="formSection">
+        <h2 class="title">Reset Your Password</h2>
+        <p class="subtitle">Enter and confirm your new password below</p>
+        
+        <div id="errorAlert" class="alert alert-error"></div>
+        <div id="successAlert" class="alert alert-success"></div>
+
+        <form id="resetForm" onsubmit="handleSubmit(event)">
+          <input type="hidden" id="token" value="${token}">
+          
+          <div class="form-group">
+            <label for="newPassword">New Password</label>
+            <div class="input-wrapper">
+              <input type="password" id="newPassword" placeholder="••••••••" required minlength="6" autocomplete="new-password">
+              <button type="button" class="toggle-btn" onclick="togglePassword('newPassword', this)">👁️</button>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="confirmPassword">Confirm Password</label>
+            <div class="input-wrapper">
+              <input type="password" id="confirmPassword" placeholder="••••••••" required minlength="6" autocomplete="new-password">
+              <button type="button" class="toggle-btn" onclick="togglePassword('confirmPassword', this)">👁️</button>
+            </div>
+          </div>
+
+          <button type="submit" id="submitBtn" class="btn">Submit New Password</button>
+        </form>
+      </div>
+
+      <div id="successSection" style="display: none; text-align: center;">
+        <div style="font-size: 48px; margin-bottom: 12px;">✅</div>
+        <h2 class="title" style="color: #15803d;">Password Reset Successful!</h2>
+        <p class="subtitle" style="margin-top: 8px;">Your new password has been saved. You can now login on your mobile app or admin portal with your new password.</p>
+      </div>
+
+      <div class="footer">
+        © ${new Date().getFullYear()} Kevalon Technology. All rights reserved.
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function togglePassword(inputId, btn) {
+      const input = document.getElementById(inputId);
+      if (input.type === 'password') {
+        input.type = 'text';
+        btn.textContent = '🙈';
+      } else {
+        input.type = 'password';
+        btn.textContent = '👁️';
+      }
+    }
+
+    async function handleSubmit(e) {
+      e.preventDefault();
+      const token = document.getElementById('token').value;
+      const newPassword = document.getElementById('newPassword').value;
+      const confirmPassword = document.getElementById('confirmPassword').value;
+      const errorAlert = document.getElementById('errorAlert');
+      const submitBtn = document.getElementById('submitBtn');
+
+      errorAlert.style.display = 'none';
+
+      if (!token) {
+        errorAlert.textContent = 'Invalid or missing reset token. Please request a new reset link.';
+        errorAlert.style.display = 'block';
+        return;
+      }
+
+      if (newPassword.length < 6) {
+        errorAlert.textContent = 'Password must be at least 6 characters long.';
+        errorAlert.style.display = 'block';
+        return;
+      }
+
+      if (newPassword !== confirmPassword) {
+        errorAlert.textContent = 'New Password and Confirm Password do not match.';
+        errorAlert.style.display = 'block';
+        return;
+      }
+
+      try {
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Updating Password...';
+
+        const res = await fetch('/api/users/reset-password', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token, newPassword })
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+          errorAlert.textContent = data.message || 'Failed to reset password.';
+          errorAlert.style.display = 'block';
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Submit New Password';
+          return;
+        }
+
+        document.getElementById('formSection').style.display = 'none';
+        document.getElementById('successSection').style.display = 'block';
+      } catch (err) {
+        errorAlert.textContent = 'Network error. Please try again.';
+        errorAlert.style.display = 'block';
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Submit New Password';
+      }
+    }
+  </script>
+</body>
+</html>`;
+
+  res.setHeader("Content-Type", "text/html");
+  res.status(200).send(html);
 };
 
 // ======================================================

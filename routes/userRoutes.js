@@ -17,6 +17,7 @@ const {
   verifyOTP,
   forgotPassword,
   resetPassword,
+  renderResetPasswordPage,
   refreshUserToken,
   logoutUser,
 } = require(
@@ -73,6 +74,11 @@ router.post(
 ); //done
 
 // ================= RESET PASSWORD =================
+router.get(
+  "/reset-password",
+  renderResetPasswordPage
+);
+
 router.put(
   "/reset-password",
   resetPassword
