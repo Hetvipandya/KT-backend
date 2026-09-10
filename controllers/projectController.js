@@ -567,12 +567,21 @@ module.exports.recalculateMilestoneAndProjectProgress = recalculateMilestoneAndP
 // Create Project: Auto Fetches Team Members (Employee + Intern) from Team Collection if Team Lead is selected
 exports.createProject = async (req, res) => {
   try {
-    const uploadedFiles = req.files
-      ? req.files.map((file) => ({
-          fileName: file.originalname,
-          fileUrl: file.path,
-        }))
-      : [];
+    let rawFiles = [];
+    if (req.files) {
+      if (Array.isArray(req.files)) {
+        rawFiles = req.files;
+      } else if (typeof req.files === "object") {
+        rawFiles = Object.values(req.files).flat();
+      }
+    } else if (req.file) {
+      rawFiles = [req.file];
+    }
+
+    const uploadedFiles = rawFiles.map((file) => ({
+      fileName: file.originalname || "attachment",
+      fileUrl: file.path || file.secure_url || file.url || "",
+    }));
 
     const parseArrayField = (field) => {
       if (!field) return [];
