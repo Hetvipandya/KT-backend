@@ -369,6 +369,7 @@ exports.createOrUpdateTeam = async (req, res) => {
           isTeamLead: true,
           department: user.department || null,
           mobile: user.phoneNumber || "",
+          address: user.address || "",
           currentAddress: user.address || "",
           permanentAddress: user.address || "",
           designation: "Team Lead",

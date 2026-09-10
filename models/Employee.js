@@ -69,10 +69,18 @@ const employeeSchema =
       },
 
       // ADDRESS DETAILS
-     address: {
-  type: String,
-  default: "",
-},
+      address: {
+        type: String,
+        default: "",
+      },
+      currentAddress: {
+        type: String,
+        default: "",
+      },
+      permanentAddress: {
+        type: String,
+        default: "",
+      },
 
 
       // EMERGENCY CONTACT

@@ -2126,6 +2126,8 @@ exports.registerUser = async (req, res) => {
 
             bloodGroup,
 
+            address,
+
             currentAddress:
               address,
 
@@ -2454,6 +2456,9 @@ exports.approveEmployee = async (req, res) => {
 
         bloodGroup:
           user.bloodGroup || "",
+
+        address:
+          user.address || "",
 
         currentAddress:
           user.address || "",

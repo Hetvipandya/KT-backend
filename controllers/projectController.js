@@ -574,7 +574,27 @@ exports.createProject = async (req, res) => {
         }))
       : [];
 
-    let { teamLead, teamLeadUser, teamLeadEmployee, employees = [], interns = [] } = req.body;
+    const parseArrayField = (field) => {
+      if (!field) return [];
+      if (Array.isArray(field)) return field;
+      if (typeof field === "string") {
+        try {
+          const parsed = JSON.parse(field);
+          if (Array.isArray(parsed)) return parsed;
+          return [parsed];
+        } catch (e) {
+          if (field.includes(",")) {
+            return field.split(",").map((s) => s.trim()).filter(Boolean);
+          }
+          return [field.trim()];
+        }
+      }
+      return [field];
+    };
+
+    let { teamLead, teamLeadUser, teamLeadEmployee } = req.body;
+    let employees = parseArrayField(req.body.employees);
+    let interns = parseArrayField(req.body.interns);
 
     // Automatically Fetch Team Members (Employee + Intern) from Team Collection if Team Lead provided
     if (teamLead || teamLeadUser || teamLeadEmployee) {
@@ -590,8 +610,13 @@ exports.createProject = async (req, res) => {
       }
     }
 
+    const priority = req.body.priority ? String(req.body.priority).toLowerCase() : "medium";
+    const status = req.body.status ? String(req.body.status).toLowerCase().replace(/\s+/g, "_") : "pending";
+
     const project = await Project.create({
       ...req.body,
+      priority,
+      status,
       teamLeadUser: teamLeadUser || null,
       teamLeadEmployee: teamLeadEmployee || null,
       employees,
