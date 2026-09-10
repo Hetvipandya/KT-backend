@@ -3120,12 +3120,18 @@ exports.renderResetPasswordPage = async (req, res) => {
           ? `
       <!-- EXPIRED LINK SCREEN -->
       <div class="expired-box">
-        <div class="expired-icon">⚠️</div>
-        <h2 class="title" style="color: #b91c1c;">Link Expired</h2>
-        <p class="subtitle" style="margin-top: 8px; color: #475569;">
+        <div style="width: 72px; height: 72px; margin: 0 auto 18px; border-radius: 50%; background: #fef2f2; border: 2px solid #fca5a5; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 12px rgba(239, 68, 68, 0.12);">
+          <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"></circle>
+            <line x1="12" y1="8" x2="12" y2="12"></line>
+            <line x1="12" y1="16" x2="12.01" y2="16"></line>
+          </svg>
+        </div>
+        <h2 class="title" style="color: #991b1b; font-size: 20px;">Link Expired</h2>
+        <p class="subtitle" style="margin-top: 8px; color: #475569; font-size: 13px; line-height: 1.5;">
           This password reset link has already been used or has expired.
         </p>
-        <div class="alert alert-error" style="display: block; margin-top: 16px;">
+        <div class="alert alert-error" style="display: block; margin-top: 18px; text-align: left; font-size: 12px; line-height: 1.5;">
           For security reasons, password reset links can only be used once. Please request a new link from your mobile app or login screen.
         </div>
       </div>
@@ -3147,7 +3153,7 @@ exports.renderResetPasswordPage = async (req, res) => {
             <div class="input-wrapper">
               <input type="password" id="newPassword" placeholder="••••••••" required minlength="6" autocomplete="new-password">
               <button type="button" class="toggle-btn" onclick="togglePassword('newPassword', this)" aria-label="Toggle Password Visibility">
-                <svg class="eye-icon" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+                <svg class="eye-icon" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/><line x1="2" x2="22" y1="2" y2="22"/></svg>
               </button>
             </div>
           </div>
@@ -3157,7 +3163,7 @@ exports.renderResetPasswordPage = async (req, res) => {
             <div class="input-wrapper">
               <input type="password" id="confirmPassword" placeholder="••••••••" required minlength="6" autocomplete="new-password">
               <button type="button" class="toggle-btn" onclick="togglePassword('confirmPassword', this)" aria-label="Toggle Password Visibility">
-                <svg class="eye-icon" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+                <svg class="eye-icon" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/><line x1="2" x2="22" y1="2" y2="22"/></svg>
               </button>
             </div>
           </div>
@@ -3166,10 +3172,14 @@ exports.renderResetPasswordPage = async (req, res) => {
         </form>
       </div>
 
-      <div id="successSection" style="display: none; text-align: center;">
-        <div style="font-size: 48px; margin-bottom: 12px;">✅</div>
-        <h2 class="title" style="color: #15803d;">Password Reset Successful!</h2>
-        <p class="subtitle" style="margin-top: 8px;">Your new password has been saved. You can now login on your mobile app or admin portal with your new password.</p>
+      <div id="successSection" style="display: none; text-align: center; padding: 12px 0;">
+        <div style="width: 72px; height: 72px; margin: 0 auto 18px; border-radius: 50%; background: #ecfdf5; border: 2px solid #6ee7b7; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.15);">
+          <svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M20 6L9 17l-5-5"/>
+          </svg>
+        </div>
+        <h2 class="title" style="color: #065f46; font-size: 20px;">Password Reset Successful!</h2>
+        <p class="subtitle" style="margin-top: 8px; color: #475569; font-size: 13px; line-height: 1.5;">Your new password has been saved. You can now login on your mobile app or admin portal with your new password.</p>
       </div>
       `
       }
@@ -3181,17 +3191,17 @@ exports.renderResetPasswordPage = async (req, res) => {
   </div>
 
   <script>
-    const eyeSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>';
-    const eyeOffSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/><line x1="2" x2="22" y1="2" y2="22"/></svg>';
+    const eyeOpenSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#4f46e5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>';
+    const eyeClosedSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/><line x1="2" x2="22" y1="2" y2="22"/></svg>';
 
     function togglePassword(inputId, btn) {
       const input = document.getElementById(inputId);
       if (input.type === 'password') {
         input.type = 'text';
-        btn.innerHTML = eyeOffSvg;
+        btn.innerHTML = eyeOpenSvg;
       } else {
         input.type = 'password';
-        btn.innerHTML = eyeSvg;
+        btn.innerHTML = eyeClosedSvg;
       }
     }
 

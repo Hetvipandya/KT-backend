@@ -7,10 +7,14 @@ router.post("/job/create", ctrl.createJob);
 router.put("/job/publish/:id", ctrl.publishJob);
 router.get("/job/all", ctrl.getAllJobs);
 
-// ================= CANDIDATE =================
 router.post(
   "/candidate/add",
-  upload.single("resume"),
+  upload.fields([
+    { name: "resume", maxCount: 1 },
+    { name: "file", maxCount: 1 },
+    { name: "pdf", maxCount: 1 },
+    { name: "document", maxCount: 1 },
+  ]),
   ctrl.addCandidate
 );
 router.get(

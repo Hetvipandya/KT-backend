@@ -82,16 +82,31 @@ exports.addCandidate = async (req, res) => {
     console.log("BODY =", req.body);
     console.log("FILE =", req.file);
 
-   const candidate =
-  await Candidate.create({
-    jobId: req.body.jobId,
-    name: req.body.name,
-    email: req.body.email,
-    phone: req.body.phone,
-    resume: req.file
-      ? req.file.path
-      : "",
-  });
+    let resumeUrl = "";
+    if (req.file) {
+      resumeUrl = req.file.secure_url || req.file.path || req.file.url || "";
+    } else if (req.files) {
+      const fileObj =
+        req.files.resume?.[0] ||
+        req.files.file?.[0] ||
+        req.files.pdf?.[0] ||
+        req.files.document?.[0] ||
+        Object.values(req.files).flat()[0];
+      if (fileObj) {
+        resumeUrl = fileObj.secure_url || fileObj.path || fileObj.url || "";
+      }
+    }
+    if (!resumeUrl && req.body.resume) {
+      resumeUrl = req.body.resume;
+    }
+
+    const candidate = await Candidate.create({
+      jobId: req.body.jobId,
+      name: req.body.name,
+      email: req.body.email,
+      phone: req.body.phone,
+      resume: resumeUrl,
+    });
 
     res.status(201).json({
       success: true,
