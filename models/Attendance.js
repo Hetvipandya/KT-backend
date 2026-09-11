@@ -16,6 +16,18 @@ const breakSchema = new mongoose.Schema(
       type: Number,
       default: 0, // Minutes
     },
+
+    startLocation: {
+      latitude: Number,
+      longitude: Number,
+      distanceFromOffice: Number,
+    },
+
+    endLocation: {
+      latitude: Number,
+      longitude: Number,
+      distanceFromOffice: Number,
+    },
   },
   { _id: false }
 );
@@ -41,7 +53,19 @@ const attendanceSchema = new mongoose.Schema(
 
     checkInTime: Date, 
 
+    checkInLocation: {
+      latitude: Number,
+      longitude: Number,
+      distanceFromOffice: Number,
+    },
+
     checkOutTime: Date,
+
+    checkOutLocation: {
+      latitude: Number,
+      longitude: Number,
+      distanceFromOffice: Number,
+    },
 
     breaks: [breakSchema],
 

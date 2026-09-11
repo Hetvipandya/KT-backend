@@ -2165,6 +2165,10 @@
 
 const Attendance = require("../models/Attendance");
 const User = require("../models/User");
+const {
+  OFFICE_LOCATION,
+  validateAttendanceGeofence,
+} = require("../utils/geofence");
 
 // ============================================================
 // BASIC HELPERS
@@ -3347,6 +3351,21 @@ exports.checkIn = async (
       });
     }
 
+    // ========================================================
+    // GPS GEOFENCING VALIDATION
+    // ========================================================
+    const geofenceResult = validateAttendanceGeofence(req.body);
+    if (!geofenceResult.isInside) {
+      return res.status(400).json({
+        success: false,
+        message:
+          geofenceResult.error ||
+          "You are outside the office location. Please reach the office to continue.",
+        distance: geofenceResult.distance,
+        allowedRadius: OFFICE_LOCATION.radiusMeters,
+      });
+    }
+
     const user =
       await User.findById(userId);
 
@@ -3474,6 +3493,12 @@ exports.checkIn = async (
 
     attendance.checkInTime =
       actualCheckInTime;
+
+    attendance.checkInLocation = {
+      latitude: geofenceResult.latitude,
+      longitude: geofenceResult.longitude,
+      distanceFromOffice: geofenceResult.distance,
+    };
 
     attendance.approvedCheckInTime =
       null;
@@ -3942,6 +3967,21 @@ exports.checkOut =
         });
       }
 
+      // ======================================================
+      // GPS GEOFENCING VALIDATION
+      // ======================================================
+      const geofenceResult = validateAttendanceGeofence(req.body);
+      if (!geofenceResult.isInside) {
+        return res.status(400).json({
+          success: false,
+          message:
+            geofenceResult.error ||
+            "You are outside the office location. Please reach the office to continue.",
+          distance: geofenceResult.distance,
+          allowedRadius: OFFICE_LOCATION.radiusMeters,
+        });
+      }
+
       const attendance =
         await Attendance.findOne({
           userId,
@@ -4052,6 +4092,12 @@ exports.checkOut =
       attendance.checkOutTime =
         checkoutTime;
 
+      attendance.checkOutLocation = {
+        latitude: geofenceResult.latitude,
+        longitude: geofenceResult.longitude,
+        distanceFromOffice: geofenceResult.distance,
+      };
+
       // ======================================================
       // WORKING HOURS
       // ======================================================
@@ -4157,6 +4203,21 @@ exports.startBreak =
         });
       }
 
+      // ======================================================
+      // GPS GEOFENCING VALIDATION
+      // ======================================================
+      const geofenceResult = validateAttendanceGeofence(req.body);
+      if (!geofenceResult.isInside) {
+        return res.status(400).json({
+          success: false,
+          message:
+            geofenceResult.error ||
+            "You are outside the office location. Please reach the office to continue.",
+          distance: geofenceResult.distance,
+          allowedRadius: OFFICE_LOCATION.radiusMeters,
+        });
+      }
+
       const attendance =
         await Attendance.findOne({
           userId,
@@ -4214,6 +4275,11 @@ exports.startBreak =
       attendance.breaks.push({
         startTime:
           getISTNow(),
+        startLocation: {
+          latitude: geofenceResult.latitude,
+          longitude: geofenceResult.longitude,
+          distanceFromOffice: geofenceResult.distance,
+        },
       });
 
       await attendance.save();
@@ -4257,6 +4323,21 @@ exports.endBreak =
           success: false,
           message:
             "userId is required",
+        });
+      }
+
+      // ======================================================
+      // GPS GEOFENCING VALIDATION
+      // ======================================================
+      const geofenceResult = validateAttendanceGeofence(req.body);
+      if (!geofenceResult.isInside) {
+        return res.status(400).json({
+          success: false,
+          message:
+            geofenceResult.error ||
+            "You are outside the office location. Please reach the office to continue.",
+          distance: geofenceResult.distance,
+          allowedRadius: OFFICE_LOCATION.radiusMeters,
         });
       }
 
@@ -4319,6 +4400,12 @@ exports.endBreak =
 
       activeBreak.endTime =
         endTime;
+
+      activeBreak.endLocation = {
+        latitude: geofenceResult.latitude,
+        longitude: geofenceResult.longitude,
+        distanceFromOffice: geofenceResult.distance,
+      };
 
       const duration =
         (

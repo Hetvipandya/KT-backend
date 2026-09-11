@@ -14,6 +14,7 @@ const Notification = require("../models/notification");
 const Project = require("../models/Project");
 const crypto = require("crypto");
 const { sanitizeTaskWithAttachments } = require("./taskManagementController");
+const { validateAttendanceGeofence } = require("../utils/geofence");
 
 // Helper for IST Today Date String (YYYY-MM-DD)
 const getTodayIST = () => {
@@ -444,6 +445,21 @@ exports.getEmployeeAttendanceTimeline = async (req, res) => {
 // ============================================================
 exports.startAttendanceSession = async (req, res) => {
   try {
+    const today = getTodayIST();
+
+    if (req.body.latitude !== undefined || req.body.lat !== undefined || req.body.location) {
+      const geofenceResult = validateAttendanceGeofence(req.body);
+      if (!geofenceResult.isInside) {
+        return res.status(400).json({
+          success: false,
+          message:
+            geofenceResult.error ||
+            "You are outside the office location. Please reach the office to continue.",
+          distance: geofenceResult.distance,
+        });
+      }
+    }
+
     let targetUserId = req.user._id;
     let user = await User.findById(targetUserId);
     if (!user) {
