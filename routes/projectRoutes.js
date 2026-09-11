@@ -161,6 +161,12 @@ router.put(
 // Create Task
 router.post(
   "/task/create",
+  upload.fields([
+    { name: "attachments", maxCount: 10 },
+    { name: "files", maxCount: 10 },
+    { name: "file", maxCount: 10 },
+    { name: "document", maxCount: 10 },
+  ]),
   createTask
 );
 
@@ -207,6 +213,12 @@ router.get(
 // Update Task (General update)
 router.put(
   "/task/update/:id",
+  upload.fields([
+    { name: "attachments", maxCount: 10 },
+    { name: "files", maxCount: 10 },
+    { name: "file", maxCount: 10 },
+    { name: "document", maxCount: 10 },
+  ]),
   updateTask
 ); 
 

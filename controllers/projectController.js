@@ -1289,6 +1289,58 @@ exports.createTask = async (req, res) => {
         null;
     }
 
+    // Handle uploaded files & attachments
+    const uploadedAttachments = [];
+    if (req.files) {
+      const fileList = Array.isArray(req.files)
+        ? req.files
+        : Object.values(req.files).flat();
+      fileList.forEach((file) => {
+        uploadedAttachments.push({
+          fileName: file.originalname || file.filename,
+          fileUrl: file.path || file.url || file.filename,
+        });
+      });
+    } else if (req.file) {
+      uploadedAttachments.push({
+        fileName: req.file.originalname || req.file.filename,
+        fileUrl: req.file.path || req.file.url || req.file.filename,
+      });
+    }
+
+    if (taskData.attachments) {
+      const parsedAttachments =
+        typeof taskData.attachments === "string"
+          ? (() => {
+              try {
+                return JSON.parse(taskData.attachments);
+              } catch (e) {
+                return taskData.attachments;
+              }
+            })()
+          : taskData.attachments;
+
+      if (Array.isArray(parsedAttachments)) {
+        parsedAttachments.forEach((att) => {
+          if (typeof att === "string") {
+            uploadedAttachments.push({
+              fileName: att.split("/").pop() || att,
+              fileUrl: att,
+            });
+          } else if (att && typeof att === "object") {
+            uploadedAttachments.push({
+              fileName: att.fileName || (att.fileUrl ? att.fileUrl.split("/").pop() : "attachment"),
+              fileUrl: att.fileUrl || att.url || att.path || "",
+            });
+          }
+        });
+      }
+    }
+
+    if (uploadedAttachments.length > 0) {
+      taskData.attachments = uploadedAttachments;
+    }
+
     // Validate that at least one assignee exists
     if (!taskData.assignedEmployee && !taskData.assignedIntern && !taskData.assignedTeamLeadUser) {
       return res.status(400).json({
@@ -1586,6 +1638,58 @@ exports.updateTask = async (req, res) => {
         updateData.status = "completed";
         updateData.completedAt = new Date();
       }
+    }
+
+    // Handle uploaded files & attachments
+    const uploadedAttachments = [];
+    if (req.files) {
+      const fileList = Array.isArray(req.files)
+        ? req.files
+        : Object.values(req.files).flat();
+      fileList.forEach((file) => {
+        uploadedAttachments.push({
+          fileName: file.originalname || file.filename,
+          fileUrl: file.path || file.url || file.filename,
+        });
+      });
+    } else if (req.file) {
+      uploadedAttachments.push({
+        fileName: req.file.originalname || req.file.filename,
+        fileUrl: req.file.path || req.file.url || req.file.filename,
+      });
+    }
+
+    if (updateData.attachments) {
+      const parsedAttachments =
+        typeof updateData.attachments === "string"
+          ? (() => {
+              try {
+                return JSON.parse(updateData.attachments);
+              } catch (e) {
+                return updateData.attachments;
+              }
+            })()
+          : updateData.attachments;
+
+      if (Array.isArray(parsedAttachments)) {
+        parsedAttachments.forEach((att) => {
+          if (typeof att === "string") {
+            uploadedAttachments.push({
+              fileName: att.split("/").pop() || att,
+              fileUrl: att,
+            });
+          } else if (att && typeof att === "object") {
+            uploadedAttachments.push({
+              fileName: att.fileName || (att.fileUrl ? att.fileUrl.split("/").pop() : "attachment"),
+              fileUrl: att.fileUrl || att.url || att.path || "",
+            });
+          }
+        });
+      }
+    }
+
+    if (uploadedAttachments.length > 0) {
+      updateData.attachments = uploadedAttachments;
     }
 
     const task = await Task.findByIdAndUpdate(req.params.id, updateData, { new: true })
