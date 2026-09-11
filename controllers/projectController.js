@@ -5,6 +5,7 @@ const DailyUpdate = require("../models/dailyUpdateModel");
 const User = require("../models/User"); 
 const Employee = require("../models/Employee");
 const Team = require("../models/Team");  
+const { sanitizeTaskWithAttachments } = require("./taskManagementController");  
  
 // ======================================================
 // HELPER FUNCTIONS FOR TEAM & PROGRESS MANAGEMENT
@@ -1315,7 +1316,7 @@ exports.createTask = async (req, res) => {
     return res.status(201).json({
       success: true,
       message: "Task created successfully",
-      data: populatedTask
+      data: sanitizeTaskWithAttachments(populatedTask, req)
     });
     
   } catch (error) {
@@ -1342,7 +1343,7 @@ exports.getAllTasks = async (req, res) => {
     res.status(200).json({
       success: true,
       count: tasks.length,
-      data: tasks,
+      data: tasks.map((t) => sanitizeTaskWithAttachments(t, req)),
     });
   } catch (error) {
     res.status(500).json({
@@ -1368,7 +1369,7 @@ exports.getProjectTasks = async (req, res) => {
     res.status(200).json({
       success: true,
       count: tasks.length,
-      data: tasks,
+      data: tasks.map((t) => sanitizeTaskWithAttachments(t, req)),
     });
   } catch (error) {
     res.status(500).json({
@@ -1394,7 +1395,7 @@ exports.getMilestoneTasks = async (req, res) => {
     res.status(200).json({
       success: true,
       count: tasks.length,
-      data: tasks,
+      data: tasks.map((t) => sanitizeTaskWithAttachments(t, req)),
     });
   } catch (error) {
     res.status(500).json({
@@ -1428,7 +1429,7 @@ exports.getTasksByAssignedEmployee = async (req, res) => {
     res.status(200).json({
       success: true,
       count: tasks.length,
-      data: tasks,
+      data: tasks.map((t) => sanitizeTaskWithAttachments(t, req)),
     });
   } catch (error) {
     res.status(500).json({
@@ -1459,7 +1460,7 @@ exports.getSingleTask = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      data: task,
+      data: sanitizeTaskWithAttachments(task, req),
     });
   } catch (error) {
     res.status(500).json({
@@ -1500,7 +1501,7 @@ exports.updateTaskProgress = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      data: task,
+      data: sanitizeTaskWithAttachments(task, req),
     });
   } catch (error) {
     res.status(500).json({
@@ -1554,7 +1555,7 @@ exports.updateTaskStatus = async (req, res) => {
     res.status(200).json({
       success: true,
       message: "Task status updated successfully",
-      data: updatedTask,
+      data: sanitizeTaskWithAttachments(updatedTask, req),
     });
   } catch (error) {
     res.status(500).json({
@@ -1608,7 +1609,7 @@ exports.updateTask = async (req, res) => {
     res.status(200).json({
       success: true,
       message: "Task updated successfully",
-      data: task,
+      data: sanitizeTaskWithAttachments(task, req),
     });
   } catch (error) {
     res.status(500).json({
