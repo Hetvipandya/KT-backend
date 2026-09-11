@@ -1,6 +1,68 @@
 const TaskManagement =
   require("../models/TaskManagement");
 
+const getBaseUrl = (req) => {
+  if (process.env.BASE_URL) return process.env.BASE_URL.replace(/\/$/, "");
+  if (req) {
+    const protocol = req.headers["x-forwarded-proto"] || req.protocol || "http";
+    const host = req.get("host") || "localhost:5000";
+    return `${protocol}://${host}`;
+  }
+  return "http://localhost:5000";
+};
+
+const formatFileUrl = (url, req) => {
+  if (!url) return "";
+  if (typeof url !== "string") return "";
+  const trimmed = url.trim();
+  if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+    return trimmed;
+  }
+  const baseUrl = getBaseUrl(req);
+  const cleanPath = trimmed.replace(/\\/g, "/");
+  if (cleanPath.startsWith("/uploads/")) {
+    return `${baseUrl}${cleanPath}`;
+  }
+  if (cleanPath.startsWith("uploads/")) {
+    return `${baseUrl}/${cleanPath}`;
+  }
+  if (cleanPath.startsWith("/")) {
+    return `${baseUrl}/uploads${cleanPath}`;
+  }
+  return `${baseUrl}/uploads/${cleanPath}`;
+};
+
+const sanitizeTaskWithAttachments = (taskDoc, req) => {
+  if (!taskDoc) return taskDoc;
+  const task = typeof taskDoc.toObject === "function" ? taskDoc.toObject() : { ...taskDoc };
+  if (task.attachments && Array.isArray(task.attachments)) {
+    task.attachments = task.attachments.map((att) => {
+      if (typeof att === "string") {
+        const fileName = att.split("/").pop() || att;
+        return {
+          fileName,
+          fileUrl: formatFileUrl(att, req),
+          uploadedAt: new Date(),
+        };
+      }
+      if (att && typeof att === "object") {
+        const rawUrl = att.fileUrl || att.url || att.path || att.fileName || "";
+        const fileName = att.fileName || rawUrl.split("/").pop() || "attachment";
+        return {
+          ...att,
+          fileName,
+          fileUrl: formatFileUrl(rawUrl, req),
+        };
+      }
+      return att;
+    });
+  }
+  return task;
+};
+
+exports.formatFileUrl = formatFileUrl;
+exports.sanitizeTaskWithAttachments = sanitizeTaskWithAttachments;
+
 const getProgressForStatus = (status) => {
   switch (status) {
     case "Assigned":
@@ -166,16 +228,46 @@ exports.createTask = async (req, res) => {
       });
     }
 
-    // Handle uploaded files
+    // Handle uploaded files & body attachments
     const attachments = [];
 
     if (req.files && req.files.length > 0) {
       req.files.forEach((file) => {
         attachments.push({
           fileName: file.originalname,
-          fileUrl: file.path || file.filename || "",
+          fileUrl: formatFileUrl(file.path || file.filename || "", req),
         });
       });
+    }
+
+    if (req.body.attachments) {
+      try {
+        const parsedAttachments =
+          typeof req.body.attachments === "string"
+            ? JSON.parse(req.body.attachments)
+            : req.body.attachments;
+
+        if (Array.isArray(parsedAttachments)) {
+          parsedAttachments.forEach((att) => {
+            if (typeof att === "string") {
+              const fileName = att.split("/").pop() || att;
+              attachments.push({
+                fileName,
+                fileUrl: formatFileUrl(att, req),
+              });
+            } else if (att && typeof att === "object") {
+              const rawUrl = att.fileUrl || att.url || att.path || att.fileName || "";
+              const fileName = att.fileName || rawUrl.split("/").pop() || "attachment";
+              attachments.push({
+                fileName,
+                fileUrl: formatFileUrl(rawUrl, req),
+              });
+            }
+          });
+        }
+      } catch (e) {
+        console.warn("Could not parse req.body.attachments:", e);
+      }
     }
 
 const taskPayload = applyDelayedStatus(
@@ -212,7 +304,7 @@ const task = await TaskManagement.findById(createdTask._id)
     return res.status(201).json({
       success: true,
       message: "Task created successfully",
-      data: task,
+      data: sanitizeTaskWithAttachments(task, req),
     });
   } catch (error) {
     console.error("Create Task Error:", error);
@@ -275,7 +367,7 @@ exports.getAllTasks =
         success: true,
         count:
           tasks.length,
-        data: tasks,
+        data: tasks.map((t) => sanitizeTaskWithAttachments(t, req)),
       });
     } catch (error) {
       res.status(500).json({
@@ -321,7 +413,7 @@ exports.getTaskById =
 
       res.status(200).json({
         success: true,
-        data: task,
+        data: sanitizeTaskWithAttachments(task, req),
       });
     } catch (error) {
       res.status(500).json({
@@ -337,8 +429,45 @@ exports.getTaskById =
 exports.updateTask =
   async (req, res) => {
     try {
-      const updatePayload = applyDelayedStatus(
-        applyProgressFromStatus({ ...req.body })
+      let updatePayload = { ...req.body };
+
+      if (req.files && req.files.length > 0) {
+        const newAttachments = req.files.map((file) => ({
+          fileName: file.originalname,
+          fileUrl: formatFileUrl(file.path || file.filename || "", req),
+        }));
+
+        if (req.body.attachments) {
+          try {
+            const parsed = typeof req.body.attachments === "string" ? JSON.parse(req.body.attachments) : req.body.attachments;
+            if (Array.isArray(parsed)) {
+              parsed.forEach((att) => {
+                if (typeof att === "string") {
+                  newAttachments.push({ fileName: att.split("/").pop() || att, fileUrl: formatFileUrl(att, req) });
+                } else if (att && typeof att === "object") {
+                  newAttachments.push({ fileName: att.fileName || "attachment", fileUrl: formatFileUrl(att.fileUrl || att.url || "", req) });
+                }
+              });
+            }
+          } catch (e) {}
+        }
+        updatePayload.attachments = newAttachments;
+      } else if (req.body.attachments) {
+        try {
+          const parsed = typeof req.body.attachments === "string" ? JSON.parse(req.body.attachments) : req.body.attachments;
+          if (Array.isArray(parsed)) {
+            updatePayload.attachments = parsed.map((att) => {
+              if (typeof att === "string") {
+                return { fileName: att.split("/").pop() || att, fileUrl: formatFileUrl(att, req) };
+              }
+              return { fileName: att.fileName || "attachment", fileUrl: formatFileUrl(att.fileUrl || att.url || "", req) };
+            });
+          }
+        } catch (e) {}
+      }
+
+      updatePayload = applyDelayedStatus(
+        applyProgressFromStatus(updatePayload)
       );
 
       const task =
@@ -363,7 +492,7 @@ exports.updateTask =
         success: true,
         message:
           "Task updated successfully",
-        data: ensuredTask,
+        data: sanitizeTaskWithAttachments(ensuredTask, req),
       });
     } catch (error) {
       res.status(500).json({
@@ -619,7 +748,7 @@ exports.getTasksByEmployeeId = async (req, res) => {
     return res.status(200).json({
       success: true,
       count: tasks.length,
-      data: tasks,
+      data: tasks.map((t) => sanitizeTaskWithAttachments(t, req)),
     });
 
   } catch (error) {

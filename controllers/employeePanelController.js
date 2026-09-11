@@ -13,6 +13,7 @@ const Holiday = require("../models/Holiday");
 const Notification = require("../models/notification");
 const Project = require("../models/Project");
 const crypto = require("crypto");
+const { sanitizeTaskWithAttachments } = require("./taskManagementController");
 
 // Helper for IST Today Date String (YYYY-MM-DD)
 const getTodayIST = () => {
@@ -958,22 +959,24 @@ exports.getEmployeeTaskManagement = async (req, res) => {
       ).length,
     };
 
+    const sanitizedTasks = tasks.map((t) => sanitizeTaskWithAttachments(t, req));
+
     const kanban = {
-      toDo: tasks.filter(
+      toDo: sanitizedTasks.filter(
         (t) => t.status === "Pending" || t.status === "Assigned",
       ),
-      inProgress: tasks.filter((t) => t.status === "In Progress"),
-      review: tasks.filter(
+      inProgress: sanitizedTasks.filter((t) => t.status === "In Progress"),
+      review: sanitizedTasks.filter(
         (t) => t.status === "Review" || t.status === "Testing",
       ),
-      completed: tasks.filter((t) => t.status === "Completed"),
+      completed: sanitizedTasks.filter((t) => t.status === "Completed"),
     };
 
     return res.status(200).json({
       success: true,
       summary,
       kanban,
-      data: tasks,
+      data: sanitizedTasks,
     });
   } catch (error) {
     return res.status(500).json({ success: false, message: error.message });
@@ -1025,7 +1028,7 @@ exports.updateEmployeeTaskDetails = async (req, res) => {
     return res.status(200).json({
       success: true,
       message: "Task updated successfully",
-      data: task,
+      data: sanitizeTaskWithAttachments(task, req),
     });
   } catch (error) {
     return res.status(500).json({ success: false, message: error.message });

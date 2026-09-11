@@ -32,7 +32,7 @@ router.post("/create", upload.array("attachments"), createTask);
 router.get("/all", getAllTasks);
 
 // Update Task
-router.put("/update/:id", updateTask);
+router.put("/update/:id", upload.array("attachments"), updateTask);
 
 // Task Status Routes
 router.put("/status/:id", updateTaskStatus);

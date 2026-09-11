@@ -20,24 +20,19 @@ const fs =
 const app =
   express();
 
-// ================= AUTO CREATE UPLOAD FOLDER =================
-const uploadPath =
-  path.join(
-    __dirname,
-    "uploads",
-    "employees"
-  );
+// ================= AUTO CREATE UPLOAD FOLDERS =================
+const uploadFolders = [
+  path.join(__dirname, "uploads"),
+  path.join(__dirname, "uploads", "employees"),
+  path.join(__dirname, "uploads", "tasks"),
+  path.join(__dirname, "uploads", "file-management"),
+];
 
-if (
-  !fs.existsSync(uploadPath)
-) {
-  fs.mkdirSync(
-    uploadPath,
-    {
-      recursive: true,
-    }
-  );
-}
+uploadFolders.forEach((folder) => {
+  if (!fs.existsSync(folder)) {
+    fs.mkdirSync(folder, { recursive: true });
+  }
+});
 
 // ================= MIDDLEWARE =================
 
