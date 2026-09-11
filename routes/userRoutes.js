@@ -84,11 +84,21 @@ router.put(
   resetPassword
 ); //done 
 
+router.post(
+  "/reset-password",
+  resetPassword
+);
+
 // ================= CHANGE PASSWORD =================
 router.put( 
   "/change-password",
   changePassword
 ); //done
+
+router.post(
+  "/change-password",
+  changePassword
+);
 
 // ================= SEND OTP =================
 router.post(

@@ -1528,6 +1528,7 @@
 //   };
 
 
+const mongoose = require("mongoose");
 const User = require("../models/User");
 const Employee = require("../models/Employee");
 const generateEmployeeID = require("../utils/employeeId");
@@ -2777,56 +2778,96 @@ exports.changePassword = async (
       userId,
       oldPassword,
       newPassword,
+      password,
+      email,
     } = req.body;
 
-    const user = await User.findById(
-      userId
-    );
+    const targetPassword = newPassword || password;
+
+    if (!targetPassword || targetPassword.length < 6) {
+      return res.status(400).json({
+        success: false,
+        message: "New password must be at least 6 characters long",
+      });
+    }
+
+    let user = null;
+
+    // Check JWT Authorization header
+    if (req.headers.authorization && req.headers.authorization.startsWith("Bearer ")) {
+      const bearerToken = req.headers.authorization.split(" ")[1];
+      try {
+        const decoded = jwt.verify(bearerToken, process.env.JWT_SECRET);
+        if (decoded && decoded.id) {
+          user = await User.findById(decoded.id);
+        }
+      } catch (e) {}
+    }
+
+    // Check req.user
+    if (!user && req.user && req.user._id) {
+      user = await User.findById(req.user._id);
+    }
+
+    // Check userId from body
+    const targetUserId = userId || req.body.id || req.body._id || req.body.employeeId || req.body.employeeID;
+    if (!user && targetUserId) {
+      if (mongoose.Types.ObjectId.isValid(targetUserId)) {
+        user = await User.findById(targetUserId);
+      }
+      if (!user) {
+        const emp = await Employee.findOne({
+          $or: [{ _id: targetUserId }, { employeeID: targetUserId }, { uniqueID: targetUserId }],
+        });
+        if (emp) {
+          user = await User.findOne({
+            $or: [{ _id: emp.userID }, { email: emp.email }],
+          });
+        }
+      }
+    }
+
+    // Check email from body
+    if (!user && email) {
+      user = await User.findOne({ email: email.trim().toLowerCase() });
+    }
 
     if (!user) {
       return res.status(404).json({
         success: false,
-
         message: "User not found",
       });
     }
 
-    // ================= OLD PASSWORD CHECK =================
-    const isMatch =
-      await bcrypt.compare(
+    // ================= OPTIONAL OLD PASSWORD CHECK =================
+    if (oldPassword) {
+      const isMatch = await bcrypt.compare(
         oldPassword,
         user.password
       );
 
-    if (!isMatch) {
-      return res.status(400).json({
-        success: false,
-
-        message:
-          "Old password incorrect",
-      });
+      if (!isMatch) {
+        return res.status(400).json({
+          success: false,
+          message: "Old password incorrect",
+        });
+      }
     }
 
     // ================= UPDATE PASSWORD =================
-    user.password = newPassword;
-
-    // Clear old plain password
-    user.plainPassword = undefined;
-
+    user.password = targetPassword;
+    user.plainPassword = targetPassword;
     user.isFirstLogin = false;
 
     await user.save();
 
     return res.json({
       success: true,
-
-      message:
-        "Password changed successfully",
+      message: "Password changed successfully",
     });
   } catch (error) {
     return res.status(500).json({
       success: false,
-
       message: error.message,
     });
   }
@@ -3285,43 +3326,112 @@ exports.resetPassword = async (
     const {
       token,
       newPassword,
+      password,
+      userId,
+      email,
     } = req.body;
 
-    if (!token) {
-      return res.status(400).json({
-        success: false,
-        message: "Reset token is required",
-      });
-    }
+    const targetPassword = newPassword || password;
 
-    if (!newPassword || newPassword.length < 6) {
+    if (!targetPassword || targetPassword.length < 6) {
       return res.status(400).json({
         success: false,
         message: "New password must be at least 6 characters long",
       });
     }
 
-    // Find user with matching active token
-    const user = await User.findOne({
-      resetPasswordToken: token,
-      resetPasswordExpires: { $gt: new Date() },
-    });
+    let user = null;
 
-    if (!user) {
-      return res.status(400).json({
-        success: false,
-        message: "This reset link has already been used or has expired. Please request a new link.",
+    // 1. If email reset token is provided in body
+    if (token) {
+      user = await User.findOne({
+        resetPasswordToken: token,
+        resetPasswordExpires: { $gt: new Date() },
       });
+
+      // If not active reset token, check if token is JWT (e.g. from app)
+      if (!user) {
+        try {
+          const decoded = jwt.verify(token, process.env.JWT_SECRET);
+          if (decoded && decoded.id) {
+            user = await User.findById(decoded.id);
+          }
+        } catch (e) {}
+      }
+
+      if (!user) {
+        return res.status(400).json({
+          success: false,
+          message: "This reset link has already been used or has expired. Please request a new link.",
+        });
+      }
+    } else {
+      // 2. Token not provided in body (Direct Reset / Change from App)
+      // Check Authorization Bearer Header
+      if (req.headers.authorization && req.headers.authorization.startsWith("Bearer ")) {
+        const bearerToken = req.headers.authorization.split(" ")[1];
+        try {
+          const decoded = jwt.verify(bearerToken, process.env.JWT_SECRET);
+          if (decoded && decoded.id) {
+            user = await User.findById(decoded.id);
+          }
+        } catch (e) {}
+      }
+
+      // Check req.user
+      if (!user && req.user && req.user._id) {
+        user = await User.findById(req.user._id);
+      }
+
+      // Check userId / id from body
+      const targetUserId = userId || req.body.id || req.body._id || req.body.employeeId || req.body.employeeID;
+      if (!user && targetUserId) {
+        if (mongoose.Types.ObjectId.isValid(targetUserId)) {
+          user = await User.findById(targetUserId);
+        }
+        if (!user) {
+          const emp = await Employee.findOne({
+            $or: [{ _id: targetUserId }, { employeeID: targetUserId }, { uniqueID: targetUserId }],
+          });
+          if (emp) {
+            user = await User.findOne({
+              $or: [{ _id: emp.userID }, { email: emp.email }],
+            });
+          }
+        }
+      }
+
+      // Check email from body
+      if (!user && email) {
+        user = await User.findOne({
+          email: email.trim().toLowerCase(),
+        });
+      }
+
+      // Check uniqueID or login from body
+      if (!user && (req.body.uniqueID || req.body.login)) {
+        const identifier = (req.body.uniqueID || req.body.login).trim();
+        user = await User.findOne({
+          $or: [{ uniqueID: identifier }, { email: identifier.toLowerCase() }],
+        });
+      }
+
+      if (!user) {
+        return res.status(400).json({
+          success: false,
+          message: "User identification or valid token is required",
+        });
+      }
     }
 
     // ================= UPDATE PASSWORD =================
     // Password hashed by pre('save') hook
-    user.password = newPassword;
+    user.password = targetPassword;
 
     // Store plain password in database as requested
-    user.plainPassword = newPassword;
+    user.plainPassword = targetPassword;
 
-    // Invalidate token so the link cannot be used ever again!
+    // Invalidate token so the link cannot be used ever again
     user.resetPasswordToken = null;
     user.resetPasswordExpires = null;
     user.isFirstLogin = false;
