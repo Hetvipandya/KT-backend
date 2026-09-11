@@ -11,8 +11,11 @@ const {
   removeTeamLead,
 
   addEmployee,
-  editEmployee, 
+  editEmployee,
+  updateEmployee,
+  updateEmployeeLifecycle,
   deleteEmployee,
+  removeEmployee,
 
   getEmployeeList,
   getEmployeeProfile,
@@ -124,8 +127,20 @@ router.get(
 );
 
 // ============================================================
-// EDIT / UPDATE EMPLOYEE
+// EDIT / UPDATE / LIFECYCLE EMPLOYEE
 // ============================================================
+
+// Employee lifecycle transition (Joining -> Probation -> Confirmation -> Resignation -> Exit)
+router.put(
+  "/lifecycle/:id",
+  updateEmployeeLifecycle
+);
+
+// Update employee with action / fields
+router.put(
+  "/update/:id",
+  updateEmployee
+);
 
 // Edit employee details + documents
 router.put(
@@ -134,14 +149,26 @@ router.put(
   editEmployee
 );
 
+// General PUT by ID fallback
+router.put(
+  "/:id",
+  updateEmployee
+);
+
 // ============================================================
-// DELETE EMPLOYEE
+// DELETE / REMOVE EMPLOYEE
 // ============================================================
 
 // Delete employee + documents + related user/team
 router.delete(
   "/delete/:id",
   deleteEmployee
+);
+
+// Remove employee
+router.delete(
+  "/remove/:id",
+  removeEmployee
 );
 
 module.exports = router;

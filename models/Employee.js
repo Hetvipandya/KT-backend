@@ -162,40 +162,32 @@ role: {
   default: "employee",
 },
 
-role: {
+department: {
   type: String,
-  enum: ["employee", "intern", "team lead", "admin", "hr"],
-  default: "employee",
-},
-
-
-      department: {
-   type: String,
   required: true,
   trim: true,
 },
 
-    
+joiningDate: {
+  type: Date,
+  default: Date.now,
+},
 
-      joiningDate: {
-        type: Date,
-        default: Date.now,
-      },
-
-      employeeStatus: {
-        type: String,
-        enum: [
-          "Active",
-          "Inactive",
-          "Resigned",
-          "Terminated",
-        ],
-        default: "Active",
-      },
-      currentAction: {
+employeeStatus: {
+  type: String,
+  enum: [
+    "Active",
+    "Inactive",
+    "Resigned",
+    "Terminated",
+  ],
+  default: "Active",
+},
+currentAction: {
   type: String,
   enum: [
     "created",
+    "joining",
     "probation",
     "confirmation",
     "resignation",

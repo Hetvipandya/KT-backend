@@ -1,20 +1,18 @@
-const Employee =
-  require("../models/Employee");
+const mongoose = require("mongoose");
+const Employee = require("../models/Employee");
 const Department = require("../models/Department");
 
-const EmployeeDocument =
-  require(
-    "../models/EmployeeDocument" 
-  );  
- 
-const EmployeeHistory =  
-  require(
-    "../models/EmployeeHistory"
-  ); 
-  const User = require("../models/User");
-  const Team = require("../models/Team");
+const EmployeeDocument = require(
+  "../models/EmployeeDocument"
+);
+
+const EmployeeHistory = require(
+  "../models/EmployeeHistory"
+);
+const User = require("../models/User");
+const Team = require("../models/Team");
 const { syncEmployeeToUser } = require("../utils/userEmployeeSync");
-  const generateEmployeeID = require("../utils/employeeId");
+const generateEmployeeID = require("../utils/employeeId");
 
 const resolveDepartmentName = async (departmentValue) => {
   if (!departmentValue) return "";
@@ -871,31 +869,152 @@ exports.getEmployeeProfile =
     }
   };
 
+// ================= UPDATE EMPLOYEE LIFECYCLE =================
+exports.updateEmployeeLifecycle = async (req, res) => {
+  try {
+    const employeeId = req.params.id;
+    let employee = null;
+
+    if (mongoose.Types.ObjectId.isValid(employeeId)) {
+      employee = await Employee.findById(employeeId);
+    }
+    if (!employee) {
+      employee = await Employee.findOne({
+        $or: [{ employeeID: employeeId }, { uniqueID: employeeId }],
+      });
+    }
+
+    if (!employee) {
+      return res.status(404).json({
+        success: false,
+        message: "Employee not found",
+      });
+    }
+
+    let rawAction =
+      req.body.action ||
+      req.body.currentAction ||
+      req.body.lifecycleStage ||
+      req.body.stage ||
+      req.body.status ||
+      "";
+
+    const normalizedAction = String(rawAction).trim().toLowerCase().replace(/[\s_-]+/g, "");
+
+    let currentAction = employee.currentAction || "created";
+    let historyAction = "updated";
+
+    if (normalizedAction.includes("probation")) {
+      currentAction = "probation";
+      historyAction = "probation";
+    } else if (normalizedAction.includes("confirm")) {
+      currentAction = "confirmation";
+      historyAction = "confirmation";
+    } else if (normalizedAction.includes("resign")) {
+      currentAction = "resignation";
+      historyAction = "resignation";
+      employee.employeeStatus = "Resigned";
+    } else if (normalizedAction.includes("exit") || normalizedAction.includes("terminate")) {
+      currentAction = "exit";
+      historyAction = "exit";
+      employee.employeeStatus = "Terminated";
+    } else if (normalizedAction.includes("joining") || normalizedAction.includes("created")) {
+      currentAction = "created";
+      historyAction = "created";
+    } else if (rawAction) {
+      currentAction = String(rawAction).trim().toLowerCase();
+      historyAction = "updated";
+    }
+
+    employee.currentAction = currentAction;
+
+    if (req.body.employeeStatus) {
+      employee.employeeStatus = req.body.employeeStatus;
+    }
+
+    await employee.save();
+
+    const historyMessage =
+      req.body.message ||
+      req.body.notes ||
+      req.body.remark ||
+      `Employee moved to ${currentAction}`;
+
+    const history = await EmployeeHistory.create({
+      employeeID: employee._id,
+      action: historyAction,
+      message: historyMessage,
+      actionBy: req.user?._id || null,
+    });
+
+    res.status(200).json({
+      success: true,
+      message: `Employee lifecycle updated to ${currentAction} successfully`,
+      employee,
+      data: employee,
+      history,
+    });
+  } catch (error) {
+    console.error("Lifecycle Update Error:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
 // ================= UPDATE EMPLOYEE =================
 exports.updateEmployee = async (req, res) => {
   try {
     const employeeId = req.params.id;
-    const actionType =
-      req.body.action?.trim();
+    let employee = null;
+
+    if (mongoose.Types.ObjectId.isValid(employeeId)) {
+      employee = await Employee.findById(employeeId);
+    }
+    if (!employee) {
+      employee = await Employee.findOne({
+        $or: [{ employeeID: employeeId }, { uniqueID: employeeId }],
+      });
+    }
+
+    if (!employee) {
+      return res.status(404).json({
+        success: false,
+        message: "Employee not found",
+      });
+    }
+
+    const actionType = req.body.action?.trim() || req.body.currentAction?.trim();
 
     const updateData = {
       ...req.body,
     };
 
-    // action update only if passed
     if (actionType) {
-      updateData.currentAction =
-        actionType;
+      const norm = actionType.toLowerCase().replace(/[\s_-]+/g, "");
+      if (norm.includes("probation")) updateData.currentAction = "probation";
+      else if (norm.includes("confirm")) updateData.currentAction = "confirmation";
+      else if (norm.includes("resign")) {
+        updateData.currentAction = "resignation";
+        updateData.employeeStatus = "Resigned";
+      } else if (norm.includes("exit") || norm.includes("terminate")) {
+        updateData.currentAction = "exit";
+        updateData.employeeStatus = "Terminated";
+      } else if (norm.includes("joining") || norm.includes("created")) {
+        updateData.currentAction = "created";
+      } else {
+        updateData.currentAction = actionType;
+      }
     }
 
     delete updateData.action;
 
-    const employee =
-      await Employee.findByIdAndUpdate(
-        employeeId,
-        updateData,
-        { new: true }
-      );
+    const updatedEmployee = await Employee.findByIdAndUpdate(
+      employee._id,
+      updateData,
+      { new: true, runValidators: true }
+    );
 
     const rawUpdateRole = req.body.role ? String(req.body.role).trim().toLowerCase().replace(/[_\s]+/g, "") : "";
     let roleValue = null;
@@ -907,98 +1026,77 @@ exports.updateEmployee = async (req, res) => {
     } else if (rawUpdateRole === "employee") {
       roleValue = "employee";
     } else if (req.body.isTeamLead === false) {
-      roleValue = employee.role || "employee";
-    } else if (employee.role) {
-      roleValue = employee.role;
+      roleValue = updatedEmployee.role || "employee";
+    } else if (updatedEmployee.role) {
+      roleValue = updatedEmployee.role;
     }
 
     if (roleValue) {
       await syncEmployeeToUser({
         employee: {
-          ...employee.toObject(),
+          ...updatedEmployee.toObject(),
           isTeamLead: roleValue === "team lead",
         },
         role: roleValue,
         userData: {
           role: roleValue,
-          name: `${employee.firstName} ${employee.lastName}`.trim(),
-          email: employee.email,
-          phoneNumber: employee.mobile,
-          address: employee.currentAddress || employee.permanentAddress || "",
-          department: employee.department,
-          bloodGroup: employee.bloodGroup,
+          name: `${updatedEmployee.firstName} ${updatedEmployee.lastName}`.trim(),
+          email: updatedEmployee.email,
+          phoneNumber: updatedEmployee.mobile,
+          address: updatedEmployee.currentAddress || updatedEmployee.permanentAddress || "",
+          department: updatedEmployee.department,
+          bloodGroup: updatedEmployee.bloodGroup,
         },
       });
     }
 
-    if (!employee) {
-      return res.status(404).json({
-        success: false,
-        message: "Employee not found",
-      });
-    }
-
     const files = req.files || {};
-
-    let employeeDocument =
-      await EmployeeDocument.findOne({
-        employeeID: employeeId,
-      });
+    let employeeDocument = await EmployeeDocument.findOne({
+      employeeID: employee._id,
+    });
 
     if (employeeDocument) {
       employeeDocument.aadharCard =
-        files?.aadharCard?.[0]?.path  ||
-        employeeDocument.aadharCard;
-
+        files?.aadharCard?.[0]?.path || employeeDocument.aadharCard;
       employeeDocument.panCard =
-        files?.panCard?.[0]?.path  ||
-        employeeDocument.panCard;
-
+        files?.panCard?.[0]?.path || employeeDocument.panCard;
       employeeDocument.resume =
-        files?.resume?.[0]?.path  ||
-        employeeDocument.resume;
-
+        files?.resume?.[0]?.path || employeeDocument.resume;
       employeeDocument.offerLetter =
-        files?.offerLetter?.[0]?.path  ||
-        employeeDocument.offerLetter;
-
+        files?.offerLetter?.[0]?.path || employeeDocument.offerLetter;
       employeeDocument.joiningLetter =
-        files?.joiningLetter?.[0]?.path  ||
-        employeeDocument.joiningLetter;
+        files?.joiningLetter?.[0]?.path || employeeDocument.joiningLetter;
 
       if (files?.certificates?.length) {
-        employeeDocument.certificates =
-          files.certificates.map(
-            (file) => file.path
-          );
+        employeeDocument.certificates = files.certificates.map(
+          (file) => file.path
+        );
       }
 
       await employeeDocument.save();
     }
 
     let history = null;
-
     if (actionType) {
-      history =
-        await EmployeeHistory.create({
-          employeeID: employeeId,
-          action: actionType,
-          message:
-            `Employee moved to ${actionType}`,
-        });
+      const act = updatedEmployee.currentAction || "updated";
+      history = await EmployeeHistory.create({
+        employeeID: employee._id,
+        action: ["created", "updated", "deleted", "exit", "probation", "confirmation", "resignation", "joining", "start_probation"].includes(act) ? act : "updated",
+        message: req.body.message || req.body.notes || `Employee moved to ${act}`,
+        actionBy: req.user?._id || null,
+      });
     }
 
     res.status(200).json({
       success: true,
-      message:
-        "Employee updated successfully",
-      employee,
+      message: "Employee updated successfully",
+      employee: updatedEmployee,
+      data: updatedEmployee,
       documents: employeeDocument,
       history,
     });
   } catch (error) {
-    console.log(error);
-
+    console.error("Update Employee Error:", error);
     res.status(500).json({
       success: false,
       message: error.message,
