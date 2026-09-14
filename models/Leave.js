@@ -63,6 +63,26 @@ const leaveSchema = new mongoose.Schema(
       default: "",
     },
 
+    description: {
+      type: String,
+      default: "",
+    },
+
+    teamLeadRemark: {
+      type: String,
+      default: "",
+    },
+
+    hrRemark: {
+      type: String,
+      default: "",
+    },
+
+    adminRemark: {
+      type: String,
+      default: "",
+    },
+
     isHalfDay: {
       type: Boolean,
       default: false,

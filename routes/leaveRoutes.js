@@ -47,9 +47,30 @@ router.put(
   adminApproval 
 );
 
+router.put(
+  "/admin-approval",
+  protect,
+  authorizeRoles("admin"),
+  adminApproval
+);
+
 // ================= TEAM LEAD APPROVAL =================
 router.put(
   "/teamlead-approval",
+  protect,
+  authorizeRoles("team lead"),
+  teamLeadApproval
+);
+
+router.put(
+  "/teamlead/approve",
+  protect,
+  authorizeRoles("team lead"),
+  teamLeadApproval
+);
+
+router.put(
+  "/teamlead/reject",
   protect,
   authorizeRoles("team lead"),
   teamLeadApproval
@@ -59,6 +80,20 @@ router.put(
 router.put(
   "/hr-approval",
   protect, 
+  authorizeRoles("hr"),
+  hrApproval
+);
+
+router.put(
+  "/hr/approve",
+  protect,
+  authorizeRoles("hr"),
+  hrApproval
+);
+
+router.put(
+  "/hr/reject",
+  protect,
   authorizeRoles("hr"),
   hrApproval
 );

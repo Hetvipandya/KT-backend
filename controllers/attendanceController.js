@@ -2847,6 +2847,7 @@ const getDateWiseAttendance =
     const users =
       await User.find({
         isApproved: { $ne: false },
+        role: { $nin: ["admin", "Admin"] },
       }).select(
         "_id name uniqueID role email department phoneNumber"
       );
@@ -2877,6 +2878,8 @@ const getDateWiseAttendance =
     users.forEach((user) => {
       let role =
         user.role?.toLowerCase();
+
+      if (role === "admin") return;
 
       if (
         teamLeadIds.has(

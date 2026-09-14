@@ -234,7 +234,8 @@ const revertLeaveBalance = async (leave) => {
 // ================= TEAM LEAD APPROVAL =================
 exports.teamLeadApproval = async (req, res) => {
   try {
-    const { leaveId, status, remark } = req.body;
+    const { leaveId, status, remark, description } = req.body;
+    const remarkText = (remark || description || "").trim();
 
     if (!leaveId) {
       return res.status(400).json({
@@ -283,7 +284,11 @@ exports.teamLeadApproval = async (req, res) => {
     }
 
     leave.teamLeadStatus = status;
-    leave.remark = remark || leave.remark;
+    if (remarkText) {
+      leave.remark = remarkText;
+      leave.description = remarkText;
+      leave.teamLeadRemark = remarkText;
+    }
 
     if (status === "approved") {
       leave.status = "pending_hr";
@@ -316,7 +321,8 @@ exports.teamLeadApproval = async (req, res) => {
 // ================= HR APPROVAL =================
 exports.hrApproval = async (req, res) => {
   try {
-    const { leaveId, status, remark } = req.body;
+    const { leaveId, status, remark, description } = req.body;
+    const remarkText = (remark || description || "").trim();
 
     if (!leaveId) {
       return res.status(400).json({
@@ -414,8 +420,10 @@ exports.hrApproval = async (req, res) => {
       leave.status = "rejected";
     }
 
-    if (remark) {
-      leave.remark = remark;
+    if (remarkText) {
+      leave.remark = remarkText;
+      leave.description = remarkText;
+      leave.hrRemark = remarkText;
     }
 
     await leave.save();
@@ -463,7 +471,8 @@ exports.getMyLeaves = async (req, res) => {
 // ================= ADMIN APPROVAL =================
 exports.adminApproval = async (req, res) => {
   try {
-    const { leaveId, status, remark } = req.body;
+    const { leaveId, status, remark, description } = req.body;
+    const remarkText = (remark || description || "").trim();
 
     // Validation
     if (!leaveId) {
@@ -524,9 +533,10 @@ exports.adminApproval = async (req, res) => {
     }
 
 
-    if (remark) {
-      leave.remark = remark;
-      leave.adminRemark = remark;
+    if (remarkText) {
+      leave.remark = remarkText;
+      leave.description = remarkText;
+      leave.adminRemark = remarkText;
     }
 
     leave.adminApprovedBy = req.user._id;
