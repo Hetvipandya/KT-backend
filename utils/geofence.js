@@ -2,14 +2,14 @@
  * GPS Geofencing Utility for Employee Attendance
  * Office: Solaris Business Hub, 913, 9th Floor
  * Coordinates: 23.057808, 72.538926
- * Radius: 100 meters
+ * Radius: 50 meters
  */
 
 const OFFICE_LOCATION = {
   name: "Solaris Business Hub, 913, 9th Floor",
   latitude: parseFloat(process.env.OFFICE_LATITUDE) || 23.057808,
   longitude: parseFloat(process.env.OFFICE_LONGITUDE) || 72.538926,
-  radiusMeters: parseFloat(process.env.OFFICE_RADIUS_METERS) || 100,
+  radiusMeters: parseFloat(process.env.OFFICE_RADIUS_METERS) || 50,
 };
 
 /**
@@ -39,7 +39,7 @@ function calculateDistanceMeters(lat1, lon1, lat2, lon2) {
 }
 
 /**
- * Validates whether the given request body contains valid GPS coordinates within the 100m geofence.
+ * Validates whether the given request body contains valid GPS coordinates within the geofence.
  * @param {object} body - Request payload containing latitude/longitude
  * @returns {{ isInside: boolean, distance: number|null, latitude: number|null, longitude: number|null, error: string|null }}
  */
@@ -127,7 +127,7 @@ function validateAttendanceGeofence(body) {
       distance: roundedDistance,
       latitude: lat,
       longitude: lon,
-      error: `You are outside the office location (${roundedDistance}m away). Attendance can only be marked within 100 meters of the office.`,
+      error: `You are outside the office location (${roundedDistance}m away). Attendance can only be marked within ${OFFICE_LOCATION.radiusMeters} meters of the office.`,
     };
   }
 
