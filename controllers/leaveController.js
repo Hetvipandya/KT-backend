@@ -251,6 +251,13 @@ exports.teamLeadApproval = async (req, res) => {
       });
     }
 
+    if (!remarkText) {
+      return res.status(400).json({
+        success: false,
+        message: "Description / Remark is required",
+      });
+    }
+
     const leave = await Leave.findById(leaveId).populate("employeeId");
 
     if (!leave) {
@@ -335,6 +342,13 @@ exports.hrApproval = async (req, res) => {
       return res.status(400).json({
         success: false,
         message: "Status must be approved or rejected",
+      });
+    }
+
+    if (!remarkText) {
+      return res.status(400).json({
+        success: false,
+        message: "Description / Remark is required",
       });
     }
 
@@ -486,6 +500,13 @@ exports.adminApproval = async (req, res) => {
       return res.status(400).json({
         success: false,
         message: "Status must be approved or rejected",
+      });
+    }
+
+    if (!remarkText) {
+      return res.status(400).json({
+        success: false,
+        message: "Description / Remark is required",
       });
     }
 
