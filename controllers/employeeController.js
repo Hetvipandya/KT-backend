@@ -782,15 +782,15 @@ exports.getEmployeeList = async (req, res) => {
           }
         }
 
-        let finalDesignation = employeeData.designation;
-        if ((!finalDesignation || finalDesignation === "Employee") && linkedUser?.designation) {
-          finalDesignation = linkedUser.designation;
+        let finalDesignation = linkedUser?.designation || employeeData.designation || "Employee";
+        if (linkedUser?.designation && employee.designation !== linkedUser.designation) {
+          Employee.findByIdAndUpdate(employee._id, { designation: linkedUser.designation }).catch(() => {});
         }
 
         return {
           ...employeeData,
           role: finalRole || (employeeData.isTeamLead ? "team lead" : "employee"),
-          designation: finalDesignation || employeeData.designation || "Employee",
+          designation: finalDesignation,
           department: departmentName,
         };
       })
@@ -1031,23 +1031,31 @@ exports.updateEmployee = async (req, res) => {
       roleValue = updatedEmployee.role;
     }
 
-    if (roleValue) {
+    if (roleValue || updatedEmployee.designation) {
       await syncEmployeeToUser({
         employee: {
           ...updatedEmployee.toObject(),
           isTeamLead: roleValue === "team lead",
         },
-        role: roleValue,
+        role: roleValue || updatedEmployee.role || "employee",
         userData: {
-          role: roleValue,
+          role: roleValue || updatedEmployee.role || "employee",
           name: `${updatedEmployee.firstName} ${updatedEmployee.lastName}`.trim(),
           email: updatedEmployee.email,
           phoneNumber: updatedEmployee.mobile,
           address: updatedEmployee.currentAddress || updatedEmployee.permanentAddress || "",
           department: updatedEmployee.department,
+          designation: updatedEmployee.designation,
           bloodGroup: updatedEmployee.bloodGroup,
         },
       });
+    }
+
+    if (updatedEmployee.designation) {
+      await User.findOneAndUpdate(
+        { $or: [{ _id: updatedEmployee.userID }, { email: updatedEmployee.email }] },
+        { designation: updatedEmployee.designation }
+      ).catch(() => {});
     }
 
     const files = req.files || {};

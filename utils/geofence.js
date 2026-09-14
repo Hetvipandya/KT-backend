@@ -1,15 +1,15 @@
 /**
  * GPS Geofencing Utility for Employee Attendance
  * Office: Solaris Business Hub, 913, 9th Floor
- * Coordinates: 23.0577915, 72.538287
+ * Coordinates: 23.057808, 72.538926
  * Radius: 100 meters
  */
 
 const OFFICE_LOCATION = {
   name: "Solaris Business Hub, 913, 9th Floor",
-  latitude: 23.0577915,
-  longitude: 72.538287,
-  radiusMeters: 100,
+  latitude: parseFloat(process.env.OFFICE_LATITUDE) || 23.057808,
+  longitude: parseFloat(process.env.OFFICE_LONGITUDE) || 72.538926,
+  radiusMeters: parseFloat(process.env.OFFICE_RADIUS_METERS) || 100,
 };
 
 /**

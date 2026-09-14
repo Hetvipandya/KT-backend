@@ -1694,6 +1694,9 @@ exports.updateProfile = async (req, res) => {
       dob,
       address,
       department,
+      designation,
+      position,
+      jobTitle,
       bloodGroup,
     } = req.body;
 
@@ -1746,12 +1749,16 @@ exports.updateProfile = async (req, res) => {
     // ==================================================
     // UPDATE USER
     // ==================================================
+    const newDesignation = designation || position || jobTitle;
     user.name = name || user.name;
     user.email = email || user.email;
     user.phoneNumber = phoneNumber || user.phoneNumber;
     user.dob = dob || user.dob;
     user.address = address || user.address;
     user.department = department || user.department;
+    if (newDesignation !== undefined && newDesignation !== null) {
+      user.designation = newDesignation;
+    }
     user.bloodGroup = bloodGroup || user.bloodGroup;
 
     await user.save();
@@ -1759,8 +1766,12 @@ exports.updateProfile = async (req, res) => {
     // ==================================================
     // USER -> EMPLOYEE SYNC
     // ==================================================
-    const employee = await Employee.findOne({
-      userID: user._id,
+    let employee = await Employee.findOne({
+      $or: [
+        { userID: user._id },
+        { userId: user._id },
+        { email: user.email },
+      ],
     });
 
     if (employee) {
@@ -1808,10 +1819,21 @@ exports.updateProfile = async (req, res) => {
       }
 
       // ----------------------------------------------
+      // DESIGNATION
+      // ----------------------------------------------
+      if (user.designation !== undefined && user.designation !== null) {
+        employee.designation = user.designation;
+      }
+
+      // ----------------------------------------------
       // BLOOD GROUP
       // ----------------------------------------------
       if (user.bloodGroup !== undefined) {
         employee.bloodGroup = user.bloodGroup;
+      }
+
+      if (!employee.userID) {
+        employee.userID = user._id;
       }
 
       await employee.save();
@@ -1840,6 +1862,7 @@ exports.updateProfile = async (req, res) => {
         dob: user.dob,
         address: user.address,
         department: user.department,
+        designation: user.designation || employee?.designation || "",
         bloodGroup: user.bloodGroup,
         uniqueID: user.uniqueID,
         role: user.role,
@@ -1879,6 +1902,16 @@ exports.getMyProfile = async (req, res) => {
       });
     } 
 
+    const employee = await Employee.findOne({
+      $or: [
+        { userID: user._id },
+        { userId: user._id },
+        { email: user.email },
+      ],
+    });
+
+    const finalDesignation = user.designation || employee?.designation || "";
+
     return res.status(200).json({
       success: true,
 
@@ -1890,6 +1923,7 @@ exports.getMyProfile = async (req, res) => {
         dob: user.dob,
         address: user.address,
         department: user.department,
+        designation: finalDesignation,
         bloodGroup: user.bloodGroup,
         uniqueID: user.uniqueID,
         role: user.role,
@@ -1898,6 +1932,7 @@ exports.getMyProfile = async (req, res) => {
         lastLogin: user.lastLogin,
         isActive: user.isActive,
       },
+      employee: employee || null,
     });
   } catch (error) {
     console.log(
@@ -2750,6 +2785,12 @@ exports.loginUser = async (req, res) => {
         email: user.email,
 
         role: user.role,
+
+        designation: user.designation || "",
+
+        department: user.department || "",
+
+        uniqueID: user.uniqueID || "",
       },
     });
   } catch (error) {

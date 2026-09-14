@@ -85,7 +85,7 @@ exports.syncEmployeeToUser = async ({ employee, role, userData = {} }) => {
       employee.address ||
       "",
     department: userData.department || employee.department || "",
-    designation: userData.designation || employee.designation || "",
+    designation: userData.designation || employee.designation || user?.designation || "",
     gender: userData.gender || employee.gender || "",
     bloodGroup: userData.bloodGroup || employee.bloodGroup || "",
     role: finalRole,
@@ -116,13 +116,17 @@ exports.syncEmployeeToUser = async ({ employee, role, userData = {} }) => {
   } else {
     Object.assign(user, payload);
     await user.save();
-    await User.findByIdAndUpdate(user._id, { role: finalRole });
+    await User.findByIdAndUpdate(user._id, { role: finalRole, designation: payload.designation });
   }
 
   if (employee) {
     let employeeModified = false;
     if (employee.role !== finalRole) {
       employee.role = finalRole;
+      employeeModified = true;
+    }
+    if (payload.designation && employee.designation !== payload.designation) {
+      employee.designation = payload.designation;
       employeeModified = true;
     }
     if (!employee.userID && user._id) {
