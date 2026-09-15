@@ -2,6 +2,13 @@ const express = require("express");
 const router = express.Router();
 
 const notificationController = require("../controllers/notificarionController");
+const { protect } = require("../middleware/authMiddleware");
+
+// ===============================
+// FCM DEVICE TOKEN ROUTES
+// ===============================
+router.post("/register-token", protect, notificationController.registerDeviceToken);
+router.post("/remove-token", protect, notificationController.removeDeviceToken);
 
 // ===============================
 // NOTIFICATION ROUTES

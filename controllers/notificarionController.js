@@ -399,3 +399,123 @@ exports.getAnnouncements = async (req, res) => {
     });
   }
 };
+
+// ===============================
+// REGISTER DEVICE TOKEN (FCM)
+// ===============================
+exports.registerDeviceToken = async (req, res) => {
+  try {
+    const { token, deviceType } = req.body;
+
+    if (!token || typeof token !== "string" || token.trim() === "") {
+      return res.status(400).json({
+        success: false,
+        message: "FCM device token is required",
+      });
+    }
+
+    const trimmedToken = token.trim();
+    const type = deviceType ? String(deviceType).trim().toLowerCase() : "android";
+    const userId = req.user?._id;
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized - User not identified",
+      });
+    }
+
+    // 1. Check if token already exists for this user
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    if (!user.notificationTokens) {
+      user.notificationTokens = [];
+    }
+
+    const existingTokenIndex = user.notificationTokens.findIndex(
+      (item) => item.token === trimmedToken
+    );
+
+    if (existingTokenIndex !== -1) {
+      // Update existing token's updatedAt and deviceType
+      user.notificationTokens[existingTokenIndex].updatedAt = new Date();
+      if (deviceType) {
+        user.notificationTokens[existingTokenIndex].deviceType = type;
+      }
+    } else {
+      // Add new token
+      user.notificationTokens.push({
+        token: trimmedToken,
+        deviceType: type,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+    }
+
+    await user.save();
+
+    console.log(`📱 [FCM] Device token registered for user: ${user.name || user.email} (${type})`);
+
+    return res.status(200).json({
+      success: true,
+      message: "Notification token registered successfully",
+    });
+  } catch (error) {
+    console.error("❌ [FCM] registerDeviceToken error:", error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Failed to register notification token",
+    });
+  }
+};
+
+// ===============================
+// REMOVE DEVICE TOKEN (FCM)
+// ===============================
+exports.removeDeviceToken = async (req, res) => {
+  try {
+    const { token } = req.body;
+
+    if (!token || typeof token !== "string" || token.trim() === "") {
+      return res.status(400).json({
+        success: false,
+        message: "FCM device token is required",
+      });
+    }
+
+    const trimmedToken = token.trim();
+    const userId = req.user?._id;
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized - User not identified",
+      });
+    }
+
+    await User.findByIdAndUpdate(userId, {
+      $pull: {
+        notificationTokens: { token: trimmedToken },
+      },
+    });
+
+    console.log(`📱 [FCM] Device token removed for user ID: ${userId}`);
+
+    return res.status(200).json({
+      success: true,
+      message: "Notification token removed successfully",
+    });
+  } catch (error) {
+    console.error("❌ [FCM] removeDeviceToken error:", error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Failed to remove notification token",
+    });
+  }
+};

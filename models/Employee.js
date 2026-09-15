@@ -200,6 +200,29 @@ currentAction: {
   ],
   default: "created",
 },
+
+// FCM PUSH NOTIFICATIONS
+notificationTokens: [
+  {
+    token: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    deviceType: {
+      type: String,
+      default: "android",
+    },
+    createdAt: {
+      type: Date,
+      default: Date.now,
+    },
+    updatedAt: {
+      type: Date,
+      default: Date.now,
+    },
+  },
+],
     },
     {
       timestamps: true,

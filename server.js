@@ -365,7 +365,12 @@ app.use(
 app.use(
   "/api/notification",
   notificationRoutes
-)
+);
+
+app.use(
+  "/api/notifications",
+  notificationRoutes
+);
 
 app.use(
   "/api/project",
