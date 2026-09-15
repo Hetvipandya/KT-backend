@@ -1,14 +1,13 @@
 const mongoose = require("mongoose");
 const Employee = require("../models/Employee");
 const Department = require("../models/Department");
-
-const EmployeeDocument = require(
-  "../models/EmployeeDocument"
-);
-
-const EmployeeHistory = require(
-  "../models/EmployeeHistory"
-);
+const EmployeeDocument = require("../models/EmployeeDocument");
+const EmployeeHistory = require("../models/EmployeeHistory");
+const Attendance = require("../models/Attendance");
+const AdjustmentRequest = require("../models/AdjustmentRequest");
+const Leave = require("../models/Leave");
+const LeaveBalance = require("../models/LeaveBalance");
+const EmployeePerformance = require("../models/EmployeePerformance");
 const User = require("../models/User");
 const Team = require("../models/Team");
 const { syncEmployeeToUser } = require("../utils/userEmployeeSync");
@@ -153,6 +152,13 @@ exports.editEmployee = async (req, res) => {
     const updateData = { 
       ...req.body,
     };
+
+    if (req.body.fullName || req.body.name) {
+      const fullName = (req.body.fullName || req.body.name || "").trim();
+      updateData.name = fullName;
+      updateData.firstName = fullName;
+      updateData.lastName = "";
+    }
 
     // These fields should not be directly changed
     delete updateData.employeeID;
@@ -423,6 +429,39 @@ exports.deleteEmployee = async (req, res) => {
     });
 
     // ==========================================
+    // DELETE CASCADE RECORDS (Attendance, Adjustments, Leaves)
+    // ==========================================
+    const userIds = [employee._id];
+    if (user?._id) userIds.push(user._id);
+    if (employee.userID) userIds.push(employee.userID);
+
+    await Attendance.deleteMany({
+      $or: [
+        { userId: { $in: userIds } },
+        { employeeId: { $in: userIds } },
+      ],
+    });
+
+    await AdjustmentRequest.deleteMany({
+      $or: [
+        { userId: { $in: userIds } },
+        { employeeId: { $in: userIds } },
+      ],
+    });
+
+    await Leave.deleteMany({
+      employeeId: { $in: userIds },
+    });
+
+    await LeaveBalance.deleteMany({
+      employeeId: { $in: userIds },
+    });
+
+    await EmployeePerformance.deleteMany({
+      employeeID: { $in: userIds },
+    });
+
+    // ==========================================
     // DELETE EMPLOYEE
     // ==========================================
     await Employee.findByIdAndDelete(employeeId);
@@ -593,9 +632,17 @@ exports.getEmployeeDocuments = async (req, res) => {
 // ================= ADD EMPLOYEE =================
 exports.addEmployee = async (req, res) => {
   try {
+    const fullName = (
+      req.body.fullName ||
+      req.body.name ||
+      req.body.firstName ||
+      ""
+    ).trim();
+
+    const firstName = fullName;
+    const lastName = (req.body.lastName || "").trim();
+
     const {
-      firstName,
-      lastName,
       email,
       mobile,
       department,

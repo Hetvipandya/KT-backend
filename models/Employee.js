@@ -23,15 +23,20 @@ const employeeSchema =
       },  
 
       // PERSONAL DETAILS 
+      name: {
+        type: String,
+        trim: true,
+      },
+
       firstName: {
         type: String,
-        required: true,
         trim: true, 
       },
 
       lastName: {
         type: String,
         trim: true,
+        default: "",
       },
 
       email: {
