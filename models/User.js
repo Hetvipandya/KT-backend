@@ -430,7 +430,6 @@ const userSchema = new mongoose.Schema(
       unique: true,
       lowercase: true,
       trim: true,
-      index: true,
     },
 
     phone: {
@@ -496,7 +495,6 @@ const userSchema = new mongoose.Schema(
       type: String,
       unique: true,
       sparse: true,
-      index: true,
     },
 
     // ========================================================
@@ -730,14 +728,6 @@ const userSchema = new mongoose.Schema(
 
 userSchema.index({
   "companyAccess.companyId": 1,
-});
-
-userSchema.index({
-  email: 1,
-});
-
-userSchema.index({
-  uniqueID: 1,
 });
 
 // Optional phone numbers must be unique only when a real value is provided.

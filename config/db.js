@@ -26,7 +26,7 @@ const connectDB = async (customUri = null) => {
     // Remove indexes left by the old User schema before creating the current ones.
     const User = require('../models/User');
     const userIndexes = await User.collection.indexes();
-    for (const obsoleteIndex of ['phoneNumber_1', 'phone_1']) {
+    for (const obsoleteIndex of ['phoneNumber_1', 'phone_1', 'uniqueID_1']) {
       if (userIndexes.some((index) => index.name === obsoleteIndex)) {
         await User.collection.dropIndex(obsoleteIndex);
         logger.info(`Removed obsolete User index: ${obsoleteIndex}`);
