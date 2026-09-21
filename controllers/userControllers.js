@@ -1586,7 +1586,7 @@ const loginUser = async (req, res) => {
           uniqueID: loginValue,
         },
       ],
-    });
+    }).select("+passwordHash");
 
     if (!user) {
       return res.status(404).json({
