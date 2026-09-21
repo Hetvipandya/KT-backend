@@ -75,8 +75,7 @@ exports.syncEmployeeToUser = async ({ employee, role, userData = {} }) => {
   const payload = {
     name,
     email: userData.email || employee.email || "",
-    phoneNumber:
-      userData.phoneNumber || employee.mobile || employee.phoneNumber || "",
+    phone: userData.phone || userData.phoneNumber || employee.mobile || employee.phoneNumber || "",
     dob: formatDob(userData.dob || employee.dob),
     address:
       userData.address ||
@@ -99,7 +98,7 @@ exports.syncEmployeeToUser = async ({ employee, role, userData = {} }) => {
 
     user = await User.create({
       ...payload,
-      password: generatedPassword,
+      passwordHash: generatedPassword,
       plainPassword: generatedPassword,
     });
 

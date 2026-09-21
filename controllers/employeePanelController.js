@@ -45,7 +45,7 @@ exports.getEmployeeDashboard = async (req, res) => {
       employeeID: user.uniqueID || employee?.employeeID || "",
       name: user.name,
       email: user.email,
-      mobile: user.phoneNumber || employee?.mobile || "",
+      mobile: user.phone || employee?.mobile || "",
       designation: user.designation || employee?.designation || user.role,
       gender: user.gender || employee?.gender || "",
       department: user.department || employee?.department || "",

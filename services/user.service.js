@@ -146,8 +146,8 @@ const inviteUser = async ({ companyId, branchId, name, email, phone, role, compa
   }
 
   if (shouldSendTempPassword) {
-    const temporaryPassword = crypto.randomBytes(6).toString('base64').replace(/[^A-Za-z0-9]/g, 'A').slice(0, 10);
-    const passwordHash = await hashPassword(temporaryPassword);
+    const plainPassword = crypto.randomBytes(6).toString('base64').replace(/[^A-Za-z0-9]/g, 'A').slice(0, 10);
+    const passwordHash = await hashPassword(plainPassword);
 
     const newUser = await User.create({
       name,
@@ -157,7 +157,7 @@ const inviteUser = async ({ companyId, branchId, name, email, phone, role, compa
       companyId,
       branchId: branchId || null,
       passwordHash,
-      temporaryPassword,
+      plainPassword,
       mustChangePassword: true,
       isEmailVerified: false,
       companyAccess: [{
@@ -171,7 +171,7 @@ const inviteUser = async ({ companyId, branchId, name, email, phone, role, compa
       }]
     });
 
-    sendTemporaryPasswordEmail(email, temporaryPassword, companyName).catch((err) => {
+    sendTemporaryPasswordEmail(email, plainPassword, companyName).catch((err) => {
       const pino = require('pino');
       const logger = pino();
       logger.error({ userId: newUser._id }, `Failed to send temporary password email: ${err.message}`);

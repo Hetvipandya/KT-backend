@@ -2849,7 +2849,7 @@ const getDateWiseAttendance =
         isApproved: { $ne: false },
         role: { $nin: ["admin", "Admin"] },
       }).select(
-        "_id name uniqueID role email department phoneNumber"
+        "_id name uniqueID role email department phone"
       );
 
     const teamLeadEmployees =
@@ -2905,7 +2905,7 @@ const getDateWiseAttendance =
         .populate({
           path: "userId",
           select:
-            "name uniqueID role email department phoneNumber",
+            "name uniqueID role email department phone",
         })
         .populate({
           path: "approvedBy",
@@ -2973,8 +2973,8 @@ const getDateWiseAttendance =
               user.email || "",
             department:
               user.department || "",
-            phoneNumber:
-              user.phoneNumber || "",
+            phone:
+              user.phone || "",
             role:
               member.role ||
               user.role ||
@@ -3073,9 +3073,9 @@ const getDateWiseAttendance =
             user.department ||
             "",
 
-          phoneNumber:
-            data.userId?.phoneNumber ||
-            user.phoneNumber ||
+          phone:
+            data.userId?.phone ||
+            user.phone ||
             "",
 
           role:
@@ -4813,7 +4813,7 @@ exports.getAttendanceById =
         )
           .populate(
             "userId",
-            "name email phoneNumber uniqueID department role"
+            "name email phone uniqueID department role"
           )
           .populate(
             "approvedBy",
@@ -5248,7 +5248,7 @@ exports.getAbsentAttendance =
           .populate({
             path: "userId",
             select:
-              "name uniqueID role email department phoneNumber",
+              "name uniqueID role email department phone",
           })
           .populate({
             path: "approvedBy",
@@ -5294,7 +5294,7 @@ exports.getAbsentAttendance =
 
                 phoneNumber:
                   data.userId
-                    ?.phoneNumber ||
+                    ?.phone ||
                   "",
 
                 role:
@@ -5545,7 +5545,7 @@ exports.getAbsentAttendanceByDateRange =
           .populate({
             path: "userId",
             select:
-              "name uniqueID role email department phoneNumber",
+              "name uniqueID role email department phone",
           })
           .populate({
             path: "approvedBy",
@@ -5592,7 +5592,7 @@ exports.getAbsentAttendanceByDateRange =
 
                 phoneNumber:
                   data.userId
-                    ?.phoneNumber ||
+                    ?.phone ||
                   "",
 
                 role:

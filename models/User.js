@@ -433,17 +433,10 @@ const userSchema = new mongoose.Schema(
       index: true,
     },
 
-    phoneNumber: {
+    phone: {
       type: String,
       unique: true,
       sparse: true,
-      trim: true,
-      default: null,
-    },
-
-    // Backward compatibility
-    phone: {
-      type: String,
       trim: true,
       default: null,
     },
@@ -520,20 +513,6 @@ const userSchema = new mongoose.Schema(
       type: String,
       default: null,
       select: false,
-    },
-
-    /**
-     * Legacy password field
-     */
-    password: {
-      type: String,
-      default: null,
-      select: false,
-    },
-
-    temporaryPassword: {
-      type: String,
-      default: null,
     },
 
     plainPassword: {
@@ -812,30 +791,6 @@ userSchema.pre("save", async function (next) {
       ) {
         this.passwordHash = await bcrypt.hash(this.passwordHash, 10);
       }
-
-      this.password = this.passwordHash;
-    } else if (this.isModified("password") && this.password) {
-      if (
-        !this.password.startsWith("$2a$") &&
-        !this.password.startsWith("$2b$") &&
-        !this.password.startsWith("$2y$")
-      ) {
-        this.password = await bcrypt.hash(this.password, 10);
-      }
-
-      this.passwordHash = this.password;
-    }
-
-    // --------------------------------------------------------
-    // Phone Compatibility
-    // --------------------------------------------------------
-
-    if (this.phoneNumber && !this.phone) {
-      this.phone = this.phoneNumber;
-    }
-
-    if (this.phone && !this.phoneNumber) {
-      this.phoneNumber = this.phone;
     }
 
     // --------------------------------------------------------
@@ -865,7 +820,7 @@ userSchema.pre("save", async function (next) {
 // ============================================================
 
 userSchema.methods.comparePassword = async function (enteredPassword) {
-  const hash = this.passwordHash || this.password;
+  const hash = this.passwordHash;
 
   if (!hash) {
     return false;
@@ -879,7 +834,7 @@ userSchema.methods.comparePassword = async function (enteredPassword) {
 // ============================================================
 
 userSchema.methods.getPasswordHash = function () {
-  return this.passwordHash || this.password || null;
+  return this.passwordHash || null;
 };
 
 // ============================================================

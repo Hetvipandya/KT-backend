@@ -119,9 +119,8 @@ const login = async (req, res, next) => {
   try {
     const { email, password } = req.body;
 
-    // Fetch both password fields so legacy HR users can use the new login API.
     const user = await User.findOne({ email }).select(
-      "+passwordHash +password +refreshTokens",
+      "+passwordHash +refreshTokens",
     );
     if (!user) {
       return res.status(401).json({
@@ -141,7 +140,7 @@ const login = async (req, res, next) => {
       });
     }
 
-    const storedPasswordHash = user.passwordHash || user.password;
+    const storedPasswordHash = user.passwordHash;
 
     // Guard against invited users who haven't completed password setup yet.
     if (!storedPasswordHash) {

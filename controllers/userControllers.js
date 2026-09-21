@@ -9,6 +9,7 @@ const crypto = require("crypto");
 const nodemailer = require("nodemailer");
 
 const userService = require("../services/user.service");
+const { sendTemporaryPasswordEmail } = require("../services/email.service");
 
 const {
   inviteUserSchema, 
@@ -105,7 +106,6 @@ const buildUserResponse = (user) => {
     _id: user._id,
     name: user.name,
     email: user.email,
-    phoneNumber: user.phoneNumber,
     phone: user.phone,
     dob: user.dob,
     address: user.address,
@@ -185,7 +185,7 @@ const createEmployeeForUser = async (user) => {
 
     email: user.email || "",
 
-    mobile: user.phoneNumber || user.phone || "",
+    mobile: user.phone || "",
 
     dob: user.dob || "",
 
@@ -231,7 +231,7 @@ const syncUserToEmployee = async (user) => {
 
   employee.email = user.email || employee.email;
 
-  employee.mobile = user.phoneNumber || user.phone || employee.mobile;
+  employee.mobile = user.phone || employee.mobile;
 
   employee.dob = user.dob || employee.dob;
 
@@ -458,7 +458,7 @@ const listUsers = async (req, res, next) => {
             uniqueID: regex,
           },
           {
-            phoneNumber: regex,
+            phone: regex,
           },
         ],
       };
@@ -781,8 +781,6 @@ const updateUser = async (req, res, next) => {
 
     if (phone !== undefined) {
       targetUser.phone = phone;
-
-      targetUser.phoneNumber = phone;
     }
 
     await targetUser.save();
@@ -948,9 +946,9 @@ const updateProfile = async (req, res) => {
     // PHONE DUPLICATE
     // --------------------------------------------------------
 
-    if (phoneNumber && phoneNumber !== user.phoneNumber) {
+    if (phoneNumber && phoneNumber !== user.phone) {
       const existingPhone = await User.findOne({
-        phoneNumber,
+        phone: phoneNumber,
 
         _id: {
           $ne: user._id,
@@ -978,8 +976,6 @@ const updateProfile = async (req, res) => {
     }
 
     if (phoneNumber !== undefined) {
-      user.phoneNumber = phoneNumber;
-
       user.phone = phoneNumber;
     }
 
@@ -1163,7 +1159,7 @@ const registerUser = async (req, res) => {
           email: normalizedEmail,
         },
         {
-          phoneNumber,
+          phone: phoneNumber,
         },
       ],
     });
@@ -1218,8 +1214,6 @@ const registerUser = async (req, res) => {
 
       email: normalizedEmail,
 
-      phoneNumber,
-
       phone: phoneNumber,
 
       dob,
@@ -1246,8 +1240,7 @@ const registerUser = async (req, res) => {
 
       uniqueID,
 
-      password: generatedPassword,
-
+      passwordHash: generatedPassword,
       plainPassword: generatedPassword,
 
       role: normalizedRole,
@@ -1309,7 +1302,7 @@ const registerUser = async (req, res) => {
 
             <p>
               <b>Phone:</b>
-              ${user.phoneNumber}
+              ${user.phone}
             </p>
 
             <p>
@@ -1347,6 +1340,12 @@ const registerUser = async (req, res) => {
       }
     } catch (emailError) {
       console.error("Admin email error:", emailError.message);
+    }
+
+    try {
+      await sendTemporaryPasswordEmail(user.email, generatedPassword, "Kevalon Technology");
+    } catch (emailError) {
+      console.error("User password email error:", emailError.message);
     }
 
     // --------------------------------------------------------
@@ -1723,7 +1722,7 @@ const changePassword = async (req, res) => {
       });
     }
 
-    user.password = newPassword;
+    user.passwordHash = newPassword;
 
     user.plainPassword = null;
 
@@ -1869,7 +1868,7 @@ const resetPassword = async (req, res) => {
       });
     }
 
-    user.password = newPassword;
+    user.passwordHash = newPassword;
 
     user.plainPassword = null;
 
