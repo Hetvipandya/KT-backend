@@ -1,0 +1,1 @@
+const r=require('express').Router(),a=require('../middleware/authenticate'),v=require('../middleware/validateRequest'),c=require('../middleware/companyAccess'),x=require('../controllers/expense.controller'),z=require('../validators/expense.validators');r.post('/',a,v(z.expense),c,x.create);r.get('/',a,z.validateQuery(z.query),c,x.list);r.get('/:id',a,c,x.get);module.exports=r;

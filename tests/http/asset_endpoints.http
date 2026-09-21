@@ -1,0 +1,69 @@
+### Kevalon ERP — Module 21: Fixed Assets Endpoints Reference
+@baseUrl = http://localhost:3000/api
+@token = REPLACE_WITH_ACCESS_TOKEN
+@companyId = REPLACE_WITH_COMPANY_ID
+@branchId = REPLACE_WITH_BRANCH_ID
+@financialYearId = REPLACE_WITH_FINANCIAL_YEAR_ID
+@assetId = REPLACE_WITH_ASSET_ID
+
+### 1. Register a New Fixed Asset
+# Creates a new asset and automatically registers Chart of Accounts ledger accounts
+# if coaAssetAccountId, coaDepreciationExpenseAccountId, and coaAccumulatedDepreciationAccountId are omitted.
+POST {{baseUrl}}/asset?companyId={{companyId}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "companyId": "{{companyId}}",
+  "branchId": "{{branchId}}",
+  "financialYearId": "{{financialYearId}}",
+  "assetName": "MacBook Pro M3",
+  "assetCode": "FA-2026-001",
+  "purchaseDate": "2026-04-15",
+  "purchaseCost": 150000,
+  "salvageValue": 15000,
+  "usefulLifeYears": 3,
+  "depreciationMethod": "STRAIGHT_LINE",
+  "depreciationRatePercent": 33.33,
+  "notes": "Office laptops for development team"
+}
+
+### 2. List All Fixed Assets
+GET {{baseUrl}}/asset?companyId={{companyId}}
+Authorization: Bearer {{token}}
+
+### 3. Get Asset Details
+GET {{baseUrl}}/asset/{{assetId}}?companyId={{companyId}}
+Authorization: Bearer {{token}}
+
+### 4. Post Monthly Depreciation
+# Calculates and updates the bookValue and creates a balanced Journal Entry
+# (Debit Depreciation Expense, Credit Accumulated Depreciation)
+POST {{baseUrl}}/asset/{{assetId}}/depreciation?companyId={{companyId}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "companyId": "{{companyId}}",
+  "financialYearId": "{{financialYearId}}",
+  "depreciationDate": "2026-05-31",
+  "depreciationAmount": 12500,
+  "remarks": "Monthly depreciation for May 2026"
+}
+
+### 5. Dispose of the Asset (Sale/Scrap/Write-Off)
+# Sets the asset status to DISPOSED, bookValue to 0, calculates gain/loss,
+# and posts a balanced Journal Entry reversing the cost/accumulated depreciation
+# and recording gain/loss and proceeds.
+POST {{baseUrl}}/asset/{{assetId}}/dispose?companyId={{companyId}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "companyId": "{{companyId}}",
+  "financialYearId": "{{financialYearId}}",
+  "disposalDate": "2026-08-15",
+  "disposalType": "SALE",
+  "saleProceeds": 135000,
+  "remarks": "Asset sold due to upgrade"
+}

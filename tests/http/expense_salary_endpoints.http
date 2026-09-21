@@ -1,0 +1,77 @@
+@baseUrl = http://localhost:3000/api
+@token = REPLACE_WITH_ACCESS_TOKEN
+@companyId = REPLACE_WITH_COMPANY_ID
+@branchId = REPLACE_WITH_BRANCH_ID
+@financialYearId = REPLACE_WITH_FINANCIAL_YEAR_ID
+@expenseAccountId = REPLACE_WITH_EXPENSE_COA_ACCOUNT_ID
+@payableAccountId = REPLACE_WITH_PAYABLE_COA_ACCOUNT_ID
+@employeeId = REPLACE_WITH_EMPLOYEE_USER_ID
+@expenseId = REPLACE_WITH_EXPENSE_ID
+
+### ─── MODULE 11: EXPENSES ────────────────────────────────────────────────────
+
+### 1. Create Expense
+# Creates a new expense. Automatically checks totals and account validity.
+POST {{baseUrl}}/expense
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "companyId": "{{companyId}}",
+  "branchId": "{{branchId}}",
+  "financialYearId": "{{financialYearId}}",
+  "expenseDate": "2026-08-13",
+  "category": "Office Supplies",
+  "description": "Bought printing paper and notebooks",
+  "amount": 1000,
+  "taxAmount": 180,
+  "totalAmount": 1180,
+  "paymentMode": "BANK",
+  "expenseAccountId": "{{expenseAccountId}}",
+  "reference": "EXP-2026-1001",
+  "notes": "Office stationeries"
+}
+
+### 2. List Expenses
+# Lists all expenses for the given company and branch.
+GET {{baseUrl}}/expense?companyId={{companyId}}&branchId={{branchId}}
+Authorization: Bearer {{token}}
+
+### 3. Get Expense Detail
+# Fetches details of a specific expense.
+GET {{baseUrl}}/expense/{{expenseId}}
+Authorization: Bearer {{token}}
+
+
+### ─── MODULE 11: SALARY ──────────────────────────────────────────────────────
+
+### 4. Accrue Salary / Payroll
+# Accrues employee salary and automatically generates a linked Journal Entry.
+POST {{baseUrl}}/salary
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "companyId": "{{companyId}}",
+  "branchId": "{{branchId}}",
+  "financialYearId": "{{financialYearId}}",
+  "employeeId": "{{employeeId}}",
+  "periodStart": "2026-08-01",
+  "periodEnd": "2026-08-31",
+  "grossSalary": 50000,
+  "basic": 30000,
+  "hra": 15000,
+  "allowances": 5000,
+  "deductions": 2000,
+  "netPayable": 48000,
+  "paymentMode": "BANK_TRANSFER",
+  "salaryExpenseAccountId": "{{expenseAccountId}}",
+  "payableAccountId": "{{payableAccountId}}",
+  "reference": "PAYROLL-AUG-2026",
+  "notes": "August salary accrual"
+}
+
+### 5. List Accrued Salaries
+# Lists all payroll records.
+GET {{baseUrl}}/salary?companyId={{companyId}}&branchId={{branchId}}
+Authorization: Bearer {{token}}

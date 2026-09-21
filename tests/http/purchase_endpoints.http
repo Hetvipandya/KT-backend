@@ -1,0 +1,53 @@
+@baseUrl = http://localhost:3000/api
+@accessToken = REPLACE_ACCESS_TOKEN
+@companyId = REPLACE_COMPANY_ID
+@financialYearId = REPLACE_FINANCIAL_YEAR_ID
+@supplierId = REPLACE_SUPPLIER_ID
+@productId = REPLACE_PRODUCT_ID
+@bankAccountId = REPLACE_BANK_ACCOUNT_ID
+
+### Create purchase order
+POST {{baseUrl}}/purchase-order
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{"companyId":"{{companyId}}","financialYearId":"{{financialYearId}}","supplierId":"{{supplierId}}","poDate":"2026-04-10","lineItems":[{"productId":"{{productId}}","description":"Stock item","quantity":2,"rate":500,"amount":1000}],"subTotal":1000,"taxAmount":0,"totalAmount":1000}
+
+### List / approve purchase orders
+GET {{baseUrl}}/purchase-order?companyId={{companyId}}
+Authorization: Bearer {{accessToken}}
+
+PUT {{baseUrl}}/purchase-order/REPLACE_PO_ID/approve
+Authorization: Bearer {{accessToken}}
+
+### Create, list, fetch, update and return a purchase
+POST {{baseUrl}}/purchase
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{"companyId":"{{companyId}}","financialYearId":"{{financialYearId}}","supplierId":"{{supplierId}}","billNumber":"PB-0001","billDate":"2026-04-10","lineItems":[{"productId":"{{productId}}","description":"Stock item","quantity":2,"rate":500,"amount":1000,"taxAmount":0,"totalAmount":1000}],"subTotal":1000,"discountTotal":0,"taxTotal":0,"grandTotal":1000,"roundOff":0,"balanceDue":1000}
+
+GET {{baseUrl}}/purchase?companyId={{companyId}}
+Authorization: Bearer {{accessToken}}
+
+GET {{baseUrl}}/purchase/REPLACE_PURCHASE_ID
+Authorization: Bearer {{accessToken}}
+
+PUT {{baseUrl}}/purchase/REPLACE_PURCHASE_ID
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{"notes":"Updated note"}
+
+POST {{baseUrl}}/purchase/REPLACE_PURCHASE_ID/return
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{"companyId":"{{companyId}}","returnDate":"2026-04-11","reason":"Damaged goods","lineItems":[{"purchaseLineItemId":"REPLACE_PURCHASE_LINE_ID","quantity":1}]}
+
+### Pay supplier
+POST {{baseUrl}}/payment/pay-supplier
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{"companyId":"{{companyId}}","financialYearId":"{{financialYearId}}","supplierId":"{{supplierId}}","paymentDate":"2026-04-12","mode":"BANK_TRANSFER","bankAccountId":"{{bankAccountId}}","totalAmount":1000,"allocations":[{"purchaseId":"REPLACE_PURCHASE_ID","allocatedAmount":1000}]}

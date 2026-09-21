@@ -1,0 +1,105 @@
+const mongoose = require("mongoose");
+
+const leaveSchema = new mongoose.Schema(
+  {
+    employeeId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+    },
+
+    applicantRole: {
+      type: String,
+      enum: ["employee", "intern", "team lead", "hr", "admin"],
+      required: true,
+    },
+
+    leaveType: {
+      type: String,
+      enum: ["casual", "sick", "paid", "unpaid", "half_day"],
+      required: true,
+    },
+
+    startDate: {
+      type: Date,
+      required: true,
+    },
+
+    endDate: {
+      type: Date,
+      required: true,
+    },
+
+    totalDays: {
+      type: Number,
+      required: true,
+    },
+
+    reason: {
+      type: String,
+      required: true,
+    },
+
+    status: {
+      type: String,
+      enum: ["pending", "pending_hr", "pending_admin", "approved", "rejected"],
+      default: "pending",
+    },
+
+    teamLeadStatus: {
+      type: String,
+      enum: ["pending", "approved", "rejected", "skipped"],
+      default: "pending",
+    },
+
+    hrStatus: {
+      type: String,
+      enum: ["pending", "approved", "rejected"],
+      default: "pending",
+    },
+
+    remark: {
+      type: String,
+      default: "",
+    },
+
+    description: {
+      type: String,
+      default: "",
+    },
+
+    teamLeadRemark: {
+      type: String,
+      default: "",
+    },
+
+    hrRemark: {
+      type: String,
+      default: "",
+    },
+
+    adminRemark: {
+      type: String,
+      default: "",
+    },
+
+    isHalfDay: {
+      type: Boolean,
+      default: false,
+    },
+
+    halfDayType: {
+      type: String,
+      enum: ["first-half", "second-half", null],
+      default: null,
+    },
+
+    attachment: {
+      type: String,
+      default: "",
+    },
+  },
+  { timestamps: true },
+);
+
+module.exports = mongoose.model("Leave", leaveSchema);

@@ -1,0 +1,52 @@
+### Kevalon ERP Module 6: Supplier API requests
+@baseUrl = http://localhost:3000/api/supplier
+@accessToken = YOUR_ACCESS_TOKEN
+@companyId = YOUR_COMPANY_ID
+@supplierId = YOUR_SUPPLIER_ID
+@payableAccountId = OPTIONAL_COA_ACCOUNT_ID
+
+### Create supplier (payableAccountId is optional; no COA is created automatically)
+POST {{baseUrl}}
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "companyId": "{{companyId}}",
+  "name": "ABC Traders",
+  "code": "SUP-001",
+  "gstin": "22AAAAA0000A1Z5",
+  "pan": "AAAAA0000A",
+  "email": "supplier@example.com",
+  "phone": "9876543210",
+  "billingAddress": {
+    "line1": "21 Market Road",
+    "city": "Ahmedabad",
+    "state": "Gujarat",
+    "pincode": "380001",
+    "country": "India"
+  },
+  "contactPerson": "Mr. Supplier"
+}
+
+### List suppliers. Optional filters: search, isActive, page and limit.
+GET {{baseUrl}}?companyId={{companyId}}&search=ABC&isActive=true&page=1&limit=20
+Authorization: Bearer {{accessToken}}
+
+### Get one supplier
+GET {{baseUrl}}/{{supplierId}}
+Authorization: Bearer {{accessToken}}
+
+### Update supplier / optionally link a payable COA belonging to this company
+PUT {{baseUrl}}/{{supplierId}}
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "name": "ABC Traders Pvt. Ltd.",
+  "payableAccountId": "{{payableAccountId}}",
+  "isActive": true
+}
+
+### Supplier payable ledger (currently a zeroed, read-only placeholder)
+GET {{baseUrl}}/{{supplierId}}/ledger?companyId={{companyId}}&from=2026-04-01&to=2027-03-31
+Authorization: Bearer {{accessToken}}

@@ -1,0 +1,43 @@
+# Audit Log API Endpoints
+
+@baseUrl = http://localhost:3000/api/audit-log
+@accessToken = YOUR_ACCESS_TOKEN_HERE
+@companyId = YOUR_COMPANY_ID_HERE
+@auditLogId = YOUR_AUDIT_LOG_ID_HERE
+
+### 1. Get Filtered Audit Trail
+GET {{baseUrl}}?companyId={{companyId}}
+Authorization: Bearer {{accessToken}}
+
+### 2. Filter Audit Trail by Module (e.g. INVOICE, AUTH)
+GET {{baseUrl}}?companyId={{companyId}}&module=INVOICE
+Authorization: Bearer {{accessToken}}
+
+### 3. Filter Audit Trail by Action Type (e.g. CREATE, UPDATE, DELETE, LOGIN_SUCCESS)
+GET {{baseUrl}}?companyId={{companyId}}&actionType=LOGIN_SUCCESS
+Authorization: Bearer {{accessToken}}
+
+### 4. Filter Audit Trail by Date Range
+GET {{baseUrl}}?companyId={{companyId}}&from=2026-08-01T00:00:00.000Z&to=2026-08-31T23:59:59.000Z
+Authorization: Bearer {{accessToken}}
+
+### 5. Filter Audit Trail with Pagination
+GET {{baseUrl}}?companyId={{companyId}}&page=1&limit=10
+Authorization: Bearer {{accessToken}}
+
+### 6. Get Single Audit Log Details
+GET {{baseUrl}}/{{auditLogId}}
+Authorization: Bearer {{accessToken}}
+
+### 7. Attempt to Update Audit Log (Should fail - Route not defined / blocked)
+PUT {{baseUrl}}/{{auditLogId}}
+Content-Type: application/json
+Authorization: Bearer {{accessToken}}
+
+{
+  "description": "Malicious description modification"
+}
+
+### 8. Attempt to Delete Audit Log (Should fail - Route not defined / blocked)
+DELETE {{baseUrl}}/{{auditLogId}}
+Authorization: Bearer {{accessToken}}

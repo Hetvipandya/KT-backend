@@ -1,0 +1,58 @@
+### Kevalon ERP — Module 14: Reports Endpoints Reference
+@baseUrl = http://localhost:5000/api
+@token = REPLACE_WITH_ACCESS_TOKEN
+@companyId = REPLACE_WITH_COMPANY_ID
+@branchId = REPLACE_WITH_BRANCH_ID
+@financialYearId = REPLACE_WITH_FINANCIAL_YEAR_ID
+
+### 1. GET Trial Balance
+# Query Params:
+# - companyId (Required)
+# - branchId (Optional)
+# - financialYearId (Optional)
+# - from, to (Optional date range YYYY-MM-DD)
+GET {{baseUrl}}/reports/trial-balance?companyId={{companyId}}&branchId={{branchId}}&financialYearId={{financialYearId}}
+Authorization: Bearer {{token}}
+
+### 2. GET Profit & Loss Statement
+# Query Params:
+# - companyId (Required)
+# - branchId (Optional)
+# - financialYearId (Optional)
+# - from, to (Optional date range YYYY-MM-DD)
+GET {{baseUrl}}/reports/profit-loss?companyId={{companyId}}&branchId={{branchId}}&from=2025-04-01&to=2026-03-31
+Authorization: Bearer {{token}}
+
+### 3. GET Balance Sheet
+# Query Params:
+# - companyId (Required)
+# - branchId (Optional)
+# - financialYearId (Optional)
+# - to (Optional closing/asOf date YYYY-MM-DD)
+GET {{baseUrl}}/reports/balance-sheet?companyId={{companyId}}&branchId={{branchId}}
+Authorization: Bearer {{token}}
+
+### 4. GET GST Payable Summary
+# Query Params:
+# - companyId (Required)
+# - branchId (Optional)
+# - financialYearId (Optional)
+# - from, to (Optional date range YYYY-MM-DD)
+GET {{baseUrl}}/reports/gst?companyId={{companyId}}&branchId={{branchId}}
+Authorization: Bearer {{token}}
+
+### 5. Export Trial Balance
+GET {{baseUrl}}/reports/trial-balance/export?companyId={{companyId}}&branchId={{branchId}}&financialYearId={{financialYearId}}
+Authorization: Bearer {{token}}
+
+### 6. Export Profit & Loss
+GET {{baseUrl}}/reports/profit-loss/export?companyId={{companyId}}&branchId={{branchId}}&from=2025-04-01&to=2026-03-31
+Authorization: Bearer {{token}}
+
+### 7. Export Balance Sheet
+GET {{baseUrl}}/reports/balance-sheet/export?companyId={{companyId}}&branchId={{branchId}}
+Authorization: Bearer {{token}}
+
+### 8. Export GST Report
+GET {{baseUrl}}/reports/gst/export?companyId={{companyId}}&branchId={{branchId}}
+Authorization: Bearer {{token}}

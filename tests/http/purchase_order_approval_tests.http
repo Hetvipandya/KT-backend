@@ -1,0 +1,231 @@
+@baseUrl = http://localhost:3000/api
+@accessTokenAdmin = REPLACE_ADMIN_ACCESS_TOKEN
+@accessTokenUser = REPLACE_NORMAL_USER_ACCESS_TOKEN
+@companyId = REPLACE_COMPANY_ID
+@financialYearId = REPLACE_FINANCIAL_YEAR_ID
+@supplierId = REPLACE_SUPPLIER_ID
+@productId = REPLACE_PRODUCT_ID
+
+### 1. Create PO totalAmount = 45000; expect APPROVED, autoApproved = true.
+POST {{baseUrl}}/purchase-order
+Authorization: Bearer {{accessTokenAdmin}}
+Content-Type: application/json
+
+{
+  "companyId": "{{companyId}}",
+  "financialYearId": "{{financialYearId}}",
+  "supplierId": "{{supplierId}}",
+  "poDate": "2026-04-10",
+  "lineItems": [
+    {
+      "productId": "{{productId}}",
+      "description": "Stock item",
+      "quantity": 9,
+      "rate": 5000,
+      "amount": 45000
+    }
+  ],
+  "subTotal": 45000,
+  "taxAmount": 0,
+  "totalAmount": 45000
+}
+
+### 2. Create PO totalAmount = 50000; expect APPROVED, autoApproved = true.
+POST {{baseUrl}}/purchase-order
+Authorization: Bearer {{accessTokenAdmin}}
+Content-Type: application/json
+
+{
+  "companyId": "{{companyId}}",
+  "financialYearId": "{{financialYearId}}",
+  "supplierId": "{{supplierId}}",
+  "poDate": "2026-04-10",
+  "lineItems": [
+    {
+      "productId": "{{productId}}",
+      "description": "Stock item",
+      "quantity": 10,
+      "rate": 5000,
+      "amount": 50000
+    }
+  ],
+  "subTotal": 50000,
+  "taxAmount": 0,
+  "totalAmount": 50000
+}
+
+### 3. Create PO totalAmount = 50001; expect PENDING_APPROVAL.
+# Save the PO_ID returned in response (e.g. @poId = 50001_PO_ID)
+POST {{baseUrl}}/purchase-order
+Authorization: Bearer {{accessTokenAdmin}}
+Content-Type: application/json
+
+{
+  "companyId": "{{companyId}}",
+  "financialYearId": "{{financialYearId}}",
+  "supplierId": "{{supplierId}}",
+  "poDate": "2026-04-10",
+  "lineItems": [
+    {
+      "productId": "{{productId}}",
+      "description": "Stock item",
+      "quantity": 1,
+      "rate": 50001,
+      "amount": 50001
+    }
+  ],
+  "subTotal": 50001,
+  "taxAmount": 0,
+  "totalAmount": 50001
+}
+
+### 4. Attempt to create Purchase Bill for PENDING_APPROVAL PO; expect 400.
+# Replace REPLACE_PENDING_PO_ID with the id from step 3.
+POST {{baseUrl}}/purchase
+Authorization: Bearer {{accessTokenAdmin}}
+Content-Type: application/json
+
+{
+  "companyId": "{{companyId}}",
+  "financialYearId": "{{financialYearId}}",
+  "supplierId": "{{supplierId}}",
+  "purchaseOrderId": "REPLACE_PENDING_PO_ID",
+  "billNumber": "PB-PENDING-TEST-001",
+  "billDate": "2026-04-10",
+  "lineItems": [
+    {
+      "productId": "{{productId}}",
+      "description": "Stock item",
+      "quantity": 1,
+      "rate": 50001,
+      "amount": 50001,
+      "taxAmount": 0,
+      "totalAmount": 50001
+    }
+  ],
+  "subTotal": 50001,
+  "discountTotal": 0,
+  "taxTotal": 0,
+  "grandTotal": 50001,
+  "roundOff": 0,
+  "balanceDue": 50001
+}
+
+### 5. Attempt approval with normal purchase-user token; expect 403.
+# Replace REPLACE_PENDING_PO_ID with the id from step 3.
+PUT {{baseUrl}}/purchase-order/REPLACE_PENDING_PO_ID/approve
+Authorization: Bearer {{accessTokenUser}}
+Content-Type: application/json
+
+{
+  "reason": "Authorized by mistake"
+}
+
+### 6. Approve high-value PO using Admin/Super Admin token; expect APPROVED.
+# Replace REPLACE_PENDING_PO_ID with the id from step 3.
+PUT {{baseUrl}}/purchase-order/REPLACE_PENDING_PO_ID/approve
+Authorization: Bearer {{accessTokenAdmin}}
+Content-Type: application/json
+
+{
+  "reason": "Budget and vendor quotation verified."
+}
+
+### 7. Create Purchase Bill against approved PO; expect successful validation (201).
+# Replace REPLACE_APPROVED_PO_ID with the id from step 3 (which is now approved).
+POST {{baseUrl}}/purchase
+Authorization: Bearer {{accessTokenAdmin}}
+Content-Type: application/json
+
+{
+  "companyId": "{{companyId}}",
+  "financialYearId": "{{financialYearId}}",
+  "supplierId": "{{supplierId}}",
+  "purchaseOrderId": "REPLACE_APPROVED_PO_ID",
+  "billNumber": "PB-APPROVED-TEST-001",
+  "billDate": "2026-04-10",
+  "lineItems": [
+    {
+      "productId": "{{productId}}",
+      "description": "Stock item",
+      "quantity": 1,
+      "rate": 50001,
+      "amount": 50001,
+      "taxAmount": 0,
+      "totalAmount": 50001
+    }
+  ],
+  "subTotal": 50001,
+  "discountTotal": 0,
+  "taxTotal": 0,
+  "grandTotal": 50001,
+  "roundOff": 0,
+  "balanceDue": 50001
+}
+
+### 8. Create another high-value PO for rejection testing.
+# Save the new PO_ID from the response
+POST {{baseUrl}}/purchase-order
+Authorization: Bearer {{accessTokenAdmin}}
+Content-Type: application/json
+
+{
+  "companyId": "{{companyId}}",
+  "financialYearId": "{{financialYearId}}",
+  "supplierId": "{{supplierId}}",
+  "poDate": "2026-04-10",
+  "lineItems": [
+    {
+      "productId": "{{productId}}",
+      "description": "Stock item",
+      "quantity": 1,
+      "rate": 60000,
+      "amount": 60000
+    }
+  ],
+  "subTotal": 60000,
+  "taxAmount": 0,
+  "totalAmount": 60000
+}
+
+### 9. Reject high-value PO using Admin/Super Admin token; expect REJECTED.
+# Replace REPLACE_PO_TO_REJECT_ID with the id from step 8.
+PUT {{baseUrl}}/purchase-order/REPLACE_PO_TO_REJECT_ID/reject
+Authorization: Bearer {{accessTokenAdmin}}
+Content-Type: application/json
+
+{
+  "reason": "Vendor quotation is above the approved budget."
+}
+
+### 10. Attempt Purchase Bill against rejected PO; expect 400.
+# Replace REPLACE_PO_TO_REJECT_ID with the id from step 8.
+POST {{baseUrl}}/purchase
+Authorization: Bearer {{accessTokenAdmin}}
+Content-Type: application/json
+
+{
+  "companyId": "{{companyId}}",
+  "financialYearId": "{{financialYearId}}",
+  "supplierId": "{{supplierId}}",
+  "purchaseOrderId": "REPLACE_PO_TO_REJECT_ID",
+  "billNumber": "PB-REJECTED-TEST-001",
+  "billDate": "2026-04-10",
+  "lineItems": [
+    {
+      "productId": "{{productId}}",
+      "description": "Stock item",
+      "quantity": 1,
+      "rate": 60000,
+      "amount": 60000,
+      "taxAmount": 0,
+      "totalAmount": 60000
+    }
+  ],
+  "subTotal": 60000,
+  "discountTotal": 0,
+  "taxTotal": 0,
+  "grandTotal": 60000,
+  "roundOff": 0,
+  "balanceDue": 60000
+}
