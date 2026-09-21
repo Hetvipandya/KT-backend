@@ -1245,7 +1245,8 @@ const registerUser = async (req, res) => {
 
       role: normalizedRole,
 
-      isApproved: normalizedRole === "admin" || normalizedRole === "hr",
+      // Registration credentials must be usable immediately after the email is sent.
+      isApproved: true,
 
       isFirstLogin: true,
 
@@ -1355,7 +1356,7 @@ const registerUser = async (req, res) => {
     return res.status(201).json({
       success: true,
 
-      message: "Registration successful. Waiting for admin approval.",
+      message: "Registration successful. Login credentials have been sent to your email.",
 
       credentials: {
         uniqueID,
@@ -1561,16 +1562,17 @@ const rejectEmployee = async (req, res) => {
 
 const loginUser = async (req, res) => {
   try {
-    const { login, password, deviceId } = req.body;
+    const { login, email, password, deviceId } = req.body;
+    const loginInput = login || email;
 
-    if (!login || !password) {
+    if (!loginInput || !password) {
       return res.status(400).json({
         success: false,
-        message: "Login and password required",
+        message: "Email/login and password are required",
       });
     }
 
-    const loginValue = login.trim();
+    const loginValue = loginInput.trim();
 
     const user = await User.findOne({
       $or: [
