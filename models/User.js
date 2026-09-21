@@ -435,10 +435,7 @@ const userSchema = new mongoose.Schema(
 
     phone: {
       type: String,
-      unique: true,
-      sparse: true,
       trim: true,
-      default: null,
     },
 
     dob: {
@@ -742,6 +739,16 @@ userSchema.index({
 userSchema.index({
   uniqueID: 1,
 });
+
+// Optional phone numbers must be unique only when a real value is provided.
+userSchema.index(
+  { phone: 1 },
+  {
+    unique: true,
+    name: "phone_unique",
+    partialFilterExpression: { phone: { $type: "string" } },
+  },
+);
 
 // ============================================================
 // VIRTUAL - CHECK ACCOUNT LOCK

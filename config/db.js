@@ -22,6 +22,18 @@ const connectDB = async (customUri = null) => {
 
   try {
     const conn = await mongoose.connect(uri);
+
+    // Remove indexes left by the old User schema before creating the current ones.
+    const User = require('../models/User');
+    const userIndexes = await User.collection.indexes();
+    for (const obsoleteIndex of ['phoneNumber_1', 'phone_1']) {
+      if (userIndexes.some((index) => index.name === obsoleteIndex)) {
+        await User.collection.dropIndex(obsoleteIndex);
+        logger.info(`Removed obsolete User index: ${obsoleteIndex}`);
+      }
+    }
+    await User.createIndexes();
+
     isConnected = true;
     logger.info(`✅ MongoDB Connected: ${conn.connection.host}/${conn.connection.name}`);
   } catch (error) {
