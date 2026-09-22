@@ -108,11 +108,6 @@ router.post("/reset-password", (req, res, next) => {
 });
 
 // ================= CHANGE PASSWORD =================
-router.post(
-  "/change-password",
-  protect,
-  changePassword
-);
 
 router.put(
   "/change-password",

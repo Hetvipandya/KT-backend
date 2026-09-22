@@ -1831,9 +1831,10 @@ const changePassword = async (req, res) => {
 
 const forgotPassword = async (req, res) => {
   try {
-    const { email } = req.body;
+    const email = req.body?.email;
+    const normalizedEmail = email?.trim().toLowerCase();
 
-    if (!email) {
+    if (!normalizedEmail) {
       return res.status(400).json({
         success: false,
         message: "Email is required",
@@ -1841,7 +1842,7 @@ const forgotPassword = async (req, res) => {
     }
 
     const user = await User.findOne({
-      email: email.trim().toLowerCase(),
+      email: normalizedEmail,
     });
 
     if (!user) {
@@ -1858,41 +1859,34 @@ const forgotPassword = async (req, res) => {
       .update(resetToken)
       .digest("hex");
 
-    user.passwordResetTokenHash = tokenHash;
+    const resetExpires = new Date(Date.now() + 30 * 60 * 1000);
 
-    user.passwordResetExpires = new Date(Date.now() + 30 * 60 * 1000);
+    user.passwordResetTokenHash = tokenHash;
+    user.resetPasswordToken = tokenHash;
+    user.passwordResetExpires = resetExpires;
+    user.resetPasswordExpires = resetExpires;
 
     await user.save();
 
-    const resetUrl = `${process.env.CLIENT_URL || "http://localhost:3000"}/reset-password?token=${resetToken}&email=${encodeURIComponent(user.email)}`;
+    const frontendUrl =
+      process.env.CLIENT_URL ||
+      process.env.FRONTEND_URL ||
+      "http://localhost:3000";
+
+    const resetUrl = `${frontendUrl}/reset-password?token=${resetToken}&email=${encodeURIComponent(user.email)}`;
 
     try {
       if (process.env.EMAIL_USER) {
         await transporter.sendMail({
           from: process.env.EMAIL_USER,
-
           to: user.email,
-
           subject: "Password Reset Request",
-
           html: `
             <h2>Password Reset</h2>
-
-            <p>Hello ${user.name},</p>
-
-            <p>
-              Click the link below to reset your password.
-            </p>
-
-            <p>
-              <a href="${resetUrl}">
-                Reset Password
-              </a>
-            </p>
-
-            <p>
-              This link will expire in 30 minutes.
-            </p>
+            <p>Hello ${user.name || "there"},</p>
+            <p>Click the link below to reset your password.</p>
+            <p><a href="${resetUrl}">Reset Password</a></p>
+            <p>This link will expire in 30 minutes.</p>
           `,
         });
       }
@@ -1902,8 +1896,8 @@ const forgotPassword = async (req, res) => {
 
     return res.status(200).json({
       success: true,
-
       message: "Password reset link sent successfully",
+      resetUrl,
     });
   } catch (error) {
     return res.status(500).json({
@@ -1939,20 +1933,29 @@ const resetPassword = async (req, res) => {
     let user;
 
     if (email && token) {
+      const normalizedEmail = email.trim().toLowerCase();
       const tokenHash = crypto
         .createHash("sha256")
         .update(token)
         .digest("hex");
 
       user = await User.findOne({
-        email: email.trim().toLowerCase(),
-
+        email: normalizedEmail,
         passwordResetTokenHash: tokenHash,
-
         passwordResetExpires: {
           $gt: new Date(),
         },
-      });
+      }).select("+passwordResetTokenHash +passwordResetExpires +password +passwordHash");
+
+      if (!user) {
+        user = await User.findOne({
+          email: normalizedEmail,
+          resetPasswordToken: tokenHash,
+          resetPasswordExpires: {
+            $gt: new Date(),
+          },
+        }).select("+resetPasswordToken +resetPasswordExpires +password +passwordHash");
+      }
     } else {
       const authorization = req.headers.authorization || "";
       const accessToken = authorization.startsWith("Bearer ")
@@ -1970,7 +1973,7 @@ const resetPassword = async (req, res) => {
 
       try {
         const decoded = jwt.verify(accessToken, process.env.JWT_SECRET);
-        user = await User.findById(decoded.id);
+        user = await User.findById(decoded.id).select("+password +passwordHash");
       } catch (error) {
         return res.status(401).json({
           success: false,
@@ -1994,15 +1997,14 @@ const resetPassword = async (req, res) => {
     user.mustChangePassword = false;
 
     user.passwordResetTokenHash = null;
-    
-
+    user.resetPasswordToken = null;
     user.passwordResetExpires = null;
+    user.resetPasswordExpires = null;
 
     await user.save();
 
     return res.status(200).json({
       success: true,
-
       message: "Password reset successfully",
     });
   } catch (error) {
