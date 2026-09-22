@@ -57,7 +57,7 @@ const maskEmail = (email) => {
  */
 const register = async (req, res, next) => {
   try {
-    const { name, email, password, phone, phoneNumber } = req.body;
+    const { name, email, password, phone, phoneNumber, role } = req.body;
 
     // Check if email already exists
     const existingUser = await User.findOne({ email });
@@ -82,6 +82,7 @@ const register = async (req, res, next) => {
       email,
       passwordHash,
       phoneNumber: phoneNumber ?? phone,
+      role,
       emailVerificationTokenHash: verificationTokenHash,
       emailVerificationExpires,
     });
