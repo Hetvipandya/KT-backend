@@ -67,14 +67,9 @@ const userSchema =
       },
 
       bloodGroup: {
-        type: String,
+        type: String, 
         default: null,
         trim: true,
-      },
-
-      uniqueID: {
-        type: String,
-        unique: true,
       },
 
       password: {
@@ -223,43 +218,6 @@ userSchema.pre(
   "save",
   async function () {
     try {
-      // ================= GENERATE UNIQUE ID =================
-      if (
-        !this.uniqueID
-      ) {
-        const lastUser =
-          await mongoose
-            .model("User")
-            .findOne()
-            .sort({
-              createdAt:
-                -1,
-            });
-
-        let nextNumber =
-          1001;
-
-        if (
-          lastUser &&
-          lastUser.uniqueID
-        ) {
-          const lastNumber =
-            parseInt(
-              lastUser.uniqueID.replace(
-                "NEW",
-                ""
-              )
-            );
-
-          nextNumber =
-            lastNumber +
-            1;
-        }
-
-        this.uniqueID =
-          `NEW${nextNumber}`;
-      }
-
       // ================= PASSWORD HASH =================
       if (
         this.isModified(

@@ -42,7 +42,7 @@ exports.getEmployeeDashboard = async (req, res) => {
 
     const employeeInfo = {
       userId: user._id,
-      employeeID: user.uniqueID || employee?.employeeID || "",
+      employeeID: employee?.employeeID || "",
       name: user.name,
       email: user.email,
       mobile: user.phone || employee?.mobile || "",
@@ -637,7 +637,7 @@ exports.uploadScreenshot = async (req, res) => {
       sessionId: sessionId || attendance?.sessionId || "SESS_BG",
       userId,
       employeeName: user.name,
-      employeeID: user.uniqueID || employee?.employeeID || "",
+      employeeID: employee?.employeeID || "",
       date: today,
       captureTime: new Date(),
       checkInTime: attendance?.checkInTime || null,
@@ -725,7 +725,7 @@ exports.logInactivityAlert = async (req, res) => {
     const event = await InactivityEvent.create({
       userId,
       employeeName: user.name,
-      employeeID: user.uniqueID || employee?.employeeID || "",
+      employeeID: employee?.employeeID || "",
       sessionId,
       date: today,
       inactivityStartTime: new Date(Date.now() - durationMinutes * 60 * 1000),
@@ -742,7 +742,7 @@ exports.logInactivityAlert = async (req, res) => {
       await Notification.create({
         userId: admin._id,
         title: "⚠️ Work Activity Alert",
-        message: `Employee ${user.name} (${user.uniqueID || "N/A"}) has been inactive for ${durationMinutes} minutes.`,
+        message: `Employee ${user.name} (${employee?.employeeID || "N/A"}) has been inactive for ${durationMinutes} minutes.`,
         type: "SYSTEM",
         metaData: {
           eventId: event._id,

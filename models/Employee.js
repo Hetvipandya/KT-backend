@@ -10,7 +10,7 @@ const addressSchema = new mongoose.Schema(
     country: { type: String, trim: true, default: 'India' }
   },
   { _id: false }
-);
+); 
 
 const emergencyContactSchema = new mongoose.Schema(
   {
@@ -39,12 +39,6 @@ const employeeSchema = new mongoose.Schema(
       sparse: true,
       trim: true,
       uppercase: true
-    },
-    uniqueID: {
-      type: String,
-      unique: true,
-      sparse: true,
-      trim: true
     },
     userID: {
       type: mongoose.Schema.Types.ObjectId,

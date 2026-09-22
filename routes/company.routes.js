@@ -7,7 +7,7 @@ const { createCompanySchema, updateCompanySchema } = require('../validators/comp
 const multer = require('multer');
 
 const router = express.Router();
-
+ 
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: {

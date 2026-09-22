@@ -32,7 +32,7 @@ exports.getAdminNotifications = async (req, res) => {
   try {
     // 1. Fetch DB notifications
     const dbNotifications = await Notification.find()
-      .populate("userId", "name email role uniqueID")
+      .populate("userId", "name email role")
       .sort({ createdAt: -1 })
       .limit(50)
       .lean();
@@ -41,7 +41,7 @@ exports.getAdminNotifications = async (req, res) => {
     const pendingLeaves = await Leave.find({
       status: { $in: ["pending", "pending_admin", "pending_hr"] },
     })
-      .populate("employeeId", "name email role uniqueID")
+      .populate("employeeId", "name email role employeeID")
       .sort({ createdAt: -1 })
       .limit(20)
       .lean();
@@ -51,7 +51,7 @@ exports.getAdminNotifications = async (req, res) => {
       approvalStatus: "pending",
       checkInTime: { $ne: null },
     })
-      .populate("userId", "name email role uniqueID")
+      .populate("userId", "name email role")
       .sort({ createdAt: -1 })
       .limit(20)
       .lean();
@@ -62,7 +62,7 @@ exports.getAdminNotifications = async (req, res) => {
       pendingAdjustments = await AdjustmentRequest.find({
         status: "pending",
       })
-        .populate("userId", "name email role uniqueID")
+        .populate("userId", "name email role")
         .sort({ createdAt: -1 })
         .limit(20)
         .lean();

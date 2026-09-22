@@ -694,7 +694,7 @@ exports.getAdjustmentHistory = async (req, res) => {
     const adjustmentRequests = await AdjustmentRequest.find(query)
       .populate({
         path: "userId",
-        select: "name firstName lastName uniqueID role",
+        select: "name firstName lastName role",
       })
       .sort({ date: -1, createdAt: -1 })
       .limit(20);

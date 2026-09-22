@@ -181,7 +181,7 @@ exports.getAllLeaves = async (req, res) => {
     const leaves = await Leave.find(filter)
       .populate({
         path: "employeeId",
-        select: "name email role uniqueID",
+        select: "name email role",
       })
       .sort({ createdAt: -1 });
 
@@ -222,7 +222,7 @@ exports.getTeamLeadPendingLeaves = async (req, res) => {
     })
       .populate({
         path: "employeeId",
-        select: "name email role uniqueID",
+        select: "name email role",
       })
       .sort({ createdAt: -1 });
 
@@ -259,7 +259,7 @@ exports.getHRPendingLeaves = async (req, res) => {
     })
       .populate({
         path: "employeeId",
-        select: "name email role uniqueID",
+        select: "name email role",
       })
       .sort({ createdAt: -1 });
 

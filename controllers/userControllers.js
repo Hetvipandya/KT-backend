@@ -159,8 +159,8 @@ const createEmployeeForUser = async (user) => {
 
   const role = normalizeRole(user.role);
 
-  // Only Employee and Team Lead get Employee record
-  if (role !== "employee" && role !== "team lead") {
+  // Employee, intern, and team lead accounts receive an EMP employeeID.
+  if (role !== "employee" && role !== "intern" && role !== "team lead") {
     return null;
   }
 
@@ -206,6 +206,7 @@ const createEmployeeForUser = async (user) => {
     employeeStatus: "Active",
 
     isTeamLead: role === "team lead",
+      isTeamLead: role === "team lead",
   });
 
   return employee;
@@ -459,7 +460,6 @@ const listUsers = async (req, res, next) => {
             email: regex,
           },
           {
-            uniqueID: regex,
           },
           {
             phone: regex,
@@ -1178,33 +1178,6 @@ const registerUser = async (req, res) => {
     }
 
     // --------------------------------------------------------
-    // GENERATE UNIQUE ID
-    // --------------------------------------------------------
-
-    const lastUser = await User.findOne({
-      uniqueID: {
-        $regex: /^NEW\d+$/,
-      },
-    }).sort({
-      createdAt: -1,
-    });
-
-    let nextNumber = 1001;
-
-    if (lastUser && lastUser.uniqueID) {
-      const lastNumber = parseInt(
-        lastUser.uniqueID.replace("NEW", ""),
-        10
-      );
-
-      if (!isNaN(lastNumber)) {
-        nextNumber = lastNumber + 1;
-      }
-    }
-
-    const uniqueID = `NEW${nextNumber}`;
-
-    // --------------------------------------------------------
     // GENERATE TEMPORARY PASSWORD
     // --------------------------------------------------------
 
@@ -1252,8 +1225,6 @@ const registerUser = async (req, res) => {
         ? ifscCode.trim().toUpperCase()
         : null,
 
-      uniqueID,
-
       // IMPORTANT:
       // Schema expects "password".
       // Mongoose pre-save middleware will bcrypt hash it.
@@ -1283,6 +1254,7 @@ const registerUser = async (req, res) => {
 
     if (
       normalizedRole === "employee" ||
+      normalizedRole === "intern" ||
       normalizedRole === "team lead"
     ) {
       try {
@@ -1350,10 +1322,6 @@ const registerUser = async (req, res) => {
             </p>
 
             <p>
-              <b>Unique ID:</b>
-              ${user.uniqueID}
-            </p>
-
             ${
               employee
                 ? `
@@ -1406,10 +1374,6 @@ const registerUser = async (req, res) => {
       message:
         "Registration successful. Login credentials have been sent to your email.",
 
-      credentials: {
-        uniqueID,
-      },
-
       user: {
         _id: user._id,
 
@@ -1419,7 +1383,6 @@ const registerUser = async (req, res) => {
 
         phoneNumber: user.phoneNumber,
 
-        uniqueID: user.uniqueID,
 
         role: user.role,
 
@@ -1640,7 +1603,6 @@ const loginUser = async (req, res) => {
         },
 
         {
-          uniqueID: loginValue,
         },
       ],
     }).select("+password +passwordHash");

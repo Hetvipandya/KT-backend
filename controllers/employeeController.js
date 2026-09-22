@@ -16,7 +16,7 @@ const generateEmployeeID = require("../utils/employeeId");
 const resolveDepartmentName = async (departmentValue) => {
   if (!departmentValue) return "";
 
-  if (typeof departmentValue === "object") {
+  if (typeof departmentValue === "object") { 
     return departmentValue.departmentName || departmentValue.name || "";
   }
 
@@ -941,7 +941,7 @@ exports.updateEmployeeLifecycle = async (req, res) => {
     }
     if (!employee) {
       employee = await Employee.findOne({
-        $or: [{ employeeID: employeeId }, { uniqueID: employeeId }],
+          employeeID: employeeId,
       });
     }
 
@@ -1035,7 +1035,7 @@ exports.updateEmployee = async (req, res) => {
     }
     if (!employee) {
       employee = await Employee.findOne({
-        $or: [{ employeeID: employeeId }, { uniqueID: employeeId }],
+          employeeID: employeeId,
       });
     }
 
