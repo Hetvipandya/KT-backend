@@ -1994,6 +1994,7 @@ const resetPassword = async (req, res) => {
     user.mustChangePassword = false;
 
     user.passwordResetTokenHash = null;
+    
 
     user.passwordResetExpires = null;
 

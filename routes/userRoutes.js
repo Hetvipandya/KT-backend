@@ -108,17 +108,17 @@ router.post("/reset-password", (req, res, next) => {
 });
 
 // ================= CHANGE PASSWORD =================
-router.put( 
-  "/change-password",
-  protect,
-  changePassword
-); //done
-
 router.post(
   "/change-password",
   protect,
   changePassword
 );
+
+router.put(
+  "/change-password",
+  protect,
+  changePassword
+); //done
 
 // ================= SEND OTP =================
 router.post(
