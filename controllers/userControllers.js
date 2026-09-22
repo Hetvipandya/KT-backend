@@ -123,6 +123,7 @@ const buildUserResponse = (user) => {
 
     isApproved: user.isApproved,
     isFirstLogin: user.isFirstLogin,
+    mustChangePassword: user.mustChangePassword,
     isActive: user.isActive,
 
     companyId: user.companyId,
@@ -1266,6 +1267,8 @@ const registerUser = async (req, res) => {
 
       isFirstLogin: true,
 
+      mustChangePassword: true,
+
       isActive: true,
     });
 
@@ -1714,6 +1717,10 @@ const loginUser = async (req, res) => {
 
     user.lastLoginAt = new Date();
 
+    if (user.isFirstLogin && !user.mustChangePassword) {
+      user.mustChangePassword = true;
+    }
+
     await user.save();
 
     return res.status(200).json({
@@ -1725,7 +1732,8 @@ const loginUser = async (req, res) => {
 
       refreshToken,
 
-      changePassword: user.isFirstLogin,
+      changePassword: user.mustChangePassword || user.isFirstLogin,
+      mustChangePassword: user.mustChangePassword || user.isFirstLogin,
 
       user: buildUserResponse(user),
     });
@@ -1791,8 +1799,7 @@ const changePassword = async (req, res) => {
       }
     }
 
-    user.passwordHash = newPassword;
-
+    user.password = newPassword;
     user.plainPassword = null;
 
     user.isFirstLogin = false;
@@ -1976,11 +1983,11 @@ const resetPassword = async (req, res) => {
       });
     }
 
-    user.passwordHash = newPassword;
-
+    user.password = newPassword;
     user.plainPassword = null;
 
     user.isFirstLogin = false;
+    user.mustChangePassword = false;
 
     user.passwordResetTokenHash = null;
 

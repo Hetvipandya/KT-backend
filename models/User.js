@@ -116,6 +116,11 @@ const userSchema =
         default: true,
       },
 
+      mustChangePassword: {
+        type: Boolean,
+        default: false,
+      },
+
       // ================= ACCOUNT STATUS =================
       isActive: {
         type: Boolean,
