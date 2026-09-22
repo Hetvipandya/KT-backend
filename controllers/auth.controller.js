@@ -436,7 +436,7 @@ const resetPassword = async (req, res, next) => {
  */
 const changePassword = async (req, res, next) => {
   try {
-    const { currentPassword, newPassword } = req.body;
+    const { currentPassword, newPassword, confirmPassword } = req.body;
     const user = await User.findById(req.user._id).select("+passwordHash");
 
     if (!user) {
@@ -446,10 +446,10 @@ const changePassword = async (req, res, next) => {
       });
     }
 
-    if (!user.mustChangePassword && !currentPassword) {
+    if (confirmPassword !== undefined && newPassword !== confirmPassword) {
       return res.status(400).json({
         success: false,
-        message: "Current password is required to change password",
+        message: "New password and confirm password do not match",
       });
     }
 

@@ -1697,15 +1697,28 @@ const loginUser = async (req, res) => {
 
 const changePassword = async (req, res) => { 
   try {
-    const { userId, oldPassword, currentPassword, newPassword } = req.body;
+    const {
+      userId,
+      oldPassword,
+      currentPassword,
+      newPassword,
+      confirmPassword,
+    } = req.body;
     const authenticatedUserId = req.user?._id;
     const requestedUserId = authenticatedUserId || userId;
     const passwordToVerify = oldPassword || currentPassword;
 
-    if (!requestedUserId || !passwordToVerify || !newPassword) {
+    if (!requestedUserId || !newPassword) {
       return res.status(400).json({
         success: false,
-        message: "Current password and new password are required",
+        message: "New password is required",
+      });
+    }
+
+    if (confirmPassword !== undefined && newPassword !== confirmPassword) {
+      return res.status(400).json({
+        success: false,
+        message: "New password and confirm password do not match",
       });
     }
 
@@ -1718,13 +1731,15 @@ const changePassword = async (req, res) => {
       });
     }
 
-    const isMatch = await user.comparePassword(passwordToVerify);
+    if (passwordToVerify) {
+      const isMatch = await user.comparePassword(passwordToVerify);
 
-    if (!isMatch) {
-      return res.status(400).json({
-        success: false,
-        message: "Old password incorrect",
-      });
+      if (!isMatch) {
+        return res.status(400).json({
+          success: false,
+          message: "Old password incorrect",
+        });
+      }
     }
 
     user.passwordHash = newPassword;
