@@ -1,4 +1,5 @@
 const User = require("../models/User");
+const Employee = require("../models/Employee");
 const { sendRegistrationEmail } = require("./mailer");
 
 const normalizeRole = (role) => {
@@ -133,7 +134,16 @@ exports.syncEmployeeToUser = async ({ employee, role, userData = {} }) => {
       employeeModified = true;
     }
     if (employeeModified) {
-      await employee.save();
+      if (typeof employee.save === "function") {
+        await employee.save();
+      } else if (employee._id) {
+        await Employee.findByIdAndUpdate(employee._id, {
+          role: employee.role,
+          designation: employee.designation,
+          userID: employee.userID,
+          isTeamLead: employee.isTeamLead,
+        });
+      }
     }
   }
 

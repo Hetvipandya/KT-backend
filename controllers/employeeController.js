@@ -59,8 +59,14 @@ exports.assignTeamLead = async (req, res) => {
     }
 
     if (employee) {
-      employee.isTeamLead = true;
-      await employee.save();
+      employee = await Employee.findByIdAndUpdate(
+        employee._id,
+        {
+          isTeamLead: true,
+          role: "team lead",
+        },
+        { new: true, runValidators: true },
+      );
     }
 
     if (employee) {
@@ -85,7 +91,15 @@ exports.assignTeamLead = async (req, res) => {
 
     if (employee && user && !employee.userID) {
       employee.userID = user._id;
-      await employee.save();
+      if (typeof employee.save === "function") {
+        await employee.save();
+      } else {
+        await Employee.findByIdAndUpdate(employee._id, {
+          userID: user._id,
+          isTeamLead: true,
+          role: "team lead",
+        });
+      }
     }
 
     // Ensure record exists/is inserted in Team collection
