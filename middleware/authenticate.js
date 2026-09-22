@@ -1,5 +1,6 @@
 const { verifyAccessToken } = require('../utils/jwt');
 const User = require('../models/User');
+const FinanceUser = require('../models/FinanceUser');
 
 // Ultra-fast in-memory user cache (60s TTL) to bypass MongoDB lookup on repeated API calls
 const userCache = new Map();
@@ -61,6 +62,11 @@ const authenticate = async (req, res, next) => {
         });
       }
       userCache.set(userIdStr, { user, timestamp: now });
+    }
+
+    const financeUser = await FinanceUser.findOne({ userId: user._id }).lean();
+    if (financeUser) {
+      Object.assign(user, financeUser);
     }
 
     // Check if user account is locked

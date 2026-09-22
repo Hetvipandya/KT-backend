@@ -1,4 +1,5 @@
 const User = require('../models/User');
+const FinanceUser = require('../models/FinanceUser');
 const Company = require('../models/Company');
 const userService = require('../services/user.service');
 const { inviteUserSchema, updateUserSchema } = require('../validators/user.validators');
@@ -62,7 +63,8 @@ const inviteUser = async (req, res, next) => {
 
     const { isNewUser, user } = result;
 
-    const assignedBranchId = branchId || user.branchId;
+    const financeUser = await FinanceUser.findOne({ userId: user._id }).lean();
+    const assignedBranchId = branchId || financeUser?.branchId;
     let branchName = null;
     if (assignedBranchId) {
       const Branch = require('../models/Branch');
@@ -127,31 +129,46 @@ const listUsers = async (req, res, next) => {
       };
     }
 
-   const filter = {
-  $or: [
-    { companyId }, // Company Owner/Admin
-    {
-      companyAccess: {
-        $elemMatch: {
-          companyId,
-          ...(includeInactive === "true" ? {} : { isActive: true })
+    const financeFilter = {
+      $or: [
+        { companyId },
+        {
+          companyAccess: {
+            $elemMatch: {
+              companyId,
+              ...(includeInactive === "true" ? {} : { isActive: true })
+            }
+          }
         }
-      }
-    }
-  ],
-  ...searchFilter
-};
+      ]
+    };
 
-    const total = await User.countDocuments(filter);
-
-    const users = await User.find(filter)
+    const financeUsers = await FinanceUser.find(financeFilter)
       .skip((page - 1) * limit)
       .limit(limit)
       .lean();
 
+    const userIds = financeUsers.map((financeUser) => financeUser.userId);
+    const users = await User.find({
+      _id: { $in: userIds },
+      ...searchFilter
+    }).lean();
+    const usersById = new Map(users.map((user) => [user._id.toString(), user]));
+    const usersWithFinance = financeUsers
+      .map((financeUser) => ({
+        ...(usersById.get(financeUser.userId.toString()) || {}),
+        ...financeUser,
+        _id: financeUser.userId,
+        companyId: financeUser.companyId,
+        branchId: financeUser.branchId,
+      }))
+      .filter((user) => user.name || user.email);
+
+    const total = await FinanceUser.countDocuments(financeFilter);
+
     // Map branch names for users
     const branchIds = new Set();
-    users.forEach((u) => {
+    usersWithFinance.forEach((u) => {
       if (u.branchId) branchIds.add(u.branchId.toString());
       (u.companyAccess || []).forEach((a) => {
         if (a.branchId) branchIds.add(a.branchId.toString());
@@ -162,7 +179,7 @@ const listUsers = async (req, res, next) => {
     const branches = await Branch.find({ _id: { $in: Array.from(branchIds) } }).select('branchName').lean();
     const branchMap = new Map(branches.map((b) => [b._id.toString(), b.branchName]));
 
-    const data = users.map((user) =>
+    const data = usersWithFinance.map((user) =>
       userService.toCompanyUserView(user, companyId, branchMap)
     );
 

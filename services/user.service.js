@@ -1,5 +1,6 @@
 const crypto = require('crypto');
 const User = require('../models/User');
+const FinanceUser = require('../models/FinanceUser');
 const { hashPassword, hashSha256 } = require('../utils/hash');
 const { sendInviteEmail, sendTemporaryPasswordEmail } = require('./email.service');
 const env = require('../config/env');
@@ -115,12 +116,15 @@ const wouldSelfLockout = (callerUser, targetUserId, companyId) => {
  */
 const inviteUser = async ({ companyId, branchId, name, email, phone, role, companyName, sendTemporaryPassword, baseUrl }) => {
   const existingUser = await User.findOne({ email });
+  const existingFinanceUser = existingUser
+    ? await FinanceUser.findOne({ userId: existingUser._id })
+    : null;
   const normalizedRole = String(role || '').trim().toLowerCase();
   const shouldSendTempPassword = Boolean(sendTemporaryPassword) || normalizedRole === 'accountant' || normalizedRole === 'ca';
 
   if (existingUser) {
     // Check if already has access to this company
-    const alreadyHasAccess = (existingUser.companyAccess || []).some(
+    const alreadyHasAccess = (existingFinanceUser?.companyAccess || []).some(
       (a) => a.companyId.toString() === companyId.toString()
     );
     if (alreadyHasAccess) {
@@ -131,16 +135,29 @@ const inviteUser = async ({ companyId, branchId, name, email, phone, role, compa
     }
 
     // Grant access to the new company
-    existingUser.companyAccess.push({
+    const accessEntry = {
       companyId,
       branchId: branchId || null,
       role,
       isActive: true,
       invitedAt: new Date(),
       joinedAt: null
-    });
-    if (branchId) existingUser.branchId = branchId;
-    await existingUser.save();
+    };
+
+    if (existingFinanceUser) {
+      existingFinanceUser.companyAccess.push(accessEntry);
+      existingFinanceUser.branchId = branchId || existingFinanceUser.branchId;
+      existingFinanceUser.role = role;
+      await existingFinanceUser.save();
+    } else {
+      await FinanceUser.create({
+        userId: existingUser._id,
+        companyId,
+        branchId: branchId || null,
+        role,
+        companyAccess: [accessEntry],
+      });
+    }
 
     return { isNewUser: false, user: existingUser };
   }
@@ -154,12 +171,17 @@ const inviteUser = async ({ companyId, branchId, name, email, phone, role, compa
       email,
       phone,
       role,
-      companyId,
-      branchId: branchId || null,
       passwordHash,
       plainPassword,
       mustChangePassword: true,
       isEmailVerified: false,
+    });
+
+    await FinanceUser.create({
+      userId: newUser._id,
+      companyId,
+      branchId: branchId || null,
+      role,
       companyAccess: [{
         companyId,
         branchId: branchId || null,
@@ -168,7 +190,7 @@ const inviteUser = async ({ companyId, branchId, name, email, phone, role, compa
         invitedAt: new Date(),
         joinedAt: null,
         inviteSent: true
-      }]
+      }],
     });
 
     sendTemporaryPasswordEmail(email, plainPassword, companyName).catch((err) => {
@@ -191,12 +213,17 @@ const inviteUser = async ({ companyId, branchId, name, email, phone, role, compa
     email,
     phone,
     role,
-    companyId,
-    branchId: branchId || null,
     passwordHash: null, // not usable until invite is accepted
     isEmailVerified: false,
     passwordResetTokenHash: tokenHash,
     passwordResetExpires: tokenExpiry,
+  });
+
+  await FinanceUser.create({
+    userId: newUser._id,
+    companyId,
+    branchId: branchId || null,
+    role,
     companyAccess: [{
       companyId,
       branchId: branchId || null,
@@ -205,7 +232,7 @@ const inviteUser = async ({ companyId, branchId, name, email, phone, role, compa
       invitedAt: new Date(),
       joinedAt: null,
       inviteSent: true
-    }]
+    }],
   });
 
   // Send invite email (non-blocking — never fail the invite if SMTP is down)

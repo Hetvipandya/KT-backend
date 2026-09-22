@@ -327,55 +327,6 @@ const refreshTokenSchema = new mongoose.Schema(
 );
 
 // ============================================================
-// COMPANY ACCESS SCHEMA
-// ============================================================
-
-const companyAccessSchema = new mongoose.Schema(
-  {
-    companyId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Company",
-      required: true,
-    },
-
-    branchId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Branch",
-      default: null,
-    },
-
-    role: {
-      type: String,
-      required: true,
-      default: "employee",
-    },
-
-    isActive: {
-      type: Boolean,
-      default: true,
-    },
-
-    invitedAt: {
-      type: Date,
-      default: null,
-    },
-
-    inviteSent: {
-      type: Boolean,
-      default: false,
-    },
-
-    joinedAt: {
-      type: Date,
-      default: null,
-    },
-  },
-  {
-    _id: true,
-  },
-);
-
-// ============================================================
 // NOTIFICATION TOKEN SCHEMA
 // ============================================================
 
@@ -645,56 +596,6 @@ const userSchema = new mongoose.Schema(
     },
 
     // ========================================================
-    // COMPANY / BRANCH / FINANCIAL YEAR
-    // ========================================================
-
-    companyId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Company",
-      default: null,
-    },
-
-    branchId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Branch",
-      default: null,
-    },
-
-    financialYearId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "FinancialYear",
-      default: null,
-    },
-
-    // ========================================================
-    // ONBOARDING FLAGS
-    // ========================================================
-
-    companyCreated: {
-      type: Boolean,
-      default: false,
-    },
-
-    branchCreated: {
-      type: Boolean,
-      default: false,
-    },
-
-    financialYearCreated: {
-      type: Boolean,
-      default: false,
-    },
-
-    // ========================================================
-    // MULTI COMPANY ACCESS
-    // ========================================================
-
-    companyAccess: {
-      type: [companyAccessSchema],
-      default: [],
-    },
-
-    // ========================================================
     // DEVICE INFORMATION
     // ========================================================
 
@@ -721,14 +622,6 @@ const userSchema = new mongoose.Schema(
     timestamps: true,
   },
 );
-
-// ============================================================
-// INDEXES
-// ============================================================
-
-userSchema.index({
-  "companyAccess.companyId": 1,
-});
 
 // Optional phone numbers must be unique only when a real value is provided.
 userSchema.index(
@@ -788,22 +681,6 @@ userSchema.pre("save", async function (next) {
       ) {
         this.passwordHash = await bcrypt.hash(this.passwordHash, 10);
       }
-    }
-
-    // --------------------------------------------------------
-    // Onboarding Flags
-    // --------------------------------------------------------
-
-    if (this.companyId) {
-      this.companyCreated = true;
-    }
-
-    if (this.branchId) {
-      this.branchCreated = true;
-    }
-
-    if (this.financialYearId) {
-      this.financialYearCreated = true;
     }
 
     next();

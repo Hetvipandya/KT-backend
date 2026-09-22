@@ -72,6 +72,7 @@
 
 const jwt = require("jsonwebtoken");
 const User = require("../models/User");
+const FinanceUser = require("../models/FinanceUser");
 
 exports.protect = async (req, res, next) => {
   try {
@@ -140,6 +141,11 @@ exports.protect = async (req, res, next) => {
         success: false,
         message: "User account disabled",
       });
+    }
+
+    const financeUser = await FinanceUser.findOne({ userId: user._id }).lean();
+    if (financeUser) {
+      Object.assign(user, financeUser);
     }
 
     // ================= ATTACH USER =================
