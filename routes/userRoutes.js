@@ -95,10 +95,17 @@ router.put(
   resetPassword
 ); //done 
 
-router.post(
-  "/reset-password",
-  resetPassword
-);
+router.post("/reset-password", (req, res, next) => {
+  const hasLoginToken = (req.headers.authorization || "").startsWith("Bearer ");
+  const isAuthenticatedPasswordChange =
+    hasLoginToken && !req.body.email && !req.body.token;
+
+  if (isAuthenticatedPasswordChange) {
+    return protect(req, res, () => changePassword(req, res, next));
+  }
+
+  return resetPassword(req, res, next);
+});
 
 // ================= CHANGE PASSWORD =================
 router.put( 
