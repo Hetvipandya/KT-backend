@@ -103,11 +103,13 @@ router.post(
 // ================= CHANGE PASSWORD =================
 router.put( 
   "/change-password",
+  protect,
   changePassword
 ); //done
 
 router.post(
   "/change-password",
+  protect,
   changePassword
 );
 

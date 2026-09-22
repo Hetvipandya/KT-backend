@@ -1695,18 +1695,21 @@ const loginUser = async (req, res) => {
 // CHANGE PASSWORD
 // ============================================================
 
-const changePassword = async (req, res) => {
+const changePassword = async (req, res) => { 
   try {
-    const { userId, oldPassword, newPassword } = req.body;
+    const { userId, oldPassword, currentPassword, newPassword } = req.body;
+    const authenticatedUserId = req.user?._id;
+    const requestedUserId = authenticatedUserId || userId;
+    const passwordToVerify = oldPassword || currentPassword;
 
-    if (!userId || !oldPassword || !newPassword) {
+    if (!requestedUserId || !passwordToVerify || !newPassword) {
       return res.status(400).json({
         success: false,
-        message: "userId, oldPassword and newPassword are required",
+        message: "Current password and new password are required",
       });
     }
 
-    const user = await User.findById(userId);
+    const user = await User.findById(requestedUserId).select("+passwordHash");
 
     if (!user) {
       return res.status(404).json({
@@ -1715,7 +1718,7 @@ const changePassword = async (req, res) => {
       });
     }
 
-    const isMatch = await user.comparePassword(oldPassword);
+    const isMatch = await user.comparePassword(passwordToVerify);
 
     if (!isMatch) {
       return res.status(400).json({
@@ -1729,6 +1732,7 @@ const changePassword = async (req, res) => {
     user.plainPassword = null;
 
     user.isFirstLogin = false;
+    user.mustChangePassword = false;
 
     await user.save();
 
