@@ -1245,8 +1245,8 @@ const registerUser = async (req, res) => {
 
       role: normalizedRole,
 
-      // Registration credentials must be usable immediately after the email is sent.
-      isApproved: true,
+      // Employee, intern, and team lead accounts require admin approval.
+      isApproved: false,
 
       isFirstLogin: true,
 
