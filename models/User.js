@@ -23,56 +23,53 @@ const userSchema =
 
       phoneNumber: {
         type: String,
-        required: function () {
-          return this.role !== "admin";
-        },
+        default: null,
         unique: true,
         sparse: true,
         trim: true,
+        set: (value) => {
+          if (value === undefined || value === null || value === "") {
+            return null;
+          }
+
+          return String(value).trim();
+        },
       },
 
       dob: {
         type: String,
-        required: function () {
-          return this.role !== "admin";
-        },
+        default: null,
+        trim: true,
       },
 
       address: {
         type: String,
-        required: function () {
-          return this.role !== "admin";
-        },
+        default: null,
+        trim: true,
       },
 
       department: {
         type: String,
-        required: function () {
-          return this.role !== "admin";
-        },
+        default: null,
+        trim: true,
       },
 
       designation: {
         type: String,
-        required: function () {
-          return this.role !== "admin";
-        },
+        default: null,
         trim: true,
       },
 
       gender: {
         type: String,
-        required: function () {
-          return this.role !== "admin";
-        },
+        default: null,
         trim: true,
       },
 
       bloodGroup: {
         type: String,
-        required: function () {
-          return this.role !== "admin";
-        },
+        default: null,
+        trim: true,
       },
 
       uniqueID: {
