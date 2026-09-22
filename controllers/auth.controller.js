@@ -1,4 +1,5 @@
 const User = require("../models/User");
+const FinanceUser = require("../models/FinanceUser");
 const { hashPassword, comparePassword, hashSha256 } = require("../utils/hash");
 const {
   createSession,
@@ -87,6 +88,21 @@ const register = async (req, res, next) => {
       emailVerificationExpires,
     });
 
+    let financeUser;
+    try {
+      financeUser = await FinanceUser.create({
+        userId: newUser._id,
+        role: role || "admin",
+        companyId: null,
+        branchId: null,
+        financialYearId: null,
+        companyAccess: [],
+      });
+    } catch (financeError) {
+      await User.findByIdAndDelete(newUser._id);
+      throw financeError;
+    }
+
     // Send verification email (non-blocking — do not fail register if email fails)
     sendVerificationEmail(newUser.email, plainVerificationToken).catch(
       (err) => {
@@ -105,7 +121,9 @@ const register = async (req, res, next) => {
         "Registered successfully. Please check your email to verify your account.",
       data: {
         userId: newUser._id,
+        financeUserId: financeUser._id,
         email: newUser.email,
+        role: financeUser.role,
       },
     });
   } catch (error) {

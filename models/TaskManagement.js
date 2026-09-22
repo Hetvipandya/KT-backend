@@ -53,7 +53,7 @@ const taskManagementSchema =
       },
 
       // Due Date
-      dueDate: {
+      dueDate: { 
         type: Date,
         required: true,
       },

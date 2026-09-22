@@ -1,4 +1,3 @@
-const User = require('../models/User');
 const FinanceUser = require('../models/FinanceUser');
 const Company = require('../models/Company');
 const userService = require('../services/user.service');
@@ -8,7 +7,7 @@ const { inviteUserSchema, updateUserSchema } = require('../validators/user.valid
 // POST /api/user — Invite / add a user to a company
 // ─────────────────────────────────────────────────────────────────────────────
 
-const inviteUser = async (req, res, next) => {
+const inviteUser = async (req, res, next) => { 
   try {
     const parsed = inviteUserSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -63,7 +62,10 @@ const inviteUser = async (req, res, next) => {
 
     const { isNewUser, user } = result;
 
-    const financeUser = await FinanceUser.findOne({ userId: user._id }).lean();
+    const financeUser = await FinanceUser.findOne({ userId: user._id })
+      .populate('userId', 'name email phoneNumber')
+      .lean();
+    const financeIdentity = financeUser?.userId || user;
     const assignedBranchId = branchId || financeUser?.branchId;
     let branchName = null;
     if (assignedBranchId) {
@@ -78,9 +80,9 @@ const inviteUser = async (req, res, next) => {
         ? 'User invited successfully. An email has been sent.'
         : 'Existing user granted access to this company.',
       data: {
-        userId: user._id,
-        email: user.email,
-        phoneNumber: user.phoneNumber || null,
+        userId: financeIdentity._id,
+        email: financeIdentity.email,
+        phoneNumber: financeIdentity.phoneNumber || null,
         companyId,
         branchId: assignedBranchId ? assignedBranchId.toString() : null,
         branchName: branchName || null,
@@ -117,19 +119,6 @@ const listUsers = async (req, res, next) => {
       });
     }
 
-    // Optional name/email search
-    let searchFilter = {};
-
-    if (search) {
-      const regex = new RegExp(search, "i");
-      searchFilter = {
-        $or: [
-          { name: regex },
-          { email: regex }
-        ]
-      };
-    }
-
     const financeFilter = {
       $or: [
         { companyId },
@@ -145,25 +134,20 @@ const listUsers = async (req, res, next) => {
     };
 
     const financeUsers = await FinanceUser.find(financeFilter)
+      .populate('userId', 'name email phoneNumber')
       .skip((page - 1) * limit)
       .limit(limit)
       .lean();
 
-    const userIds = financeUsers.map((financeUser) => financeUser.userId);
-    const users = await User.find({
-      _id: { $in: userIds },
-      ...searchFilter
-    }).lean();
-    const usersById = new Map(users.map((user) => [user._id.toString(), user]));
     const usersWithFinance = financeUsers
       .map((financeUser) => ({
-        ...(usersById.get(financeUser.userId.toString()) || {}),
+        ...(financeUser.userId || {}),
         ...financeUser,
-        _id: financeUser.userId,
+        _id: financeUser.userId?._id || financeUser.userId,
         companyId: financeUser.companyId,
         branchId: financeUser.branchId,
       }))
-      .filter((user) => user.name || user.email);
+      .filter((user) => (!search || new RegExp(search, 'i').test(user.name || '') || new RegExp(search, 'i').test(user.email || '')) && (user.name || user.email));
 
     const total = await FinanceUser.countDocuments(financeFilter);
 
@@ -229,8 +213,11 @@ const updateUser = async (req, res, next) => {
       }
     }
 
-    const targetUser = await User.findById(targetUserId);
-    if (!targetUser) {
+    const financeUser = await FinanceUser.findOne({ userId: targetUserId })
+      .populate('userId', 'name email phoneNumber role companyId branchId companyCreated companyAccess')
+      .exec();
+    const targetUser = financeUser?.userId;
+    if (!financeUser || !targetUser) {
       return res.status(404).json({
         success: false,
         message: 'User not found',
@@ -239,37 +226,20 @@ const updateUser = async (req, res, next) => {
     }
 
     // Find the companyAccess entry for this company
-    let accessEntry = targetUser.companyAccess.find(
+    let accessEntry = financeUser.companyAccess.find(
       (a) => a.companyId.toString() === companyId.toString()
     );
     if (!accessEntry) {
-      const isOwner = targetUser.companyCreated && targetUser.companyId && targetUser.companyId.toString() === companyId.toString();
-      const isLegacyMember = targetUser.companyId && targetUser.companyId.toString() === companyId.toString();
-      if (isOwner || isLegacyMember) {
-        targetUser.companyAccess.push({
-          companyId,
-          branchId: branchId || null,
-          role: role || (isOwner ? 'Admin' : 'employee'),
-          isActive: isActive !== undefined ? isActive : true,
-          invitedAt: new Date(),
-          joinedAt: new Date()
-        });
-        accessEntry = targetUser.companyAccess.find(
-          (a) => a.companyId.toString() === companyId.toString()
-        );
-      } else {
-        return res.status(404).json({
-          success: false,
-          message: 'This user does not have access to the specified company',
-          errorCode: 'ACCESS_ENTRY_NOT_FOUND'
-        });
-      }
+      return res.status(404).json({
+        success: false,
+        message: 'This user does not have access to the specified company',
+        errorCode: 'ACCESS_ENTRY_NOT_FOUND'
+      });
     }
 
     // Self-lockout guard
     if (isActive === false) {
-      const callerUser = await User.findById(req.user._id);
-      if (userService.wouldSelfLockout(callerUser, targetUserId, companyId)) {
+      if (userService.wouldSelfLockout(req.user, targetUserId, companyId)) {
         return res.status(400).json({
           success: false,
           message: 'Cannot deactivate your own only remaining company access',
@@ -286,8 +256,7 @@ const updateUser = async (req, res, next) => {
     if (branchId !== undefined) {
       const finalBranchId = branchId ? branchId : null;
       accessEntry.branchId = finalBranchId;
-      targetUser.branchId = finalBranchId;
-      targetUser.markModified('companyAccess');
+      financeUser.branchId = finalBranchId;
     }
     if (isActive !== undefined) accessEntry.isActive = isActive;
 
@@ -297,12 +266,13 @@ const updateUser = async (req, res, next) => {
       targetUser.phoneNumber = phoneNumber ?? phone;
     }
 
+    await financeUser.save();
     await targetUser.save();
 
     const { invalidateUserCache } = require('../middleware/authenticate');
     invalidateUserCache(targetUserId);
 
-    const assignedBranchId = accessEntry.branchId || targetUser.branchId;
+    const assignedBranchId = accessEntry.branchId || financeUser.branchId || targetUser.branchId;
     let branchName = null;
     if (assignedBranchId) {
       const Branch = require('../models/Branch');
@@ -346,8 +316,11 @@ const getUserById = async (req, res, next) => {
       });
     }
 
-    const targetUser = await User.findById(targetUserId).lean();
-    if (!targetUser) {
+    const financeUser = await FinanceUser.findOne({ userId: targetUserId })
+      .populate('userId', 'name email phoneNumber role companyId branchId companyCreated companyAccess')
+      .lean();
+    const targetUser = financeUser?.userId;
+    if (!financeUser || !targetUser) {
       return res.status(404).json({
         success: false,
         message: 'User not found',
@@ -355,11 +328,11 @@ const getUserById = async (req, res, next) => {
       });
     }
 
-    const accessEntry = (targetUser.companyAccess || []).find(
+    const accessEntry = (financeUser.companyAccess || []).find(
       (a) => a.companyId.toString() === companyId.toString()
     );
 
-    const assignedBranchId = accessEntry?.branchId || targetUser.branchId;
+    const assignedBranchId = accessEntry?.branchId || financeUser.branchId;
     let branchName = null;
     if (assignedBranchId) {
       const Branch = require('../models/Branch');
@@ -398,8 +371,10 @@ const revokeAccess = async (req, res, next) => {
       });
     }
 
-    const targetUser = await User.findById(targetUserId);
-    if (!targetUser) {
+    const financeUser = await FinanceUser.findOne({ userId: targetUserId })
+      .populate('userId', 'name email phoneNumber')
+      .exec();
+    if (!financeUser) {
       return res.status(404).json({
         success: false,
         message: 'User not found',
@@ -407,7 +382,7 @@ const revokeAccess = async (req, res, next) => {
       });
     }
 
-    const accessEntry = targetUser.companyAccess.find(
+    const accessEntry = financeUser.companyAccess.find(
       (a) => a.companyId.toString() === companyId.toString()
     );
     if (!accessEntry) {
@@ -419,8 +394,7 @@ const revokeAccess = async (req, res, next) => {
     }
 
     // Self-lockout guard
-    const callerUser = await User.findById(req.user._id);
-    if (userService.wouldSelfLockout(callerUser, targetUserId, companyId)) {
+    if (userService.wouldSelfLockout(req.user, targetUserId, companyId)) {
       return res.status(400).json({
         success: false,
         message: 'Cannot deactivate your own only remaining company access',
@@ -430,7 +404,7 @@ const revokeAccess = async (req, res, next) => {
 
     // Soft revoke — preserve the user and their history
     accessEntry.isActive = false;
-    await targetUser.save();
+    await financeUser.save();
 
     return res.status(200).json({
       success: true,

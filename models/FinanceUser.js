@@ -9,7 +9,7 @@ const companyAccessSchema = new mongoose.Schema(
     invitedAt: { type: Date, default: null },
     inviteSent: { type: Boolean, default: false },
     joinedAt: { type: Date, default: null },
-  },
+  }, 
   { _id: true },
 ); 
 

@@ -17,6 +17,7 @@ const registerSchema = z.object({
   role: z.enum(['admin', 'hr', 'employee', 'intern', 'teamlead', 'team lead']).optional().default('admin')
 }).strict();
 
+
 const loginSchema = z.object({
   email: z.string({ required_error: 'email is required' }).email('invalid email address'),
   password: z.string({ required_error: 'password is required' }).min(1, 'password cannot be empty')
