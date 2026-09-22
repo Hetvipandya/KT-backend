@@ -12,7 +12,8 @@ const registerSchema = z.object({
   password: z.string({ required_error: 'password is required' })
     .min(8, 'password must be at least 8 characters')
     .regex(passwordRegex, 'password must contain at least one letter and one number'),
-  phone: z.string().regex(phoneRegex, 'phone must be in E.164 format (e.g., +1234567890)').optional()
+  phone: z.string().regex(phoneRegex, 'phone must be in E.164 format (e.g., +1234567890)').optional(),
+  phoneNumber: z.string().regex(phoneRegex, 'phoneNumber must be in E.164 format (e.g., +1234567890)').optional()
 }).strict();
 
 const loginSchema = z.object({

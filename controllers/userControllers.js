@@ -276,6 +276,7 @@ const inviteUser = async (req, res, next) => {
 
     const {
       companyId,
+      branchId,
       name,
       email,
       phone,
