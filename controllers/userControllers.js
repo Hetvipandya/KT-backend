@@ -1898,7 +1898,9 @@ const resetPassword = async (req, res) => {
       const authorization = req.headers.authorization || "";
       const accessToken = authorization.startsWith("Bearer ")
         ? authorization.slice(7)
-        : null;
+        : req.headers["x-access-token"] ||
+          req.body.accessToken ||
+          (!email ? token : null);
 
       if (!accessToken) {
         return res.status(401).json({
