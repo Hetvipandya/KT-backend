@@ -276,10 +276,10 @@ const inviteUser = async (req, res, next) => {
 
     const {
       companyId,
-      branchId,
       name,
       email,
       phone,
+      phoneNumber,
       role,
       sendTemporaryPassword,
     } = parsed.data;
@@ -341,7 +341,7 @@ const inviteUser = async (req, res, next) => {
         branchId,
         name,
         email,
-        phone,
+        phoneNumber: phoneNumber ?? phone,
         role,
         companyName: company.name,
         sendTemporaryPassword,
@@ -390,6 +390,8 @@ const inviteUser = async (req, res, next) => {
         userId: user._id,
 
         email: user.email,
+
+        phoneNumber: user.phoneNumber || null,
 
         companyId,
 
@@ -647,7 +649,7 @@ const updateUser = async (req, res, next) => {
       });
     }
 
-    const { companyId, branchId, role, isActive, name, phone } = parsed.data;
+    const { companyId, branchId, role, isActive, name, phone, phoneNumber } = parsed.data;
 
     const targetUserId = req.params.id;
 
@@ -780,8 +782,8 @@ const updateUser = async (req, res, next) => {
       targetUser.name = name;
     }
 
-    if (phone !== undefined) {
-      targetUser.phone = phone;
+    if (phone !== undefined || phoneNumber !== undefined) {
+      targetUser.phoneNumber = phoneNumber ?? phone;
     }
 
     await targetUser.save();

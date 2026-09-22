@@ -21,6 +21,7 @@ const inviteUserSchema = z.object({
     .toLowerCase()
     .email('Invalid email format'),
   phone: z.string().trim().optional().or(z.literal('')),
+  phoneNumber: z.string().trim().optional().or(z.literal('')),
   role: z
     .string({ required_error: 'role is required' })
     .trim()
@@ -40,7 +41,8 @@ const updateUserSchema = z.object({
   role: z.string().trim().min(1).optional(),
   isActive: z.boolean().optional(),
   name: z.string().trim().min(1).optional(),
-  phone: z.string().trim().optional().or(z.literal(''))
+  phone: z.string().trim().optional().or(z.literal('')),
+  phoneNumber: z.string().trim().optional().or(z.literal(''))
 }).strict();
 
 module.exports = {

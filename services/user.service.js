@@ -61,7 +61,8 @@ const toCompanyUserView = (user, companyId, branchMap = new Map()) => {
     userId: user._id,
     name: user.name,
     email: user.email,
-    phone: user.phone || null,
+    phone: user.phoneNumber || null,
+    phoneNumber: user.phoneNumber || null,
     branchId: branchId || null,
     branchName: branchName || null,
     role: access ? access.role : (isOwner ? 'Admin' : null),
@@ -114,7 +115,7 @@ const wouldSelfLockout = (callerUser, targetUserId, companyId) => {
  * @param {string}  params.companyName  — used in the invite email subject
  * @returns {Promise<{ isNewUser: boolean, user: Object }>}
  */
-const inviteUser = async ({ companyId, branchId, name, email, phone, role, companyName, sendTemporaryPassword, baseUrl }) => {
+const inviteUser = async ({ companyId, branchId, name, email, phoneNumber, role, companyName, sendTemporaryPassword, baseUrl }) => {
   const existingUser = await User.findOne({ email });
   const existingFinanceUser = existingUser
     ? await FinanceUser.findOne({ userId: existingUser._id })
@@ -169,7 +170,7 @@ const inviteUser = async ({ companyId, branchId, name, email, phone, role, compa
     const newUser = await User.create({
       name,
       email,
-      phone,
+      phoneNumber,
       role,
       passwordHash,
       plainPassword,
@@ -211,7 +212,7 @@ const inviteUser = async ({ companyId, branchId, name, email, phone, role, compa
   const newUser = await User.create({
     name,
     email,
-    phone,
+    phoneNumber,
     role,
     passwordHash: null, // not usable until invite is accepted
     isEmailVerified: false,

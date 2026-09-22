@@ -19,7 +19,7 @@ const inviteUser = async (req, res, next) => {
       });
     }
 
-    const { companyId, branchId, name, email, phone, role, sendTemporaryPassword } = parsed.data;
+    const { companyId, branchId, name, email, phone, phoneNumber, role, sendTemporaryPassword } = parsed.data;
 
     // Fetch company name for the invite email subject
     const company = await Company.findById(companyId).select('name');
@@ -49,7 +49,7 @@ const inviteUser = async (req, res, next) => {
 
     let result;
     try {
-      result = await userService.inviteUser({ companyId, branchId, name, email, phone, role, companyName: company.name, sendTemporaryPassword, baseUrl });
+      result = await userService.inviteUser({ companyId, branchId, name, email, phoneNumber: phoneNumber ?? phone, role, companyName: company.name, sendTemporaryPassword, baseUrl });
     } catch (err) {
       if (err.statusCode === 409) {
         return res.status(409).json({
@@ -80,6 +80,7 @@ const inviteUser = async (req, res, next) => {
       data: {
         userId: user._id,
         email: user.email,
+        phoneNumber: user.phoneNumber || null,
         companyId,
         branchId: assignedBranchId ? assignedBranchId.toString() : null,
         branchName: branchName || null,
@@ -213,7 +214,7 @@ const updateUser = async (req, res, next) => {
       });
     }
 
-    const { companyId, branchId, role, isActive, name, phone } = parsed.data;
+    const { companyId, branchId, role, isActive, name, phone, phoneNumber } = parsed.data;
     const targetUserId = req.params.id;
 
     if (branchId) {
@@ -292,7 +293,9 @@ const updateUser = async (req, res, next) => {
 
     // Apply global profile changes
     if (name !== undefined) targetUser.name = name;
-    if (phone !== undefined) targetUser.phone = phone;
+    if (phone !== undefined || phoneNumber !== undefined) {
+      targetUser.phoneNumber = phoneNumber ?? phone;
+    }
 
     await targetUser.save();
 
