@@ -1149,6 +1149,8 @@ const registerUser = async (req, res) => {
 
     const normalizedEmail = email.trim().toLowerCase();
 
+    const normalizedPhoneNumber = phoneNumber.trim();
+
     // --------------------------------------------------------
     // CHECK EXISTING USER
     // --------------------------------------------------------
@@ -1159,7 +1161,7 @@ const registerUser = async (req, res) => {
           email: normalizedEmail,
         },
         {
-          phone: phoneNumber,
+          phoneNumber: normalizedPhoneNumber,
         },
       ],
     });
@@ -1186,7 +1188,10 @@ const registerUser = async (req, res) => {
     let nextNumber = 1001;
 
     if (lastUser && lastUser.uniqueID) {
-      const lastNumber = parseInt(lastUser.uniqueID.replace("NEW", ""), 10);
+      const lastNumber = parseInt(
+        lastUser.uniqueID.replace("NEW", ""),
+        10
+      );
 
       if (!isNaN(lastNumber)) {
         nextNumber = lastNumber + 1;
@@ -1196,7 +1201,7 @@ const registerUser = async (req, res) => {
     const uniqueID = `NEW${nextNumber}`;
 
     // --------------------------------------------------------
-    // GENERATE PASSWORD
+    // GENERATE TEMPORARY PASSWORD
     // --------------------------------------------------------
 
     const generatedPassword = crypto
@@ -1214,13 +1219,15 @@ const registerUser = async (req, res) => {
 
       email: normalizedEmail,
 
-      phone: phoneNumber,
+      // IMPORTANT:
+      // Schema field is phoneNumber, NOT phone
+      phoneNumber: normalizedPhoneNumber,
 
       dob,
 
-      address,
+      address: address.trim(),
 
-      department,
+      department: department.trim(),
 
       designation:
         designation ||
@@ -1234,18 +1241,27 @@ const registerUser = async (req, res) => {
 
       bloodGroup,
 
-      bankAccountNumber: bankAccountNumber || null,
+      bankAccountNumber:
+        bankAccountNumber || null,
 
-      ifscCode: ifscCode ? ifscCode.trim().toUpperCase() : null,
+      ifscCode: ifscCode
+        ? ifscCode.trim().toUpperCase()
+        : null,
 
       uniqueID,
 
-      passwordHash: generatedPassword,
+      // IMPORTANT:
+      // Schema expects "password".
+      // Mongoose pre-save middleware will bcrypt hash it.
+      password: generatedPassword,
+
+      // Keep this only if your existing system needs it.
       plainPassword: generatedPassword,
 
       role: normalizedRole,
 
-      // Employee, intern, and team lead accounts require admin approval.
+      // Employee, intern and team lead accounts
+      // require admin approval.
       isApproved: false,
 
       isFirstLogin: true,
@@ -1259,17 +1275,25 @@ const registerUser = async (req, res) => {
 
     let employee = null;
 
-    if (normalizedRole === "employee" || normalizedRole === "team lead") {
+    if (
+      normalizedRole === "employee" ||
+      normalizedRole === "team lead"
+    ) {
       try {
         employee = await createEmployeeForUser(user);
       } catch (employeeError) {
-        console.error("Employee creation failed:", employeeError);
+        console.error(
+          "Employee creation failed:",
+          employeeError
+        );
 
+        // Rollback user if employee creation fails
         await User.findByIdAndDelete(user._id);
 
         return res.status(500).json({
           success: false,
-          message: "Employee registration failed. User was not created.",
+          message:
+            "Employee registration failed. User was not created.",
           error: employeeError.message,
         });
       }
@@ -1280,7 +1304,10 @@ const registerUser = async (req, res) => {
     // --------------------------------------------------------
 
     try {
-      if (process.env.EMAIL_USER && process.env.ADMIN_EMAIL) {
+      if (
+        process.env.EMAIL_USER &&
+        process.env.ADMIN_EMAIL
+      ) {
         await transporter.sendMail({
           from: process.env.EMAIL_USER,
 
@@ -1303,7 +1330,7 @@ const registerUser = async (req, res) => {
 
             <p>
               <b>Phone:</b>
-              ${user.phone}
+              ${user.phoneNumber}
             </p>
 
             <p>
@@ -1340,13 +1367,27 @@ const registerUser = async (req, res) => {
         });
       }
     } catch (emailError) {
-      console.error("Admin email error:", emailError.message);
+      console.error(
+        "Admin email error:",
+        emailError.message
+      );
     }
 
+    // --------------------------------------------------------
+    // SEND TEMPORARY PASSWORD EMAIL
+    // --------------------------------------------------------
+
     try {
-      await sendTemporaryPasswordEmail(user.email, generatedPassword, "Kevalon Technology");
+      await sendTemporaryPasswordEmail(
+        user.email,
+        generatedPassword,
+        "Kevalon Technology"
+      );
     } catch (emailError) {
-      console.error("User password email error:", emailError.message);
+      console.error(
+        "User password email error:",
+        emailError.message
+      );
     }
 
     // --------------------------------------------------------
@@ -1356,7 +1397,8 @@ const registerUser = async (req, res) => {
     return res.status(201).json({
       success: true,
 
-      message: "Registration successful. Login credentials have been sent to your email.",
+      message:
+        "Registration successful. Login credentials have been sent to your email.",
 
       credentials: {
         uniqueID,
@@ -1369,11 +1411,17 @@ const registerUser = async (req, res) => {
 
         email: user.email,
 
+        phoneNumber: user.phoneNumber,
+
         uniqueID: user.uniqueID,
 
         role: user.role,
 
         isApproved: user.isApproved,
+
+        isFirstLogin: user.isFirstLogin,
+
+        isActive: user.isActive,
       },
 
       employee: employee
@@ -1395,7 +1443,8 @@ const registerUser = async (req, res) => {
 
     return res.status(500).json({
       success: false,
-      message: error.message || "Registration failed",
+      message:
+        error.message || "Registration failed",
     });
   }
 };
