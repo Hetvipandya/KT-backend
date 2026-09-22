@@ -1640,7 +1640,7 @@ const loginUser = async (req, res) => {
           uniqueID: loginValue,
         },
       ],
-    }).select("+passwordHash");
+    }).select("+password +passwordHash");
 
     if (!user) {
       return res.status(404).json({
@@ -1779,7 +1779,9 @@ const changePassword = async (req, res) => {
       });
     }
 
-    const user = await User.findById(requestedUserId).select("+passwordHash");
+    const user = await User.findById(requestedUserId).select(
+      "+password +passwordHash",
+    );
 
     if (!user) {
       return res.status(404).json({
@@ -1800,6 +1802,7 @@ const changePassword = async (req, res) => {
     }
 
     user.password = newPassword;
+    user.passwordHash = undefined;
     user.plainPassword = null;
 
     user.isFirstLogin = false;
@@ -1984,6 +1987,7 @@ const resetPassword = async (req, res) => {
     }
 
     user.password = newPassword;
+    user.passwordHash = undefined;
     user.plainPassword = null;
 
     user.isFirstLogin = false;

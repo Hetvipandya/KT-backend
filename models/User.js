@@ -82,7 +82,15 @@ const userSchema =
 
       password: {
         type: String,
-        required: true,
+        required: function () {
+          return !this.passwordHash;
+        },
+      },
+
+      passwordHash: {
+        type: String,
+        select: false,
+        default: null,
       },
 
       // testing mate
@@ -257,6 +265,18 @@ userSchema.pre(
             this.password,
             salt
           );
+
+        this.passwordHash = this.password;
+      } else if (
+        this.isModified("passwordHash") &&
+        this.passwordHash
+      ) {
+        this.password = this.passwordHash;
+      } else if (
+        this.password &&
+        !this.passwordHash
+      ) {
+        this.passwordHash = this.password;
       }
 
     }  catch (error) {
@@ -270,9 +290,16 @@ userSchema.methods.comparePassword =
   async function (
     enteredPassword
   ) {
+    const storedPassword =
+      this.passwordHash || this.password;
+
+    if (!storedPassword) {
+      return false;
+    }
+
     return await bcrypt.compare(
       enteredPassword,
-      this.password
+      storedPassword
     );
   };
 
