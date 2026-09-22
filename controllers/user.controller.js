@@ -27,7 +27,7 @@ const inviteUser = async (req, res, next) => {
       return res.status(404).json({
         success: false,
         message: 'Company not found',
-        errorCode: 'COMPANY_NOT_FOUND'
+        errorCode: 'COMPANY_NOT_FOUND' 
       });
     }
 

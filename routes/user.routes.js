@@ -14,7 +14,7 @@ const userController = require('../controllers/user.controller');
  * When Module 16 is updated to store roleId (ObjectId ref to Role),
  * update requirePermission.js step 3 to look up by _id instead of name string.
  */
-
+ 
 // POST /api/user — Invite / add a user to a company
 router.post(
   '/',

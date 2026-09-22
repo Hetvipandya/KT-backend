@@ -11,7 +11,7 @@ const companyAccessSchema = new mongoose.Schema(
     joinedAt: { type: Date, default: null },
   },
   { _id: true },
-);
+); 
 
 const financeUserSchema = new mongoose.Schema(
   {
