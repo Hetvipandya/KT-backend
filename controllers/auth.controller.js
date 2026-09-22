@@ -53,6 +53,20 @@ const maskEmail = (email) => {
   return `${maskedName}@${domain}`;
 };
 
+const ensureFinanceUser = async (user, role) => {
+  const existingFinanceUser = await FinanceUser.findOne({ userId: user._id });
+  if (existingFinanceUser) return existingFinanceUser;
+
+  return FinanceUser.create({
+    userId: user._id,
+    role: user.role || role || "admin",
+    companyId: null,
+    branchId: null,
+    financialYearId: null,
+    companyAccess: [],
+  });
+};
+
 /**
  * POST /api/auth/register
  */
@@ -63,6 +77,7 @@ const register = async (req, res, next) => {
     // Check if email already exists
     const existingUser = await User.findOne({ email });
     if (existingUser) {
+      await ensureFinanceUser(existingUser, role);
       return res.status(409).json({
         success: false,
         message: "Email address is already registered",
@@ -90,14 +105,7 @@ const register = async (req, res, next) => {
 
     let financeUser;
     try {
-      financeUser = await FinanceUser.create({
-        userId: newUser._id,
-        role: role || "admin",
-        companyId: null,
-        branchId: null,
-        financialYearId: null,
-        companyAccess: [],
-      });
+      financeUser = await ensureFinanceUser(newUser, role);
     } catch (financeError) {
       await User.findByIdAndDelete(newUser._id);
       throw financeError;
