@@ -1861,26 +1861,62 @@ const forgotPassword = async (req, res) => {
 
 const resetPassword = async (req, res) => {
   try {
-    const { email, token, newPassword } = req.body;
+    const { email, token, newPassword, confirmPassword } = req.body;
 
-    if (!email || !token || !newPassword) {
+    if (!newPassword) {
       return res.status(400).json({
         success: false,
-        message: "Email, token and new password are required",
+        message: "New password is required",
       });
     }
 
-    const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
+    if (confirmPassword !== undefined && newPassword !== confirmPassword) {
+      return res.status(400).json({
+        success: false,
+        message: "New password and confirm password do not match",
+      });
+    }
 
-    const user = await User.findOne({
-      email: email.trim().toLowerCase(),
+    let user;
 
-      passwordResetTokenHash: tokenHash,
+    if (email && token) {
+      const tokenHash = crypto
+        .createHash("sha256")
+        .update(token)
+        .digest("hex");
 
-      passwordResetExpires: {
-        $gt: new Date(),
-      },
-    });
+      user = await User.findOne({
+        email: email.trim().toLowerCase(),
+
+        passwordResetTokenHash: tokenHash,
+
+        passwordResetExpires: {
+          $gt: new Date(),
+        },
+      });
+    } else {
+      const authorization = req.headers.authorization || "";
+      const accessToken = authorization.startsWith("Bearer ")
+        ? authorization.slice(7)
+        : null;
+
+      if (!accessToken) {
+        return res.status(401).json({
+          success: false,
+          message: "Email and reset token or a valid login token are required",
+        });
+      }
+
+      try {
+        const decoded = jwt.verify(accessToken, process.env.JWT_SECRET);
+        user = await User.findById(decoded.id);
+      } catch (error) {
+        return res.status(401).json({
+          success: false,
+          message: "Login token is invalid or expired",
+        });
+      }
+    }
 
     if (!user) {
       return res.status(400).json({
