@@ -3,6 +3,7 @@ const User = require("../models/User");
 const {
   buildLoginLookupQuery,
   __test__applyPasswordUpdate,
+  __test__applySuccessfulLoginState,
 } = require("../controllers/userControllers");
 
 describe("password safety for user updates", () => {
@@ -60,5 +61,24 @@ describe("password safety for user updates", () => {
 
     expect(user.password).toBe("NewPass456");
     expect(user.plainPassword).toBe("NewPass456");
+  });
+
+  it("does not force a password reset on ordinary successful logins for hr and team lead accounts", () => {
+    const user = new User({
+      name: "Riya Shah",
+      email: "riya@kevalon.com",
+      password: "ValidPass123",
+      role: "hr",
+      isApproved: true,
+      isActive: true,
+      mustChangePassword: false,
+      isFirstLogin: false,
+      lastLogin: new Date("2024-01-01T00:00:00.000Z"),
+    });
+
+    __test__applySuccessfulLoginState(user);
+
+    expect(user.mustChangePassword).toBe(false);
+    expect(user.isFirstLogin).toBe(false);
   });
 });

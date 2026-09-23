@@ -45,6 +45,31 @@ const applyPasswordUpdate = (user, newPassword) => {
   return user;
 };
 
+const applySuccessfulLoginState = (user, { deviceId = null } = {}) => {
+  if (!user) {
+    return user;
+  }
+
+  const shouldForcePasswordChange = Boolean(
+    user.mustChangePassword || user.isFirstLogin,
+  );
+
+  user.refreshToken = user.refreshToken || null;
+  user.deviceId = deviceId || user.deviceId || null;
+  user.lastLogin = new Date();
+  user.lastLoginAt = new Date();
+
+  if (shouldForcePasswordChange) {
+    user.isFirstLogin = true;
+    user.mustChangePassword = true;
+  } else {
+    user.isFirstLogin = false;
+    user.mustChangePassword = false;
+  }
+
+  return user;
+};
+
 const buildResetPasswordUrl = (req, token) => {
   const host = req.get("host");
 
@@ -1117,12 +1142,7 @@ const loginUser = async (req, res) => {
 
     user.lastLoginAt = new Date();
 
-    // Successful email/password login marks this as the first-login flow.
-    user.isFirstLogin = true;
-
-    if (!user.mustChangePassword) {
-      user.mustChangePassword = true;
-    }
+    applySuccessfulLoginState(user, { deviceId: deviceId || user.deviceId || null });
 
     await user.save();
 
@@ -1601,6 +1621,7 @@ const { sendOTP, verifyOTP } = require("./otpController");
 module.exports = {
   buildLoginLookupQuery,
   __test__applyPasswordUpdate: applyPasswordUpdate,
+  __test__applySuccessfulLoginState: applySuccessfulLoginState,
 
   // HRMS
   updateProfile,
