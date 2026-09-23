@@ -59,6 +59,20 @@ const normalizeRole = (role) => {
   return normalized;
 };
 
+const resolveProfileImage = (user) => {
+  if (!user) {
+    return "";
+  }
+
+  return (
+    user.profileImage ||
+    user.photo ||
+    user.imageUrl ||
+    user.avatar ||
+    ""
+  );
+};
+
 // ============================================================
 // EMPLOYEE ID GENERATOR
 // ============================================================
@@ -179,7 +193,9 @@ const createEmployeeForUser = async (user) => {
 
     email: user.email || "",
 
-    mobile: user.phone || "",
+    phoneNumber: user.phoneNumber || user.phone || "",
+
+    profileImage: resolveProfileImage(user),
 
     dob: user.dob || "",
 
@@ -199,7 +215,6 @@ const createEmployeeForUser = async (user) => {
     employeeStatus: "Active",
 
     isTeamLead: role === "team lead",
-      isTeamLead: role === "team lead",
   });
 
   return employee;
@@ -227,6 +242,8 @@ const syncUserToEmployee = async (user) => {
   employee.email = user.email || employee.email;
 
   employee.phoneNumber = user.phoneNumber || user.phone || employee.phoneNumber || "";
+
+  employee.profileImage = resolveProfileImage(user) || employee.profileImage || "";
 
   employee.dob = user.dob || employee.dob;
 
@@ -455,6 +472,7 @@ const registerUser = async (req, res) => {
       name,
       email,
       phoneNumber,
+      phone,
       dob,
       address,
       department,
@@ -464,16 +482,22 @@ const registerUser = async (req, res) => {
       bankAccountNumber,
       ifscCode,
       role,
+      profileImage,
+      photo,
+      imageUrl,
     } = req.body;
 
     // --------------------------------------------------------
     // VALIDATION
     // --------------------------------------------------------
 
+    const resolvedPhoneNumber = phoneNumber ?? phone ?? null;
+    const resolvedProfileImage = profileImage || photo || imageUrl || null;
+
     if (
       !name ||
       !email ||
-      !phoneNumber ||
+      !resolvedPhoneNumber ||
       !dob ||
       !address ||
       !department ||
@@ -514,7 +538,8 @@ const registerUser = async (req, res) => {
 
     const normalizedEmail = email.trim().toLowerCase();
 
-    const normalizedPhoneNumber = phoneNumber.trim();
+    const normalizedPhoneNumber = String(resolvedPhoneNumber).trim();
+    const normalizedProfileImage = resolvedProfileImage ? String(resolvedProfileImage).trim() : null;
 
     // --------------------------------------------------------
     // CHECK EXISTING USER
@@ -560,6 +585,8 @@ const registerUser = async (req, res) => {
       // IMPORTANT:
       // Schema field is phoneNumber, NOT phone
       phoneNumber: normalizedPhoneNumber,
+
+      profileImage: normalizedProfileImage,
 
       dob,
 
@@ -744,6 +771,7 @@ const registerUser = async (req, res) => {
 
         phoneNumber: user.phoneNumber,
 
+        profileImage: user.profileImage || null,
 
         role: user.role,
 

@@ -36,6 +36,12 @@ const userSchema =
         },
       },
 
+      profileImage: {
+        type: String,
+        default: null,
+        trim: true,
+      },
+
       dob: {
         type: String,
         default: null,
