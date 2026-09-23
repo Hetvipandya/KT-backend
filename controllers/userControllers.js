@@ -33,6 +33,22 @@ const buildLoginLookupQuery = (loginInput) => {
   };
 };
 
+const buildResetPasswordUrl = (req, token) => {
+  const host = req.get("host");
+
+  if (host) {
+    const protocol = host.includes("localhost") ? req.protocol : "https";
+    return `${protocol}://${host}/api/users/reset-password?token=${encodeURIComponent(token)}`;
+  }
+
+  const fallbackBase =
+    process.env.CLIENT_URL ||
+    process.env.FRONTEND_URL ||
+    "http://localhost:5000";
+
+  return `${fallbackBase.replace(/\/+$/, "")}/api/users/reset-password?token=${encodeURIComponent(token)}`;
+};
+
 // ============================================================
 // EMAIL CONFIGURATION
 // ============================================================
@@ -1243,12 +1259,7 @@ const forgotPassword = async (req, res) => {
 
     await user.save();
 
-    const frontendUrl =
-      process.env.CLIENT_URL ||
-      process.env.FRONTEND_URL ||
-      "http://localhost:3000";
-
-    const resetUrl = `${frontendUrl}/reset-password?token=${resetToken}&email=${encodeURIComponent(user.email)}`;
+    const resetUrl = `${buildResetPasswordUrl(req, resetToken)}&email=${encodeURIComponent(user.email)}`;
 
     try {
       const { subject, text, html } = buildResetPasswordEmailContent(
@@ -1265,7 +1276,7 @@ const forgotPassword = async (req, res) => {
           reset_link: resetUrl,
           link: resetUrl,
           company_name: "Kevalon Technology",
-          website_link: frontendUrl,
+          website_link: req.protocol + "://" + req.get("host"),
         },
       });
     } catch (emailError) {
@@ -1301,6 +1312,13 @@ const resetPassword = async (req, res) => {
       });
     }
 
+    if (!token) {
+      return res.status(400).json({
+        success: false,
+        message: "Reset token is required",
+      });
+    }
+
     if (confirmPassword !== undefined && newPassword !== confirmPassword) {
       return res.status(400).json({
         success: false,
@@ -1314,26 +1332,26 @@ const resetPassword = async (req, res) => {
       const normalizedEmail = email.trim().toLowerCase();
       const tokenHash = crypto
         .createHash("sha256")
-        .update(token)
+        .update(String(token).trim())
         .digest("hex");
 
       user = await User.findOne({
         email: normalizedEmail,
-        passwordResetTokenHash: tokenHash,
-        passwordResetExpires: {
-          $gt: new Date(),
-        },
-      }).select("+passwordResetTokenHash +passwordResetExpires +password +passwordHash");
-
-      if (!user) {
-        user = await User.findOne({
-          email: normalizedEmail,
-          resetPasswordToken: tokenHash,
-          resetPasswordExpires: {
-            $gt: new Date(),
+        $or: [
+          { passwordResetTokenHash: tokenHash },
+          { resetPasswordToken: tokenHash },
+        ],
+        $and: [
+          {
+            $or: [
+              { passwordResetExpires: { $gt: new Date() } },
+              { resetPasswordExpires: { $gt: new Date() } },
+            ],
           },
-        }).select("+resetPasswordToken +resetPasswordExpires +password +passwordHash");
-      }
+        ],
+      }).select(
+        "+passwordResetTokenHash +passwordResetExpires +resetPasswordToken +resetPasswordExpires +password +passwordHash",
+      );
     } else {
       const authorization = req.headers.authorization || "";
       const accessToken = authorization.startsWith("Bearer ")
