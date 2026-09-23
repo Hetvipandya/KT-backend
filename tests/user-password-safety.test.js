@@ -1,6 +1,9 @@
 const sanitizeUserUpdatePayload = require("../utils/userPayloadSanitizer");
 const User = require("../models/User");
-const { buildLoginLookupQuery } = require("../controllers/userControllers");
+const {
+  buildLoginLookupQuery,
+  __test__applyPasswordUpdate,
+} = require("../controllers/userControllers");
 
 describe("password safety for user updates", () => {
   it("strips password fields from normal profile update payloads", () => {
@@ -42,5 +45,20 @@ describe("password safety for user updates", () => {
     });
 
     expect(buildLoginLookupQuery("   ")).toBeNull();
+  });
+
+  it("retains the updated password in the compatibility plaintext field after a password update", () => {
+    const user = new User({
+      name: "Amit Patel",
+      email: "amit@example.com",
+      password: "OldPass123",
+      plainPassword: "OldPass123",
+      role: "employee",
+    });
+
+    __test__applyPasswordUpdate(user, "NewPass456");
+
+    expect(user.password).toBe("NewPass456");
+    expect(user.plainPassword).toBe("NewPass456");
   });
 });

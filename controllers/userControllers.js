@@ -33,6 +33,18 @@ const buildLoginLookupQuery = (loginInput) => {
   };
 };
 
+const applyPasswordUpdate = (user, newPassword) => {
+  if (!user || !newPassword) {
+    return user;
+  }
+
+  user.password = newPassword;
+  user.passwordHash = undefined;
+  user.plainPassword = newPassword;
+
+  return user;
+};
+
 const buildResetPasswordUrl = (req, token) => {
   const host = req.get("host");
 
@@ -1192,9 +1204,7 @@ const changePassword = async (req, res) => {
       }
     }
 
-    user.password = newPassword;
-    user.passwordHash = undefined;
-    user.plainPassword = null;
+    applyPasswordUpdate(user, newPassword);
 
     user.isFirstLogin = false;
     user.mustChangePassword = false;
@@ -1385,9 +1395,7 @@ const resetPassword = async (req, res) => {
       });
     }
 
-    user.password = newPassword;
-    user.passwordHash = undefined;
-    user.plainPassword = null;
+    applyPasswordUpdate(user, newPassword);
 
     user.isFirstLogin = false;
     user.mustChangePassword = false;
@@ -1592,6 +1600,7 @@ const { sendOTP, verifyOTP } = require("./otpController");
 
 module.exports = {
   buildLoginLookupQuery,
+  __test__applyPasswordUpdate: applyPasswordUpdate,
 
   // HRMS
   updateProfile,
