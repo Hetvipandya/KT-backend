@@ -20,22 +20,11 @@ const {
   renderResetPasswordPage,
   refreshUserToken,
   logoutUser,
-  // Finance
-  inviteUser,
-  listUsers,
-  getUserById,
-  updateUser,
-  revokeAccess,
 } = require(
   "../controllers/userControllers"
 );
 
 const { protect } = require("../middleware/authMiddleware");
-
-// ================= FINANCE USER MANAGEMENT =================
-router.post("/invite", protect, inviteUser);
-router.get("/company-users", protect, listUsers);
-
 
 router.put(
   "/profile/update",
@@ -138,11 +127,6 @@ router.get(
   "/all",
   getAllUsers
 ); //done
-
-// ================= SINGLE USER & ACCESS MANAGEMENT =================
-router.get("/:id", protect, getUserById);
-router.put("/:id", protect, updateUser);
-router.delete("/:id/access", protect, revokeAccess);
 
 module.exports =
   router;
