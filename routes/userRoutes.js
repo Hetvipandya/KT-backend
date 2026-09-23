@@ -17,7 +17,7 @@ const {
   verifyOTP,
   forgotPassword,
   resetPassword,
-  renderResetPasswordPage,
+  renderResetPasswordPage, 
   refreshUserToken,
   logoutUser,
 } = require(

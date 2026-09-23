@@ -14,7 +14,7 @@ const { sendTemporaryPasswordEmail } = require("../services/email.service");
 
 const transporter = nodemailer.createTransport({
   service: "gmail",
-
+ 
   auth: {
     user: process.env.EMAIL_USER,
     pass: process.env.EMAIL_PASS,
@@ -257,10 +257,13 @@ const syncUserToEmployee = async (user) => {
 
 const updateProfile = async (req, res) => {
   try {
+    const payload = req.body?.user || req.body;
+
     const {
       name,
       email,
       phoneNumber,
+      phone,
       dob,
       address,
       department,
@@ -269,7 +272,9 @@ const updateProfile = async (req, res) => {
       bloodGroup,
       bankAccountNumber,
       ifscCode,
-    } = req.body;
+    } = payload;
+
+    const resolvedPhoneNumber = phoneNumber ?? phone ?? null;
 
     const user = await User.findById(req.user._id);
 
@@ -305,9 +310,9 @@ const updateProfile = async (req, res) => {
     // PHONE DUPLICATE
     // --------------------------------------------------------
 
-    if (phoneNumber && phoneNumber !== user.phone) {
+    if (resolvedPhoneNumber && resolvedPhoneNumber !== user.phone) {
       const existingPhone = await User.findOne({
-        phone: phoneNumber,
+        phone: resolvedPhoneNumber,
 
         _id: {
           $ne: user._id,
@@ -334,8 +339,8 @@ const updateProfile = async (req, res) => {
       user.email = email.trim().toLowerCase();
     }
 
-    if (phoneNumber !== undefined) {
-      user.phone = phoneNumber;
+    if (resolvedPhoneNumber !== undefined && resolvedPhoneNumber !== null) {
+      user.phone = resolvedPhoneNumber;
     }
 
     if (dob !== undefined) {
