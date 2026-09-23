@@ -6,7 +6,13 @@ const jwt = require("jsonwebtoken");
 const crypto = require("crypto");
 const nodemailer = require("nodemailer");
 
-const { sendTemporaryPasswordEmail } = require("../services/email.service");
+const {
+  sendEmail,
+  sendTemporaryPasswordEmail,
+} = require("../services/email.service");
+const {
+  buildResetPasswordEmailContent,
+} = require("../services/email.templates");
 const sanitizeUserUpdatePayload = require("../utils/userPayloadSanitizer");
 
 const buildLoginLookupQuery = (loginInput) => {
@@ -1245,20 +1251,23 @@ const forgotPassword = async (req, res) => {
     const resetUrl = `${frontendUrl}/reset-password?token=${resetToken}&email=${encodeURIComponent(user.email)}`;
 
     try {
-      if (process.env.EMAIL_USER) {
-        await transporter.sendMail({
-          from: process.env.EMAIL_USER,
-          to: user.email,
-          subject: "Password Reset Request",
-          html: `
-            <h2>Password Reset</h2>
-            <p>Hello ${user.name || "there"},</p>
-            <p>Click the link below to reset your password.</p>
-            <p><a href="${resetUrl}">Reset Password</a></p>
-            <p>This link will expire in 30 minutes.</p>
-          `,
-        });
-      }
+      const { subject, text, html } = buildResetPasswordEmailContent(
+        user.name,
+        resetUrl,
+      );
+
+      await sendEmail({
+        to: user.email,
+        subject,
+        text,
+        html,
+        templateParams: {
+          reset_link: resetUrl,
+          link: resetUrl,
+          company_name: "Kevalon Technology",
+          website_link: frontendUrl,
+        },
+      });
     } catch (emailError) {
       console.error("Reset email error:", emailError.message);
     }

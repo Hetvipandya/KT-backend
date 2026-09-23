@@ -55,7 +55,24 @@ const buildTemporaryPasswordEmailContent = (inviterCompanyName, toEmail, tempora
   return { subject, text, html };
 };
 
+const buildResetPasswordEmailContent = (userName, resetUrl) => {
+  const subject = "Reset Your Password - Kevalon Technology";
+  const text = `Hello ${userName || "there"},\n\nWe received a request to reset your password.\n\nPlease click the link below to set a new password:\n\n${resetUrl}\n\nIf you did not request this, you can safely ignore this email.`;
+  const html = wrapHtml(`
+    <p class="hero">Hello ${userName || "there"},</p>
+    <p>We received a request to reset your password.</p>
+    <p>Click the button below to create a new password.</p>
+    <p style="margin: 24px 0;"><a class="button" href="${resetUrl}" style="background-color: #2563eb; color: #ffffff !important; padding: 14px 28px; text-decoration: none; border-radius: 8px; font-weight: 600; display: inline-block;">Reset Password</a></p>
+    <p>If the button does not work, copy and paste this URL into your browser:</p>
+    <p style="word-break: break-all; color: #2563eb;"><a href="${resetUrl}" style="color: #2563eb; text-decoration: underline;">${resetUrl}</a></p>
+    <p style="margin-top: 20px; color: #777;">If you did not request this, you can ignore this email.</p>
+  `);
+
+  return { subject, text, html };
+};
+
 module.exports = {
   buildInviteEmailContent,
-  buildTemporaryPasswordEmailContent
+  buildTemporaryPasswordEmailContent,
+  buildResetPasswordEmailContent,
 };
