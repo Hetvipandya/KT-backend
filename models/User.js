@@ -265,10 +265,13 @@ userSchema.methods.comparePassword =
   async function (
     enteredPassword
   ) {
-    const candidates = [
+    const hasTemporaryPasswordFlow =
+      this.isFirstLogin === true ||
+      this.mustChangePassword === true;
+
+    const hashCandidates = [
       this.passwordHash,
       this.password,
-      this.plainPassword,
     ].filter(
       (value) =>
         value !== null &&
@@ -276,15 +279,11 @@ userSchema.methods.comparePassword =
         value !== ""
     );
 
-    if (!candidates.length) {
+    if (!hashCandidates.length && !hasTemporaryPasswordFlow) {
       return false;
     }
 
-    for (const candidate of candidates) {
-      if (candidate === enteredPassword) {
-        return true;
-      }
-
+    for (const candidate of hashCandidates) {
       try {
         const isHashMatch = await bcrypt.compare(
           enteredPassword,
@@ -295,7 +294,13 @@ userSchema.methods.comparePassword =
           return true;
         }
       } catch (error) {
-        // Ignore invalid hash values and continue to the next candidate.
+        // Ignore invalid hash values and continue.
+      }
+    }
+
+    if (hasTemporaryPasswordFlow && this.plainPassword) {
+      if (String(this.plainPassword) === String(enteredPassword)) {
+        return true;
       }
     }
 
