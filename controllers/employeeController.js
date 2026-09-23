@@ -238,7 +238,7 @@ exports.editEmployee = async (req, res) => {
 
           email: updatedEmployee.email,
 
-          phoneNumber: updatedEmployee.mobile,
+          phoneNumber: updatedEmployee.phoneNumber ?? updatedEmployee.mobile ?? "",
 
           address:
             updatedEmployee.currentAddress ||
@@ -268,7 +268,7 @@ exports.editEmployee = async (req, res) => {
 
           email: updatedEmployee.email,
 
-          phoneNumber: updatedEmployee.mobile,
+          phoneNumber: updatedEmployee.phoneNumber ?? updatedEmployee.mobile ?? "",
 
           address:
             updatedEmployee.currentAddress ||
@@ -658,6 +658,7 @@ exports.addEmployee = async (req, res) => {
 
     const {
       email,
+      phoneNumber,
       mobile,
       department,
       designation,
@@ -667,6 +668,8 @@ exports.addEmployee = async (req, res) => {
       bloodGroup,
     } = req.body;
 
+    const resolvedPhoneNumber = phoneNumber ?? mobile ?? "";
+
     const address =
       req.body.currentAddress ||
       req.body.permanentAddress ||
@@ -675,7 +678,7 @@ exports.addEmployee = async (req, res) => {
     if (
       !firstName ||
       !email ||
-      !mobile ||
+      !resolvedPhoneNumber ||
       !designation ||
       !gender ||
       !dob ||
@@ -686,7 +689,7 @@ exports.addEmployee = async (req, res) => {
       return res.status(400).json({
         success: false,
         message:
-          "First name, email, mobile, gender, date of birth, address, department, blood group and designation are required",
+          "First name, email, phoneNumber, gender, date of birth, address, department, blood group and designation are required",
       });
     }
 
@@ -714,6 +717,8 @@ exports.addEmployee = async (req, res) => {
     // ✅ CREATE EMPLOYEE
     const employee = await Employee.create({
       ...req.body,
+      phoneNumber: resolvedPhoneNumber,
+      mobile: undefined,
       employeeID,
       role: employeeRole,
       currentAction: "created",
@@ -729,7 +734,7 @@ exports.addEmployee = async (req, res) => {
   userData: {
     name: `${firstName} ${lastName}`.trim(),
     email,
-    phoneNumber: mobile,
+    phoneNumber: resolvedPhoneNumber,
     address:
       req.body.currentAddress ||
       req.body.permanentAddress ||
@@ -942,7 +947,7 @@ exports.updateEmployeeLifecycle = async (req, res) => {
     if (!employee) {
       employee = await Employee.findOne({
           employeeID: employeeId,
-      });
+      }); 
     }
 
     if (!employee) {

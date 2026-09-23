@@ -77,12 +77,7 @@ const employeeSchema = new mongoose.Schema(
       trim: true,
       lowercase: true
     },
-    mobile: {
-      type: String,
-      trim: true,
-      default: ''
-    },
-    phone: {
+    phoneNumber: {
       type: String,
       trim: true,
       default: ''
