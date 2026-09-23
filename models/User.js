@@ -222,40 +222,21 @@ const userSchema =
 // ================= PRE SAVE =================
 userSchema.pre(
   "save",
-  async function () {
+  async function (next) {
     try {
-      // ================= PASSWORD HASH =================
-      if (
-        this.isModified(
-          "password"
-        )
-      ) {
-        const salt =
-          await bcrypt.genSalt(
-            10
-          );
-
-        this.password =
-          await bcrypt.hash(
-            this.password,
-            salt
-          );
-
-        this.passwordHash = this.password;
-      } else if (
-        this.isModified("passwordHash") &&
-        this.passwordHash
-      ) {
-        this.password = this.passwordHash;
-      } else if (
-        this.password &&
-        !this.passwordHash
-      ) {
-        this.passwordHash = this.password;
+      if (!this.isModified("password")) {
+        return next();
       }
 
-    }  catch (error) {
-      throw error;
+      const salt = await bcrypt.genSalt(10);
+      const hashedPassword = await bcrypt.hash(this.password, salt);
+
+      this.password = hashedPassword;
+      this.passwordHash = hashedPassword;
+
+      return next();
+    } catch (error) {
+      return next(error);
     }
   }
 );

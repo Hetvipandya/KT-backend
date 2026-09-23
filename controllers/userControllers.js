@@ -7,6 +7,7 @@ const crypto = require("crypto");
 const nodemailer = require("nodemailer");
 
 const { sendTemporaryPasswordEmail } = require("../services/email.service");
+const sanitizeUserUpdatePayload = require("../utils/userPayloadSanitizer");
 
 // ============================================================
 // EMAIL CONFIGURATION
@@ -275,7 +276,7 @@ const syncUserToEmployee = async (user) => {
 
 const updateProfile = async (req, res) => {
   try {
-    const payload = req.body?.user || req.body;
+    const payload = sanitizeUserUpdatePayload(req.body?.user || req.body);
 
     const {
       name,

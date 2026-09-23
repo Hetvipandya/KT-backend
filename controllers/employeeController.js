@@ -11,6 +11,7 @@ const EmployeePerformance = require("../models/EmployeePerformance");
 const User = require("../models/User");
 const Team = require("../models/Team");
 const { syncEmployeeToUser } = require("../utils/userEmployeeSync");
+const sanitizeUserUpdatePayload = require("../utils/userPayloadSanitizer");
 const generateEmployeeID = require("../utils/employeeId");
 
 const resolveDepartmentName = async (departmentValue) => {
@@ -163,9 +164,7 @@ exports.editEmployee = async (req, res) => {
     // ==========================================
     // UPDATE EMPLOYEE DATA
     // ==========================================
-    const updateData = { 
-      ...req.body,
-    };
+    const updateData = sanitizeUserUpdatePayload(req.body);
 
     if (req.body.fullName || req.body.name) {
       const fullName = (req.body.fullName || req.body.name || "").trim();

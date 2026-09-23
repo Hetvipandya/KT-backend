@@ -1,5 +1,6 @@
 const User = require("../models/User");
 const Employee = require("../models/Employee");
+const sanitizeUserUpdatePayload = require("./userPayloadSanitizer");
 const { sendRegistrationEmail } = require("./mailer");
 
 const normalizeRole = (role) => {
@@ -73,21 +74,23 @@ exports.syncEmployeeToUser = async ({ employee, role, userData = {} }) => {
     }
   }
 
+  const safeUserData = sanitizeUserUpdatePayload(userData || {});
+
   const payload = {
     name,
-    email: userData.email || employee.email || "",
-    phoneNumber: userData.phoneNumber || userData.phone || employee.phoneNumber || employee.mobile || "",
-    dob: formatDob(userData.dob || employee.dob),
+    email: safeUserData.email || employee.email || "",
+    phoneNumber: safeUserData.phoneNumber || safeUserData.phone || employee.phoneNumber || employee.mobile || "",
+    dob: formatDob(safeUserData.dob || employee.dob),
     address:
-      userData.address ||
+      safeUserData.address ||
       employee.currentAddress ||
       employee.permanentAddress ||
       employee.address ||
       "",
-    department: userData.department || employee.department || "",
-    designation: userData.designation || employee.designation || user?.designation || "",
-    gender: userData.gender || employee.gender || "",
-    bloodGroup: userData.bloodGroup || employee.bloodGroup || "",
+    department: safeUserData.department || employee.department || "",
+    designation: safeUserData.designation || employee.designation || user?.designation || "",
+    gender: safeUserData.gender || employee.gender || "",
+    bloodGroup: safeUserData.bloodGroup || employee.bloodGroup || "",
     role: finalRole,
     isApproved: userData.isApproved ?? true,
     isFirstLogin: userData.isFirstLogin ?? false,
