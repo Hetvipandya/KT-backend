@@ -13,6 +13,16 @@ const {
 
 const pad = (value) => String(value).padStart(2, "0");
 
+const normalizeRoleValue = (value) => {
+  if (value === null || value === undefined) {
+    return "";
+  }
+
+  return String(value).trim().toLowerCase();
+};
+
+exports.__test__normalizeRoleValue = normalizeRoleValue;
+
 // ============================================================
 // DEFAULT SETTINGS
 // ============================================================
@@ -1217,10 +1227,14 @@ exports.checkIn = async (
       });
     }
 
-    const userType =
-      user.role
-        .trim()
-        .toLowerCase();
+    const userType = normalizeRoleValue(user.role);
+
+    if (!userType) {
+      return res.status(400).json({
+        success: false,
+        message: "User role is missing. Please contact admin.",
+      });
+    }
 
     const date = getToday();
 
@@ -1528,10 +1542,11 @@ exports.approveAttendance =
         });
       }
 
+      const approverRole = normalizeRoleValue(approver.role);
+
       if (
         !["admin", "hr"].includes(
-          approver.role
-            .toLowerCase()
+          approverRole
         )
       ) {
         return res.status(403).json({

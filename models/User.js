@@ -107,7 +107,7 @@ const userSchema =
           "intern",
           "teamlead",
           "team lead",
-        ],
+        ], 
       },
 
       // ================= APPROVAL =================
