@@ -65,6 +65,7 @@ router.post('/reset-password-web', authLimiter, handleResetPasswordWeb);
 
 // 7.1 Change password for authenticated user
 router.post('/change-password', authenticate, validateRequest(changePasswordSchema), changePassword);
+router.put('/change-password', authenticate, validateRequest(changePasswordSchema), changePassword);
 
 // 8. Dispatch 6-digit OTP code (login or 2fa_setup)
 router.post('/send-otp', authLimiter, validateRequest(sendOtpSchema), sendOtp);

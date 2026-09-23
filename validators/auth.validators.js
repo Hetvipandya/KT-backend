@@ -59,6 +59,7 @@ const verifyEmailSchema = z.object({
 
 const changePasswordSchema = z.object({
   currentPassword: z.string().min(1, 'currentPassword cannot be empty').optional(),
+  oldPassword: z.string().min(1, 'oldPassword cannot be empty').optional(),
   newPassword: z.string({ required_error: 'newPassword is required' })
     .min(8, 'newPassword must be at least 8 characters')
     .regex(passwordRegex, 'newPassword must contain at least one letter and one number'),

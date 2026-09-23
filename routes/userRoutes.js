@@ -104,6 +104,12 @@ router.put(
   changePassword
 ); //done
 
+router.post(
+  "/change-password",
+  protect,
+  changePassword
+); // compatibility for all panels
+
 // ================= SEND OTP =================
 router.post(
   "/send-otp",

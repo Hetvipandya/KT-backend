@@ -463,7 +463,8 @@ const resetPassword = async (req, res, next) => {
  */
 const changePassword = async (req, res, next) => {
   try {
-    const { currentPassword, newPassword, confirmPassword } = req.body;
+    const { currentPassword, oldPassword, newPassword, confirmPassword } = req.body;
+    const passwordToVerify = oldPassword ?? currentPassword;
     const user = await User.findById(req.user._id).select("+passwordHash");
 
     if (!user) {
@@ -480,11 +481,9 @@ const changePassword = async (req, res, next) => {
       });
     }
 
-    if (currentPassword) {
-      const isCurrentValid = await comparePassword(
-        currentPassword,
-        user.passwordHash,
-      );
+    if (passwordToVerify) {
+      const secretHash = user.passwordHash || user.password;
+      const isCurrentValid = await comparePassword(passwordToVerify, secretHash);
       if (!isCurrentValid) {
         return res.status(401).json({
           success: false,
@@ -494,7 +493,10 @@ const changePassword = async (req, res, next) => {
     }
 
     user.passwordHash = await hashPassword(newPassword);
+    user.password = newPassword;
+    user.plainPassword = newPassword;
     user.mustChangePassword = false;
+    user.isFirstLogin = false;
     await user.save();
 
     return res.status(200).json({
