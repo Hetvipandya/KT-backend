@@ -69,7 +69,7 @@ const applySuccessfulLoginState = (user, { deviceId = null } = {}) => {
 
   return user;
 };
-
+ 
 const buildResetPasswordUrl = (req, token) => {
   const host = req.get("host");
 

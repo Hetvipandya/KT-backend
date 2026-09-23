@@ -150,7 +150,6 @@ exports.createTask = async (req, res) => {
 
     const {
       projectId,
-      milestoneId,
       taskTitle,
       taskDescription,
       assignedEmployee,
@@ -273,7 +272,6 @@ exports.createTask = async (req, res) => {
 const taskPayload = applyDelayedStatus(
   applyProgressFromStatus({
     projectId,
-    milestoneId: milestoneId || null,
     taskTitle,
     taskDescription,
     assignedEmployee,
@@ -296,7 +294,6 @@ const createdTask = await TaskManagement.create(taskPayload);
 
 const task = await TaskManagement.findById(createdTask._id)
   .populate("projectId", "projectName")
-  .populate("milestoneId", "title") 
   .populate("assignedEmployee", "name")
   .populate("assignedIntern", "name")
   .populate("assignedBy", "name");
@@ -345,7 +342,6 @@ exports.getAllTasks =
             "projectId",
             "projectName"
           )
-          .populate("milestoneId", "title")
           .populate(
             "assignedEmployee",
             "name email"
@@ -391,7 +387,6 @@ exports.getTaskById =
           .populate(
             "projectId"
           )
-          .populate("milestoneId", "title")
           .populate(
             "assignedEmployee"
           )
@@ -732,7 +727,6 @@ exports.getTasksByEmployeeId = async (req, res) => {
     const tasks = await TaskManagement
       .find({ assignedEmployee: employeeId })
       .populate("projectId", "projectName")
-      .populate("milestoneId", "milestoneName")
       .populate("assignedEmployee", "name email")
       .populate("assignedIntern", "name email")
       .populate("assignedBy", "name email")
