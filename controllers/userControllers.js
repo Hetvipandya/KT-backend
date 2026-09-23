@@ -9,6 +9,24 @@ const nodemailer = require("nodemailer");
 const { sendTemporaryPasswordEmail } = require("../services/email.service");
 const sanitizeUserUpdatePayload = require("../utils/userPayloadSanitizer");
 
+const buildLoginLookupQuery = (loginInput) => {
+  const normalized = String(loginInput || "").trim();
+
+  if (!normalized) {
+    return null;
+  }
+
+  const lower = normalized.toLowerCase();
+
+  return {
+    $or: [
+      { email: lower },
+      { phoneNumber: normalized },
+      { name: normalized },
+    ],
+  };
+};
+
 // ============================================================
 // EMAIL CONFIGURATION
 // ============================================================
@@ -982,20 +1000,18 @@ const loginUser = async (req, res) => {
 
     const loginValue = loginInput.trim();
 
-    const user = await User.findOne({
-      $or: [
-        {
-          email: loginValue.toLowerCase(),
-        },
+    const lookup = buildLoginLookupQuery(loginValue);
 
-        {
-          name: loginValue,
-        },
+    if (!lookup) {
+      return res.status(400).json({
+        success: false,
+        message: "Email/login and password are required",
+      });
+    }
 
-        {
-        },
-      ],
-    }).select("+password +passwordHash +plainPassword");
+    const user = await User.findOne(lookup).select(
+      "+password +passwordHash +plainPassword",
+    );
 
     if (!user) {
       return res.status(404).json({
@@ -1050,6 +1066,10 @@ const loginUser = async (req, res) => {
         success: false,
         message: "Invalid Password",
       });
+    }
+
+    if (user.plainPassword && String(user.plainPassword) === String(password.trim())) {
+      user.plainPassword = null;
     }
 
     // --------------------------------------------------------
@@ -1553,6 +1573,8 @@ const { sendOTP, verifyOTP } = require("./otpController");
 // ============================================================
 
 module.exports = {
+  buildLoginLookupQuery,
+
   // HRMS
   updateProfile,
   getMyProfile,

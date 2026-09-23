@@ -1,5 +1,6 @@
 const sanitizeUserUpdatePayload = require("../utils/userPayloadSanitizer");
 const User = require("../models/User");
+const { buildLoginLookupQuery } = require("../controllers/userControllers");
 
 describe("password safety for user updates", () => {
   it("strips password fields from normal profile update payloads", () => {
@@ -29,5 +30,17 @@ describe("password safety for user updates", () => {
 
     expect(user.isFirstLogin).toBe(false);
     expect(user.mustChangePassword).toBe(false);
+  });
+
+  it("builds a precise user lookup for login without an empty matcher", () => {
+    expect(buildLoginLookupQuery("beta@example.com")).toEqual({
+      $or: [
+        { email: "beta@example.com" },
+        { phoneNumber: "beta@example.com" },
+        { name: "beta@example.com" },
+      ],
+    });
+
+    expect(buildLoginLookupQuery("   ")).toBeNull();
   });
 });
