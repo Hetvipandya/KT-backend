@@ -18,7 +18,13 @@ const normalizeRoleValue = (value) => {
     return "";
   }
 
-  return String(value).trim().toLowerCase();
+  const normalized = String(value).trim().toLowerCase();
+
+  if (normalized === "teamlead" || normalized === "team_lead") {
+    return "team lead";
+  }
+
+  return normalized;
 };
 
 exports.__test__normalizeRoleValue = normalizeRoleValue;
@@ -733,14 +739,14 @@ const getDateWiseAttendance =
           user._id.toString()
         )
       ) {
-        role = "teamlead";
+        role = "team lead";
       }
 
       membersMap.set(
         user._id.toString(),
         {
           user,
-          role,
+          role: normalizeRoleValue(role),
         }
       );
     });
@@ -1133,7 +1139,7 @@ const ensureTodayAttendance =
             userId: member._id,
 
             userType:
-              member.role.toLowerCase(),
+              normalizeRoleValue(member.role),
 
             date,
 
@@ -2573,7 +2579,7 @@ exports.getAllAttendanceForAdmin =
       const roleWise = {
         employee: 0,
         intern: 0,
-        teamlead: 0,
+        "team lead": 0,
         other: 0,
       };
 
@@ -2598,13 +2604,9 @@ exports.getAllAttendanceForAdmin =
           ) {
             roleWise.intern++;
           } else if (
-            role === "teamlead" ||
-            role ===
-              "team lead" ||
-            role ===
-              "team_lead"
+            role === "team lead"
           ) {
-            roleWise.teamlead++;
+            roleWise["team lead"]++;
           } else {
             roleWise.other++;
           }
@@ -3266,7 +3268,7 @@ exports.getAbsentAttendance =
       const roleWise = {
         employee: 0,
         intern: 0,
-        teamlead: 0,
+        "team lead": 0,
         other: 0,
       };
 
@@ -3287,13 +3289,13 @@ exports.getAbsentAttendance =
           ) {
             roleWise.intern++;
           } else if (
-            role === "teamlead" ||
+            role === "team lead" ||
             role ===
               "team lead" ||
             role ===
               "team_lead"
           ) {
-            roleWise.teamlead++;
+            roleWise["team lead"]++;
           } else {
             roleWise.other++;
           }
