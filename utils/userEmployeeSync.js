@@ -76,7 +76,7 @@ exports.syncEmployeeToUser = async ({ employee, role, userData = {} }) => {
   const payload = {
     name,
     email: userData.email || employee.email || "",
-    phone: userData.phone || userData.phoneNumber || employee.mobile || employee.phoneNumber || "",
+    phoneNumber: userData.phoneNumber || userData.phone || employee.phoneNumber || employee.mobile || "",
     dob: formatDob(userData.dob || employee.dob),
     address:
       userData.address ||

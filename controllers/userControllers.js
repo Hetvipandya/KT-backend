@@ -98,7 +98,8 @@ const buildUserResponse = (user) => {
     _id: user._id,
     name: user.name,
     email: user.email,
-    phone: user.phone,
+    phone: user.phoneNumber ?? user.phone ?? null,
+    phoneNumber: user.phoneNumber ?? user.phone ?? null,
     dob: user.dob,
     address: user.address,
     department: user.department,
@@ -225,7 +226,7 @@ const syncUserToEmployee = async (user) => {
 
   employee.email = user.email || employee.email;
 
-  employee.mobile = user.phone || employee.mobile;
+  employee.phoneNumber = user.phoneNumber || user.phone || employee.phoneNumber || "";
 
   employee.dob = user.dob || employee.dob;
 
@@ -310,9 +311,9 @@ const updateProfile = async (req, res) => {
     // PHONE DUPLICATE
     // --------------------------------------------------------
 
-    if (resolvedPhoneNumber && resolvedPhoneNumber !== user.phone) {
+    if (resolvedPhoneNumber && resolvedPhoneNumber !== user.phoneNumber) {
       const existingPhone = await User.findOne({
-        phone: resolvedPhoneNumber,
+        phoneNumber: resolvedPhoneNumber,
 
         _id: {
           $ne: user._id,
@@ -340,7 +341,7 @@ const updateProfile = async (req, res) => {
     }
 
     if (resolvedPhoneNumber !== undefined && resolvedPhoneNumber !== null) {
-      user.phone = resolvedPhoneNumber;
+      user.phoneNumber = resolvedPhoneNumber;
     }
 
     if (dob !== undefined) {
