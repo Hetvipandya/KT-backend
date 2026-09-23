@@ -11,15 +11,6 @@ const taskManagementSchema =
         required: true,
       },
 
-      // Milestone is intentionally optional in task management.
-      // Tasks can be created directly against a project without requiring a milestone.
-      milestoneId: {
-        type:
-          mongoose.Schema.Types.ObjectId,
-        ref: "ProjectMilestone",
-        default: null,
-      },
-
       // Task Details
       taskTitle: {
         type: String,
