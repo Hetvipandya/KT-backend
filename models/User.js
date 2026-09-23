@@ -265,17 +265,41 @@ userSchema.methods.comparePassword =
   async function (
     enteredPassword
   ) {
-    const storedPassword =
-      this.passwordHash || this.password;
+    const candidates = [
+      this.passwordHash,
+      this.password,
+      this.plainPassword,
+    ].filter(
+      (value) =>
+        value !== null &&
+        value !== undefined &&
+        value !== ""
+    );
 
-    if (!storedPassword) {
+    if (!candidates.length) {
       return false;
     }
 
-    return await bcrypt.compare(
-      enteredPassword,
-      storedPassword
-    );
+    for (const candidate of candidates) {
+      if (candidate === enteredPassword) {
+        return true;
+      }
+
+      try {
+        const isHashMatch = await bcrypt.compare(
+          enteredPassword,
+          candidate
+        );
+
+        if (isHashMatch) {
+          return true;
+        }
+      } catch (error) {
+        // Ignore invalid hash values and continue to the next candidate.
+      }
+    }
+
+    return false;
   };
 
 module.exports =
