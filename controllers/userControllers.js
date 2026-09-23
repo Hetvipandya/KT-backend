@@ -38,9 +38,28 @@ const applyPasswordUpdate = (user, newPassword) => {
     return user;
   }
 
-  user.password = newPassword;
+  const normalizedPassword = String(newPassword).trim();
+
+  if (!normalizedPassword) {
+    return user;
+  }
+
+  user.password = normalizedPassword;
   user.passwordHash = undefined;
-  user.plainPassword = newPassword;
+  user.plainPassword = normalizedPassword;
+
+  return user;
+};
+
+const clearResetTokenFields = (user) => {
+  if (!user) {
+    return user;
+  }
+
+  user.passwordResetTokenHash = null;
+  user.resetPasswordToken = null;
+  user.passwordResetExpires = null;
+  user.resetPasswordExpires = null;
 
   return user;
 };
@@ -1175,27 +1194,38 @@ const loginUser = async (req, res) => {
 // CHANGE PASSWORD
 // ============================================================
 
-const changePassword = async (req, res) => { 
+const changePassword = async (req, res) => {
   try {
     const {
       userId,
       oldPassword,
       currentPassword,
       newPassword,
+      password,
       confirmPassword,
     } = req.body;
+
     const authenticatedUserId = req.user?._id;
     const requestedUserId = authenticatedUserId || userId;
-    const passwordToVerify = oldPassword || currentPassword;
+    const passwordToVerify = oldPassword || currentPassword || req.body?.oldPassword || req.body?.currentPassword || null;
+    const updatedPassword = newPassword ?? password ?? null;
+    const confirmPasswordValue = confirmPassword ?? req.body?.confirmPassword ?? updatedPassword;
 
-    if (!requestedUserId || !newPassword) {
+    if (!requestedUserId || !updatedPassword) {
       return res.status(400).json({
         success: false,
         message: "New password is required",
       });
     }
 
-    if (confirmPassword !== undefined && newPassword !== confirmPassword) {
+    if (String(updatedPassword).trim().length < 6) {
+      return res.status(400).json({
+        success: false,
+        message: "New password must be at least 6 characters long",
+      });
+    }
+
+    if (String(updatedPassword).trim() !== String(confirmPasswordValue).trim()) {
       return res.status(400).json({
         success: false,
         message: "New password and confirm password do not match",
@@ -1214,7 +1244,7 @@ const changePassword = async (req, res) => {
     }
 
     if (passwordToVerify) {
-      const isMatch = await user.comparePassword(passwordToVerify);
+      const isMatch = await user.comparePassword(String(passwordToVerify).trim());
 
       if (!isMatch) {
         return res.status(400).json({
@@ -1222,18 +1252,28 @@ const changePassword = async (req, res) => {
           message: "Old password incorrect",
         });
       }
+    } else if (user.mustChangePassword || user.isFirstLogin) {
+      // Allow first-time or forced password change without old password.
+    } else {
+      return res.status(400).json({
+        success: false,
+        message: "Current password is required",
+      });
     }
 
-    applyPasswordUpdate(user, newPassword);
+    applyPasswordUpdate(user, updatedPassword);
 
     user.isFirstLogin = false;
     user.mustChangePassword = false;
+    user.passwordResetTokenHash = null;
+    user.resetPasswordToken = null;
+    user.passwordResetExpires = null;
+    user.resetPasswordExpires = null;
 
     await user.save();
 
     return res.json({
       success: true,
-
       message: "Password changed successfully",
     });
   } catch (error) {
@@ -1252,7 +1292,7 @@ const changePassword = async (req, res) => {
 
 const forgotPassword = async (req, res) => {
   try {
-    const email = req.body?.email;
+    const email = req.body?.email || req.body?.login || req.body?.userEmail;
     const normalizedEmail = email?.trim().toLowerCase();
 
     if (!normalizedEmail) {
@@ -1274,12 +1314,10 @@ const forgotPassword = async (req, res) => {
     }
 
     const resetToken = crypto.randomBytes(32).toString("hex");
-
     const tokenHash = crypto
       .createHash("sha256")
       .update(resetToken)
       .digest("hex");
-
     const resetExpires = new Date(Date.now() + 30 * 60 * 1000);
 
     user.passwordResetTokenHash = tokenHash;
@@ -1333,23 +1371,34 @@ const forgotPassword = async (req, res) => {
 
 const resetPassword = async (req, res) => {
   try {
-    const { email, token, newPassword, confirmPassword } = req.body;
+    const { email, token, newPassword, password, confirmPassword } = req.body;
+    const requestedToken = token || req.body?.resetToken || null;
+    const requestedPassword = newPassword ?? password ?? null;
+    const emailValue = email || req.body?.emailAddress || null;
+    const confirmPasswordValue = confirmPassword ?? req.body?.confirmPassword ?? requestedPassword;
 
-    if (!newPassword) {
+    if (!requestedPassword) {
       return res.status(400).json({
         success: false,
         message: "New password is required",
       });
     }
 
-    if (!token) {
+    if (!requestedToken) {
       return res.status(400).json({
         success: false,
         message: "Reset token is required",
       });
     }
 
-    if (confirmPassword !== undefined && newPassword !== confirmPassword) {
+    if (String(requestedPassword).trim().length < 6) {
+      return res.status(400).json({
+        success: false,
+        message: "New password must be at least 6 characters long",
+      });
+    }
+
+    if (String(requestedPassword).trim() !== String(confirmPasswordValue).trim()) {
       return res.status(400).json({
         success: false,
         message: "New password and confirm password do not match",
@@ -1358,11 +1407,11 @@ const resetPassword = async (req, res) => {
 
     let user;
 
-    if (email && token) {
-      const normalizedEmail = email.trim().toLowerCase();
+    if (emailValue && requestedToken) {
+      const normalizedEmail = String(emailValue).trim().toLowerCase();
       const tokenHash = crypto
         .createHash("sha256")
-        .update(String(token).trim())
+        .update(String(requestedToken).trim())
         .digest("hex");
 
       user = await User.findOne({
@@ -1388,7 +1437,7 @@ const resetPassword = async (req, res) => {
         ? authorization.slice(7)
         : req.headers["x-access-token"] ||
           req.body.accessToken ||
-          (!email ? token : null);
+          (!emailValue ? requestedToken : null);
 
       if (!accessToken) {
         return res.status(401).json({
@@ -1415,15 +1464,11 @@ const resetPassword = async (req, res) => {
       });
     }
 
-    applyPasswordUpdate(user, newPassword);
+    applyPasswordUpdate(user, requestedPassword);
 
     user.isFirstLogin = false;
     user.mustChangePassword = false;
-
-    user.passwordResetTokenHash = null;
-    user.resetPasswordToken = null;
-    user.passwordResetExpires = null;
-    user.resetPasswordExpires = null;
+    clearResetTokenFields(user);
 
     await user.save();
 
