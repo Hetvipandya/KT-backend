@@ -685,15 +685,14 @@ const registerUser = async (req, res) => {
     }
 
     // --------------------------------------------------------
-    // SEND ADMIN EMAIL
+    // SEND REGISTRATION EMAILS IN BACKGROUND
     // --------------------------------------------------------
 
-    try {
-      if (
-        process.env.EMAIL_USER &&
-        process.env.ADMIN_EMAIL
-      ) {
-        await transporter.sendMail({
+    const registrationEmailTasks = [];
+
+    if (process.env.EMAIL_USER && process.env.ADMIN_EMAIL) {
+      registrationEmailTasks.push(
+        transporter.sendMail({
           from: process.env.EMAIL_USER,
 
           to: process.env.ADMIN_EMAIL,
@@ -745,31 +744,23 @@ const registerUser = async (req, res) => {
               from the admin panel.
             </p>
           `,
-        });
-      }
-    } catch (emailError) {
-      console.error(
-        "Admin email error:",
-        emailError.message
+        }).catch((emailError) => {
+          console.error("Admin email error:", emailError.message);
+        }),
       );
     }
 
-    // --------------------------------------------------------
-    // SEND TEMPORARY PASSWORD EMAIL
-    // --------------------------------------------------------
-
-    try {
-      await sendTemporaryPasswordEmail(
+    registrationEmailTasks.push(
+      sendTemporaryPasswordEmail(
         user.email,
         generatedPassword,
-        "Kevalon Technology"
-      );
-    } catch (emailError) {
-      console.error(
-        "User password email error:",
-        emailError.message
-      );
-    }
+        "Kevalon Technology",
+      ).catch((emailError) => {
+        console.error("User password email error:", emailError.message);
+      }),
+    );
+
+    void Promise.allSettled(registrationEmailTasks);
 
     // --------------------------------------------------------
     // RESPONSE
