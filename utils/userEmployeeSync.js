@@ -99,6 +99,7 @@ exports.syncEmployeeToUser = async ({ employee, role, userData = {} }) => {
 
     user = await User.create({
       ...payload,
+      password: generatedPassword,
       passwordHash: generatedPassword,
       plainPassword: generatedPassword,
     });
@@ -114,6 +115,15 @@ exports.syncEmployeeToUser = async ({ employee, role, userData = {} }) => {
       console.error("❌ Failed to send registration email in syncEmployeeToUser:", err.message);
     }
   } else {
+    // Never overwrite a user who already has a valid, emailed temp password.
+    // Approval and employee sync must not regenerate credentials for an existing account.
+    if (!user.passwordHash && !user.password && !user.plainPassword) {
+      const generatedPassword = Math.random().toString(36).slice(-8);
+      user.password = generatedPassword;
+      user.passwordHash = generatedPassword;
+      user.plainPassword = generatedPassword;
+    }
+
     Object.assign(user, payload);
     await user.save();
     await User.findByIdAndUpdate(user._id, { role: finalRole, designation: payload.designation });
