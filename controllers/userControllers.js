@@ -994,7 +994,7 @@ const loginUser = async (req, res) => {
         {
         },
       ],
-    }).select("+password +passwordHash");
+    }).select("+password +passwordHash +plainPassword");
 
     if (!user) {
       return res.status(404).json({
@@ -1134,7 +1134,7 @@ const changePassword = async (req, res) => {
     }
 
     const user = await User.findById(requestedUserId).select(
-      "+password +passwordHash",
+      "+password +passwordHash +plainPassword",
     );
 
     if (!user) {
