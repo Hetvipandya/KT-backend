@@ -1,4 +1,5 @@
 const sanitizeUserUpdatePayload = require("../utils/userPayloadSanitizer");
+const User = require("../models/User");
 
 describe("password safety for user updates", () => {
   it("strips password fields from normal profile update payloads", () => {
@@ -16,5 +17,17 @@ describe("password safety for user updates", () => {
       name: "Amit Patel",
       department: "Engineering",
     });
+  });
+
+  it("keeps first-login disabled by default until a successful email/password login", () => {
+    const user = new User({
+      name: "Amit Patel",
+      email: "amit@example.com",
+      password: "Secret123",
+      role: "employee",
+    });
+
+    expect(user.isFirstLogin).toBe(false);
+    expect(user.mustChangePassword).toBe(false);
   });
 });

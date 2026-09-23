@@ -628,7 +628,7 @@ const registerUser = async (req, res) => {
       // require admin approval.
       isApproved: false,
 
-      isFirstLogin: true,
+      isFirstLogin: false,
 
       mustChangePassword: true,
 
@@ -1072,7 +1072,10 @@ const loginUser = async (req, res) => {
 
     user.lastLoginAt = new Date();
 
-    if (user.isFirstLogin && !user.mustChangePassword) {
+    // Successful email/password login marks this as the first-login flow.
+    user.isFirstLogin = true;
+
+    if (!user.mustChangePassword) {
       user.mustChangePassword = true;
     }
 

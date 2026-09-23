@@ -119,7 +119,7 @@ const userSchema =
       // ================= FIRST LOGIN =================
       isFirstLogin: {
         type: Boolean,
-        default: true,
+        default: false,
       },
 
       mustChangePassword: {
