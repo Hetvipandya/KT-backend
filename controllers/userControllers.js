@@ -1372,7 +1372,7 @@ const forgotPassword = async (req, res) => {
 const resetPassword = async (req, res) => {
   try {
     const { email, token, newPassword, password, confirmPassword } = req.body;
-    const requestedToken = token || req.body?.resetToken || null;
+    const requestedToken = token || req.body?.resetToken || req.body?.tokenHash || null;
     const requestedPassword = newPassword ?? password ?? null;
     const emailValue = email || req.body?.emailAddress || null;
     const confirmPasswordValue = confirmPassword ?? req.body?.confirmPassword ?? requestedPassword;
@@ -1406,19 +1406,45 @@ const resetPassword = async (req, res) => {
     }
 
     let user;
+    const tokenString = String(requestedToken).trim();
+    const tokenHash = crypto
+      .createHash("sha256")
+      .update(tokenString)
+      .digest("hex");
 
-    if (emailValue && requestedToken) {
-      const normalizedEmail = String(emailValue).trim().toLowerCase();
-      const tokenHash = crypto
-        .createHash("sha256")
-        .update(String(requestedToken).trim())
-        .digest("hex");
+    const tokenQuery = {
+      $or: [
+        { passwordResetTokenHash: tokenHash },
+        { resetPasswordToken: tokenHash },
+        { passwordResetTokenHash: tokenString },
+        { resetPasswordToken: tokenString },
+      ],
+      $and: [
+        {
+          $or: [
+            { passwordResetExpires: { $gt: new Date() } },
+            { resetPasswordExpires: { $gt: new Date() } },
+          ],
+        },
+      ],
+    };
 
-      user = await User.findOne({
-        email: normalizedEmail,
+    if (emailValue) {
+      tokenQuery.email = String(emailValue).trim().toLowerCase();
+    }
+
+    user = await User.findOne(tokenQuery).select(
+      "+passwordResetTokenHash +passwordResetExpires +resetPasswordToken +resetPasswordExpires +password +passwordHash",
+    );
+
+    // Fallback: search by token alone if matching with email didn't find user
+    if (!user && emailValue) {
+      const tokenOnlyQuery = {
         $or: [
           { passwordResetTokenHash: tokenHash },
           { resetPasswordToken: tokenHash },
+          { passwordResetTokenHash: tokenString },
+          { resetPasswordToken: tokenString },
         ],
         $and: [
           {
@@ -1428,32 +1454,23 @@ const resetPassword = async (req, res) => {
             ],
           },
         ],
-      }).select(
+      };
+      user = await User.findOne(tokenOnlyQuery).select(
         "+passwordResetTokenHash +passwordResetExpires +resetPasswordToken +resetPasswordExpires +password +passwordHash",
       );
-    } else {
+    }
+
+    // Fallback: check Bearer token if caller is authenticated user changing password
+    if (!user) {
       const authorization = req.headers.authorization || "";
-      const accessToken = authorization.startsWith("Bearer ")
-        ? authorization.slice(7)
-        : req.headers["x-access-token"] ||
-          req.body.accessToken ||
-          (!emailValue ? requestedToken : null);
-
-      if (!accessToken) {
-        return res.status(401).json({
-          success: false,
-          message: "Email and reset token or a valid login token are required",
-        });
-      }
-
-      try {
-        const decoded = jwt.verify(accessToken, process.env.JWT_SECRET);
-        user = await User.findById(decoded.id).select("+password +passwordHash");
-      } catch (error) {
-        return res.status(401).json({
-          success: false,
-          message: "Login token is invalid or expired",
-        });
+      if (authorization.startsWith("Bearer ")) {
+        const accessToken = authorization.slice(7);
+        try {
+          const decoded = jwt.verify(accessToken, process.env.JWT_SECRET);
+          user = await User.findById(decoded.id).select("+password +passwordHash");
+        } catch (error) {
+          // ignore JWT error
+        }
       }
     }
 

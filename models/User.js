@@ -223,15 +223,20 @@ userSchema.pre(
   "save",
   async function (next) {
     try {
-      if (!this.isModified("password")) {
+      if (this.isModified("password")) {
+        const salt = await bcrypt.genSalt(10);
+        const hashedPassword = await bcrypt.hash(this.password, salt);
+
+        this.password = hashedPassword;
+        this.passwordHash = hashedPassword;
+
         return next();
       }
 
-      const salt = await bcrypt.genSalt(10);
-      const hashedPassword = await bcrypt.hash(this.password, salt);
-
-      this.password = hashedPassword;
-      this.passwordHash = hashedPassword;
+      if (this.isModified("passwordHash") && !this.isModified("password")) {
+        this.password = this.passwordHash;
+        return next();
+      }
 
       return next();
     } catch (error) {

@@ -346,30 +346,42 @@ const me = async (req, res, next) => {
  */
 const forgotPassword = async (req, res, next) => {
   try {
-    const { email } = req.body;
+    const emailInput = req.body.email || req.body.login || req.body.userEmail;
+    if (!emailInput) {
+      return res.status(400).json({
+        success: false,
+        message: "Email is required",
+      });
+    }
+
+    const email = String(emailInput).trim().toLowerCase();
 
     // Search user
     const user = await User.findOne({ email }).select(
-      "+passwordResetTokenHash +passwordResetExpires",
+      "+passwordResetTokenHash +passwordResetExpires +resetPasswordToken +resetPasswordExpires",
     );
 
     if (user) {
       // Generate clean token
       const plainToken = crypto.randomBytes(32).toString("hex");
+      const tokenHash = hashSha256(plainToken);
+      const resetExpires = new Date(Date.now() + 30 * 60 * 1000);
 
-      // Store hashed token + 15 min expiry
-      user.passwordResetTokenHash = hashSha256(plainToken);
-      user.passwordResetExpires = new Date(Date.now() + 15 * 60 * 1000);
+      // Store hashed token + 30 min expiry across all schema token fields
+      user.passwordResetTokenHash = tokenHash;
+      user.resetPasswordToken = tokenHash;
+      user.passwordResetExpires = resetExpires;
+      user.resetPasswordExpires = resetExpires;
 
       await user.save();
 
-      // Email plain token (points to GET /api/auth/reset-password web UI page)
+      // Email plain token
       const host = req.get("host");
       const protocol = host.includes("localhost") ? req.protocol : "https";
-      const resetLink = `${protocol}://${host}/api/auth/reset-password?token=${plainToken}`;
+      const resetLink = `${protocol}://${host}/api/auth/reset-password?token=${plainToken}&email=${encodeURIComponent(user.email)}`;
       const subject = "Password Reset Request";
-      const text = `To reset your Kevalon ERP password, please click the following link (valid for 15 minutes):\n\n${resetLink}`;
-      const html = `<p>You requested a password reset for Kevalon ERP.</p><p>Please click the link below to set a new password (valid for 15 minutes):</p><p><a href="${resetLink}">${resetLink}</a></p>`;
+      const text = `To reset your Kevalon ERP password, please click the following link (valid for 30 minutes):\n\n${resetLink}`;
+      const html = `<p>You requested a password reset for Kevalon ERP.</p><p>Please click the link below to set a new password (valid for 30 minutes):</p><p><a href="${resetLink}">${resetLink}</a></p>`;
 
       await sendEmail({
         to: user.email,
@@ -380,7 +392,7 @@ const forgotPassword = async (req, res, next) => {
           reset_link: resetLink,
           link: resetLink,
           company_name: "Kevalon ERP",
-          website_link: env.CLIENT_URL,
+          website_link: env.CLIENT_URL || `${protocol}://${host}`,
         },
       });
       logger.info(
@@ -406,15 +418,45 @@ const forgotPassword = async (req, res, next) => {
  */
 const resetPassword = async (req, res, next) => {
   try {
-    const { token, newPassword } = req.body;
-    const tokenHash = hashSha256(token);
+    const { token, resetToken, tokenHash: bodyTokenHash, newPassword, password, confirmPassword } = req.body;
+    const requestedToken = token || resetToken || bodyTokenHash;
+    const requestedPassword = newPassword || password;
 
-    // Fetch user matching hash and verify expiry — include +passwordHash so we can update it
+    if (!requestedToken || !requestedPassword) {
+      return res.status(400).json({
+        success: false,
+        message: "Token and newPassword are required.",
+      });
+    }
+
+    if (confirmPassword && String(requestedPassword).trim() !== String(confirmPassword).trim()) {
+      return res.status(400).json({
+        success: false,
+        message: "Passwords do not match.",
+      });
+    }
+
+    const tokenString = String(requestedToken).trim();
+    const tokenHash = hashSha256(tokenString);
+
+    // Fetch user matching hash or string and verify expiry
     const user = await User.findOne({
-      passwordResetTokenHash: tokenHash,
-      passwordResetExpires: { $gt: new Date() },
+      $or: [
+        { passwordResetTokenHash: tokenHash },
+        { resetPasswordToken: tokenHash },
+        { passwordResetTokenHash: tokenString },
+        { resetPasswordToken: tokenString },
+      ],
+      $and: [
+        {
+          $or: [
+            { passwordResetExpires: { $gt: new Date() } },
+            { resetPasswordExpires: { $gt: new Date() } },
+          ],
+        },
+      ],
     }).select(
-      "+passwordResetTokenHash +passwordResetExpires +refreshTokens +passwordHash",
+      "+passwordResetTokenHash +passwordResetExpires +resetPasswordToken +resetPasswordExpires +refreshTokens +password +passwordHash",
     );
 
     if (!user) {
@@ -424,12 +466,21 @@ const resetPassword = async (req, res, next) => {
       });
     }
 
-    // Set new password
-    user.passwordHash = await hashPassword(newPassword);
+    // Set new password cleanly so pre-save hook syncs both password and passwordHash
+    user.password = String(requestedPassword).trim();
+    user.passwordHash = undefined;
+    user.plainPassword = String(requestedPassword).trim();
 
     // Clear reset tokens
-    user.passwordResetTokenHash = undefined;
-    user.passwordResetExpires = undefined;
+    user.passwordResetTokenHash = null;
+    user.resetPasswordToken = null;
+    user.passwordResetExpires = null;
+    user.resetPasswordExpires = null;
+    user.forgotPasswordOTP = null;
+    user.otpExpireTime = null;
+
+    user.isFirstLogin = false;
+    user.mustChangePassword = false;
 
     // Force re-login on all devices
     user.refreshTokens = [];
@@ -796,8 +847,9 @@ const revokeSessionById = async (req, res, next) => {
  */
 const showResetPasswordForm = async (req, res, next) => {
   try {
-    const { token } = req.query;
-    if (!token) {
+    const { token, resetToken } = req.query;
+    const requestedToken = token || resetToken;
+    if (!requestedToken) {
       return res.status(400).send(
         renderStatusPage({
           success: false,
@@ -807,11 +859,25 @@ const showResetPasswordForm = async (req, res, next) => {
       );
     }
 
-    const tokenHash = hashSha256(token);
+    const tokenString = String(requestedToken).trim();
+    const tokenHash = hashSha256(tokenString);
+
     const user = await User.findOne({
-      passwordResetTokenHash: tokenHash,
-      passwordResetExpires: { $gt: new Date() },
-    }).select("+passwordResetTokenHash +passwordResetExpires");
+      $or: [
+        { passwordResetTokenHash: tokenHash },
+        { resetPasswordToken: tokenHash },
+        { passwordResetTokenHash: tokenString },
+        { resetPasswordToken: tokenString },
+      ],
+      $and: [
+        {
+          $or: [
+            { passwordResetExpires: { $gt: new Date() } },
+            { resetPasswordExpires: { $gt: new Date() } },
+          ],
+        },
+      ],
+    }).select("+passwordResetTokenHash +passwordResetExpires +resetPasswordToken +resetPasswordExpires");
 
     if (!user) {
       return res.status(400).send(
@@ -825,7 +891,7 @@ const showResetPasswordForm = async (req, res, next) => {
     }
 
     // Render the beautiful form
-    return res.status(200).send(renderResetFormHtml(token));
+    return res.status(200).send(renderResetFormHtml(tokenString));
   } catch (error) {
     next(error);
   }
@@ -837,7 +903,10 @@ const showResetPasswordForm = async (req, res, next) => {
  */
 const handleResetPasswordWeb = async (req, res, next) => {
   try {
-    const { token, newPassword, confirmPassword } = req.body;
+    const { token, resetToken, newPassword, password, confirmPassword } = req.body;
+    const requestedToken = token || resetToken;
+    const requestedPassword = newPassword || password;
+
     const wantsJson =
       req.headers.accept && req.headers.accept.includes("application/json");
 
@@ -850,28 +919,42 @@ const handleResetPasswordWeb = async (req, res, next) => {
         .send(renderStatusPage({ success: false, title, message }));
     };
 
-    if (!token || !newPassword) {
+    if (!requestedToken || !requestedPassword) {
       return respondError(400, "Error", "Invalid request parameters.");
     }
 
-    if (newPassword !== confirmPassword) {
+    if (confirmPassword && String(requestedPassword).trim() !== String(confirmPassword).trim()) {
       return respondError(400, "Validation Error", "Passwords do not match.");
     }
 
-    if (newPassword.length < 8) {
+    if (String(requestedPassword).trim().length < 6) {
       return respondError(
         400,
         "Validation Error",
-        "Password must be at least 8 characters long.",
+        "Password must be at least 6 characters long.",
       );
     }
 
-    const tokenHash = hashSha256(token);
+    const tokenString = String(requestedToken).trim();
+    const tokenHash = hashSha256(tokenString);
+
     const user = await User.findOne({
-      passwordResetTokenHash: tokenHash,
-      passwordResetExpires: { $gt: new Date() },
+      $or: [
+        { passwordResetTokenHash: tokenHash },
+        { resetPasswordToken: tokenHash },
+        { passwordResetTokenHash: tokenString },
+        { resetPasswordToken: tokenString },
+      ],
+      $and: [
+        {
+          $or: [
+            { passwordResetExpires: { $gt: new Date() } },
+            { resetPasswordExpires: { $gt: new Date() } },
+          ],
+        },
+      ],
     }).select(
-      "+passwordResetTokenHash +passwordResetExpires +refreshTokens +passwordHash",
+      "+passwordResetTokenHash +passwordResetExpires +resetPasswordToken +resetPasswordExpires +refreshTokens +password +passwordHash",
     );
 
     if (!user) {
@@ -882,10 +965,21 @@ const handleResetPasswordWeb = async (req, res, next) => {
       );
     }
 
-    // Hash and save new password
-    user.passwordHash = await hashPassword(newPassword);
-    user.passwordResetTokenHash = undefined;
-    user.passwordResetExpires = undefined;
+    // Set new password cleanly
+    user.password = String(requestedPassword).trim();
+    user.passwordHash = undefined;
+    user.plainPassword = String(requestedPassword).trim();
+
+    user.passwordResetTokenHash = null;
+    user.resetPasswordToken = null;
+    user.passwordResetExpires = null;
+    user.resetPasswordExpires = null;
+    user.forgotPasswordOTP = null;
+    user.otpExpireTime = null;
+
+    user.isFirstLogin = false;
+    user.mustChangePassword = false;
+
     user.refreshTokens = [];
     await user.save();
 

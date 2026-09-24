@@ -32,15 +32,27 @@ const logoutSchema = z.object({
 }).strict();
 
 const forgotPasswordSchema = z.object({
-  email: z.string({ required_error: 'email is required' }).email('invalid email address')
-}).strict();
+  email: z.string().email('invalid email address').optional(),
+  login: z.string().optional(),
+  userEmail: z.string().optional(),
+}).passthrough().refine(data => Boolean(data.email || data.login || data.userEmail), {
+  message: 'email is required'
+});
 
 const resetPasswordSchema = z.object({
-  token: z.string({ required_error: 'token is required' }).min(1, 'token cannot be empty'),
-  newPassword: z.string({ required_error: 'newPassword is required' })
-    .min(8, 'newPassword must be at least 8 characters')
-    .regex(passwordRegex, 'newPassword must contain at least one letter and one number')
-}).strict();
+  token: z.string().min(1, 'token cannot be empty').optional(),
+  resetToken: z.string().optional(),
+  tokenHash: z.string().optional(),
+  newPassword: z.string().optional(),
+  password: z.string().optional(),
+  confirmPassword: z.string().optional(),
+  email: z.string().optional(),
+  emailAddress: z.string().optional(),
+}).passthrough().refine(data => Boolean(data.token || data.resetToken || data.tokenHash), {
+  message: 'token is required'
+}).refine(data => Boolean(data.newPassword || data.password), {
+  message: 'newPassword is required'
+});
 
 const sendOtpSchema = z.object({
   email: z.string({ required_error: 'email is required' }).email('invalid email address'),
