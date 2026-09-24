@@ -3,16 +3,70 @@ const ChartOfAccount = require('../models/ChartOfAccount');
 const ledgerService = require('./ledger.service');
 const coaService = require('./coa.service');
 
+const ensureParentCoaExists = async (companyId, parentCode, parentName, type, parentType) => {
+  let parentCoa = await ChartOfAccount.findOne({ companyId, code: parentCode });
+  if (parentCoa) return parentCoa;
+
+  const existingSystemAccount = await ChartOfAccount.findOne({ companyId, isSystemAccount: true });
+  if (!existingSystemAccount) {
+    try {
+      await coaService.seedDefaultCoa(companyId);
+    } catch (seedError) {
+      // If the company has an incomplete or legacy COA, create the missing group in place.
+    }
+    parentCoa = await ChartOfAccount.findOne({ companyId, code: parentCode });
+    if (parentCoa) return parentCoa;
+  }
+
+  const rootGroup = await ChartOfAccount.findOne({ companyId, code: '2300' });
+  if (!rootGroup) {
+    const fallbackRoot = await ChartOfAccount.create({
+      companyId,
+      name: 'Current Liabilities',
+      type: 'Liability',
+      isGroup: true,
+      code: '2300',
+      parentId: null,
+      isSystemAccount: true,
+      isActive: true,
+      openingBalance: 0,
+      openingBalanceType: 'Cr'
+    });
+    parentCoa = await ChartOfAccount.create({
+      companyId,
+      name: parentName,
+      type,
+      isGroup: true,
+      code: parentCode,
+      parentId: fallbackRoot._id,
+      isSystemAccount: true,
+      isActive: true,
+      openingBalance: 0,
+      openingBalanceType: parentType
+    });
+    return parentCoa;
+  }
+
+  parentCoa = await ChartOfAccount.create({
+    companyId,
+    name: parentName,
+    type,
+    isGroup: true,
+    code: parentCode,
+    parentId: rootGroup._id,
+    isSystemAccount: true,
+    isActive: true,
+    openingBalance: 0,
+    openingBalanceType: parentType
+  });
+
+  return parentCoa;
+};
+
 const createLinkedCoaAccount = async (companyId, supplierName) => {
   const parentCode = '2310'; // "Sundry Creditors" group
 
-  // Find parent account
-  const parentCoa = await ChartOfAccount.findOne({ companyId, code: parentCode });
-  if (!parentCoa) {
-    const error = new Error('Default Chart of Accounts has not been seeded yet. Please seed the COA first.');
-    error.statusCode = 409;
-    throw error;
-  }
+  const parentCoa = await ensureParentCoaExists(companyId, parentCode, 'Sundry Creditors', 'Liability', 'Cr');
 
   // Generate next available code
   const generatedCode = await coaService.generateNextCode(companyId, 'Liability');

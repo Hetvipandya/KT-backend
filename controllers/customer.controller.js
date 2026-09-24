@@ -13,7 +13,7 @@ const createCustomer = async (req, res, next) => {
   try {
     const {
       companyId,
-      name,
+      name, 
       gstin,
       email,
       phone,

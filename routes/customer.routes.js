@@ -22,7 +22,7 @@ const router = express.Router();
 router.use(authenticate);
 
 // 1. Create a new customer
-router.post(
+router.post( 
   '/',
   validateRequest(createCustomerSchema),
   checkCompanyAccess,
