@@ -42,10 +42,71 @@ const createCompany = async (req, res, next) => {
       : await Company.findOne({ createdBy: req.user._id });
     if (existingCompany) {
       if (transactionStarted) await session.abortTransaction();
-      return res.status(400).json({
-        success: false,
-        message: 'Company has already been created for this user',
-        errorCode: 'COMPANY_ALREADY_CREATED'
+
+      const updatedUser = await User.findByIdAndUpdate(
+        req.user._id,
+        {
+          $set: {
+            companyId: existingCompany._id,
+            companyCreated: true,
+            branchCreated: false,
+            financialYearCreated: false,
+            branchId: null,
+            financialYearId: null
+          },
+          $addToSet: {
+            companyAccess: {
+              companyId: existingCompany._id,
+              role: 'Admin',
+              isActive: true,
+              invitedAt: new Date(),
+              joinedAt: new Date()
+            }
+          }
+        },
+        { new: true }
+      );
+
+      const FinanceUser = require('../models/FinanceUser');
+      await FinanceUser.findOneAndUpdate(
+        { userId: req.user._id },
+        {
+          $set: {
+            companyId: existingCompany._id,
+            branchId: null,
+            financialYearId: null,
+            companyCreated: true,
+            branchCreated: false,
+            financialYearCreated: false,
+            role: 'Admin',
+            companyAccess: [
+              {
+                companyId: existingCompany._id,
+                branchId: null,
+                role: 'Admin',
+                isActive: true,
+                invitedAt: new Date(),
+                inviteSent: true,
+                joinedAt: new Date()
+              }
+            ]
+          }
+        },
+        { upsert: true, new: true }
+      );
+
+      const { invalidateUserCache } = require('../middleware/authenticate');
+      invalidateUserCache(req.user._id);
+
+      return res.status(200).json({
+        success: true,
+        message: 'Company already exists for this user',
+        data: {
+          ...existingCompany.toObject(),
+          user: shapeOnboardingUser(updatedUser || await User.findById(req.user._id)),
+          nextStep: determineNextStep(updatedUser || await User.findById(req.user._id)),
+          alreadyExists: true
+        }
       });
     }
 
