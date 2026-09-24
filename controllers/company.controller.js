@@ -118,6 +118,34 @@ const createCompany = async (req, res, next) => {
       { new: true, ...sessionOpts }
     );
 
+    const FinanceUser = require('../models/FinanceUser');
+    await FinanceUser.findOneAndUpdate(
+      { userId: req.user._id },
+      {
+        $set: {
+          companyId: company._id,
+          branchId: null,
+          financialYearId: null,
+          companyCreated: true,
+          branchCreated: false,
+          financialYearCreated: false,
+          role: 'Admin',
+          companyAccess: [
+            {
+              companyId: company._id,
+              branchId: null,
+              role: 'Admin',
+              isActive: true,
+              invitedAt: new Date(),
+              inviteSent: true,
+              joinedAt: new Date()
+            }
+          ]
+        }
+      },
+      { upsert: true, new: true }
+    );
+
     const { invalidateUserCache } = require('../middleware/authenticate');
     invalidateUserCache(req.user._id);
 

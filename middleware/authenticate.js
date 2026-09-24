@@ -70,7 +70,19 @@ const authenticate = async (req, res, next) => {
       const financeUserData = { ...financeUser };
       delete financeUserData._id;
       delete financeUserData.userId;
-      Object.assign(user, financeUserData);
+
+      const merged = {
+        ...user,
+        ...financeUserData,
+        companyId: financeUserData.companyId ?? user.companyId ?? null,
+        branchId: financeUserData.branchId ?? user.branchId ?? null,
+        financialYearId: financeUserData.financialYearId ?? user.financialYearId ?? null,
+        companyCreated: financeUserData.companyCreated ?? user.companyCreated ?? false,
+        branchCreated: financeUserData.branchCreated ?? user.branchCreated ?? false,
+        financialYearCreated: financeUserData.financialYearCreated ?? user.financialYearCreated ?? false,
+      };
+
+      Object.assign(user, merged);
       user._id = originalUserId;
       user.userId = originalUserId;
     }

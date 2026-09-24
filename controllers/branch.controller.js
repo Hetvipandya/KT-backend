@@ -82,6 +82,33 @@ const createBranch = async (req, res, next) => {
     };
 
     await User.findByIdAndUpdate(req.user._id, updateFields);
+
+    const FinanceUser = require('../models/FinanceUser');
+    await FinanceUser.findOneAndUpdate(
+      { userId: req.user._id },
+      {
+        $set: {
+          companyId: companyId,
+          branchId: branch._id,
+          branchCreated: true,
+          companyCreated: true,
+          role: req.user.role || 'admin'
+        },
+        $addToSet: {
+          companyAccess: {
+            companyId,
+            branchId: branch._id,
+            role: req.user.role || 'admin',
+            isActive: true,
+            invitedAt: new Date(),
+            inviteSent: true,
+            joinedAt: new Date()
+          }
+        }
+      },
+      { upsert: true, new: true }
+    );
+
     invalidateUserCache(req.user._id);
 
     return res.status(201).json({

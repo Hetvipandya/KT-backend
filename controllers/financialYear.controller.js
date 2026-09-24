@@ -118,6 +118,23 @@ const createFinancialYear = async (req, res, next) => {
 
     await User.findByIdAndUpdate(req.user._id, updateFields, { new: true, ...sessionOpts });
 
+    const FinanceUser = require('../models/FinanceUser');
+    await FinanceUser.findOneAndUpdate(
+      { userId: req.user._id },
+      {
+        $set: {
+          companyId,
+          branchId,
+          financialYearId: fy._id,
+          companyCreated: true,
+          branchCreated: true,
+          financialYearCreated: true,
+          role: req.user.role || 'admin'
+        }
+      },
+      { upsert: true, new: true }
+    );
+
     if (transactionStarted) {
       await session.commitTransaction();
     }
