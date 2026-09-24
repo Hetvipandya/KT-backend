@@ -77,7 +77,7 @@ router.get(
 
 // Assign Team Lead
 router.put(
-  "/project/teamlead/:id",
+  "/project/teamlead/:id", 
   assignTeamLead
 );
 
@@ -239,10 +239,10 @@ router.delete(
   "/task/delete/:id",
   deleteTask
 );
-router.delete(
-  "/task/:id",
-  deleteTask
-);
+// router.delete(
+//   "/task/:id",
+//   deleteTask
+// );
 
 
 // ======================================================

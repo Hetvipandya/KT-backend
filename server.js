@@ -214,7 +214,7 @@ app.use('/api/recruitment', ktRecruitmentRoutes);
 app.use('/api/interviewRound', ktInterviewRoundRoutes);
 app.use('/api/attendance', ktAttendanceRoutes);
 app.use('/api/leave', ktLeaveRoutes);
-app.use('/api/projectManage', ktProjectRoutes);
+app.use('/api/projectManage', ktProjectRoutes); 
 app.use('/api/task', ktTaskManagementRoutes); 
 app.use('/api/crm', ktCrmRoutes);
 app.use('/api/payroll', ktPayrollRoutes);

@@ -24,6 +24,19 @@ const logger = pino({
 });
 
 // Helper to record audit event in controller
+const normalizeResetToken = (tokenValue) => {
+  const tokenString = String(tokenValue ?? "").trim();
+
+  if (!tokenString) {
+    return null;
+  }
+
+  return {
+    tokenString,
+    tokenHash: hashSha256(tokenString),
+  };
+};
+
 const logAuthEvent = (user, actionType, description, req) => {
   if (user && user.companyId) {
     auditLogService
@@ -436,16 +449,23 @@ const resetPassword = async (req, res, next) => {
       });
     }
 
-    const tokenString = String(requestedToken).trim();
-    const tokenHash = hashSha256(tokenString);
+    const normalizedToken = normalizeResetToken(requestedToken);
+    if (!normalizedToken) {
+      return res.status(400).json({
+        success: false,
+        message: "Token and newPassword are required.",
+      });
+    }
 
-    // Fetch user matching hash or string and verify expiry
+    const tokenCandidates = Array.from(
+      new Set([normalizedToken.tokenString, normalizedToken.tokenHash]),
+    );
+
+    // Fetch user matching either the original token value or the SHA-256 hash and verify expiry
     const user = await User.findOne({
       $or: [
-        { passwordResetTokenHash: tokenHash },
-        { resetPasswordToken: tokenHash },
-        { passwordResetTokenHash: tokenString },
-        { resetPasswordToken: tokenString },
+        { passwordResetTokenHash: { $in: tokenCandidates } },
+        { resetPasswordToken: { $in: tokenCandidates } },
       ],
       $and: [
         {
@@ -859,15 +879,25 @@ const showResetPasswordForm = async (req, res, next) => {
       );
     }
 
-    const tokenString = String(requestedToken).trim();
-    const tokenHash = hashSha256(tokenString);
+    const normalizedToken = normalizeResetToken(requestedToken);
+    if (!normalizedToken) {
+      return res.status(400).send(
+        renderStatusPage({
+          success: false,
+          title: "Invalid Link",
+          message: "Password reset token is missing from the URL.",
+        }),
+      );
+    }
+
+    const tokenCandidates = Array.from(
+      new Set([normalizedToken.tokenString, normalizedToken.tokenHash]),
+    );
 
     const user = await User.findOne({
       $or: [
-        { passwordResetTokenHash: tokenHash },
-        { resetPasswordToken: tokenHash },
-        { passwordResetTokenHash: tokenString },
-        { resetPasswordToken: tokenString },
+        { passwordResetTokenHash: { $in: tokenCandidates } },
+        { resetPasswordToken: { $in: tokenCandidates } },
       ],
       $and: [
         {
@@ -935,15 +965,19 @@ const handleResetPasswordWeb = async (req, res, next) => {
       );
     }
 
-    const tokenString = String(requestedToken).trim();
-    const tokenHash = hashSha256(tokenString);
+    const normalizedToken = normalizeResetToken(requestedToken);
+    if (!normalizedToken) {
+      return respondError(400, "Error", "Invalid request parameters.");
+    }
+
+    const tokenCandidates = Array.from(
+      new Set([normalizedToken.tokenString, normalizedToken.tokenHash]),
+    );
 
     const user = await User.findOne({
       $or: [
-        { passwordResetTokenHash: tokenHash },
-        { resetPasswordToken: tokenHash },
-        { passwordResetTokenHash: tokenString },
-        { resetPasswordToken: tokenString },
+        { passwordResetTokenHash: { $in: tokenCandidates } },
+        { resetPasswordToken: { $in: tokenCandidates } },
       ],
       $and: [
         {

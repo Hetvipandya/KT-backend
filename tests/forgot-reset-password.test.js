@@ -164,4 +164,35 @@ describe("Forgot & Reset Password Full Flow", () => {
     const updatedUser = await User.findOne({ email: "webuser@example.com" }).select("+password +passwordHash");
     expect(await updatedUser.comparePassword("WebNewPassword123")).toBe(true);
   });
+
+  it("should accept a token that is already stored as a hash", async () => {
+    const testUser = new User({
+      name: "Hash Token User",
+      email: "hashtoken@example.com",
+      password: "OldPassword123",
+      role: "employee",
+      isApproved: true,
+    });
+    await testUser.save();
+
+    const plainToken = "abc123def4567890fedcba0987654321abcdef1234567890abcdef1234567890";
+    const tokenHash = crypto.createHash("sha256").update(plainToken).digest("hex");
+    testUser.passwordResetTokenHash = tokenHash;
+    testUser.passwordResetExpires = new Date(Date.now() + 30 * 60 * 1000);
+    await testUser.save();
+
+    const resetRes = await request(app)
+      .post("/api/users/reset-password")
+      .send({
+        token: tokenHash,
+        newPassword: "NewSecurePassword123",
+        confirmPassword: "NewSecurePassword123",
+      });
+
+    expect(resetRes.status).toBe(200);
+    expect(resetRes.body.success).toBe(true);
+
+    const updatedUser = await User.findOne({ email: "hashtoken@example.com" }).select("+password +passwordHash");
+    expect(await updatedUser.comparePassword("NewSecurePassword123")).toBe(true);
+  });
 });

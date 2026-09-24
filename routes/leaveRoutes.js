@@ -8,7 +8,7 @@ const {
   getMyLeaves,  
   getLeaveBalance,  
   createHoliday,
-  getAllHolidays, 
+  getAllHolidays,  
   getAllLeaves,
   adminApproval,
 } = require("../controllers/leaveController");
@@ -62,12 +62,12 @@ router.put(
   teamLeadApproval
 );
 
-router.put(
-  "/teamlead/approve",
-  protect,
-  authorizeRoles("team lead"),
-  teamLeadApproval
-);
+// router.put(
+//   "/teamlead/approve",
+//   protect,
+//   authorizeRoles("team lead"),
+//   teamLeadApproval
+// );
 
 router.put(
   "/teamlead/reject",

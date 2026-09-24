@@ -51,6 +51,22 @@ const applyPasswordUpdate = (user, newPassword) => {
   return user;
 };
 
+const normalizeResetToken = (tokenValue) => {
+  const tokenString = String(tokenValue ?? "").trim();
+
+  if (!tokenString) {
+    return null;
+  }
+
+  return {
+    tokenString,
+    tokenHash: crypto
+      .createHash("sha256")
+      .update(tokenString)
+      .digest("hex"),
+  };
+};
+
 const clearResetTokenFields = (user) => {
   if (!user) {
     return user;
@@ -1406,18 +1422,22 @@ const resetPassword = async (req, res) => {
     }
 
     let user;
-    const tokenString = String(requestedToken).trim();
-    const tokenHash = crypto
-      .createHash("sha256")
-      .update(tokenString)
-      .digest("hex");
+    const normalizedToken = normalizeResetToken(requestedToken);
+    if (!normalizedToken) {
+      return res.status(400).json({
+        success: false,
+        message: "Reset token is required",
+      });
+    }
+
+    const tokenCandidates = Array.from(
+      new Set([normalizedToken.tokenString, normalizedToken.tokenHash]),
+    );
 
     const tokenQuery = {
       $or: [
-        { passwordResetTokenHash: tokenHash },
-        { resetPasswordToken: tokenHash },
-        { passwordResetTokenHash: tokenString },
-        { resetPasswordToken: tokenString },
+        { passwordResetTokenHash: { $in: tokenCandidates } },
+        { resetPasswordToken: { $in: tokenCandidates } },
       ],
       $and: [
         {
@@ -1441,10 +1461,8 @@ const resetPassword = async (req, res) => {
     if (!user && emailValue) {
       const tokenOnlyQuery = {
         $or: [
-          { passwordResetTokenHash: tokenHash },
-          { resetPasswordToken: tokenHash },
-          { passwordResetTokenHash: tokenString },
-          { resetPasswordToken: tokenString },
+          { passwordResetTokenHash: { $in: tokenCandidates } },
+          { resetPasswordToken: { $in: tokenCandidates } },
         ],
         $and: [
           {

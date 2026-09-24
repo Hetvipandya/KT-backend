@@ -291,7 +291,7 @@ const resolveAssignedUserId = async ({ assignedEmployee, assignedIntern }) => {
   if (assignedIntern) {
     return assignedIntern._id || assignedIntern;
   }
-
+ 
   return null;
 };
 
