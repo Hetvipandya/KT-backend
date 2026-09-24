@@ -715,9 +715,33 @@ exports.getTasksByEmployeeId = async (req, res) => {
       });
     }
 
+    const idString = String(employeeId);
+    const userIdCandidates = [idString];
+
+    try {
+      const Employee = require("../models/Employee");
+      const employeeDoc = await Employee.findById(employeeId).select("userID userId");
+      if (employeeDoc) {
+        if (employeeDoc.userID) userIdCandidates.push(String(employeeDoc.userID));
+        if (employeeDoc.userId) userIdCandidates.push(String(employeeDoc.userId));
+      }
+    } catch (error) {
+      // ignore lookup failures and fall back to direct query
+    }
+
+    const uniqueUserIds = [...new Set(userIdCandidates.filter(Boolean))];
+
+    const taskQuery = {
+      $or: [
+        { assignedEmployee: employeeId },
+        { assignedEmployee: { $in: uniqueUserIds } },
+        { assignedIntern: { $in: uniqueUserIds } },
+      ],
+    };
+
     await TaskManagement.updateMany(
       {
-        assignedEmployee: employeeId,
+        ...taskQuery,
         dueDate: { $lt: new Date() },
         status: { $nin: ["Completed", "Delayed"] },
       },
@@ -725,7 +749,7 @@ exports.getTasksByEmployeeId = async (req, res) => {
     );
 
     const tasks = await TaskManagement
-      .find({ assignedEmployee: employeeId })
+      .find(taskQuery)
       .populate("projectId", "projectName")
       .populate("assignedEmployee", "name email")
       .populate("assignedIntern", "name email")
