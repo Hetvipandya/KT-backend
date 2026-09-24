@@ -12,7 +12,7 @@ const companyAccessSchema = new mongoose.Schema(
   }, 
   { _id: true },
 ); 
-
+ 
 const financeUserSchema = new mongoose.Schema(
   {
     userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true, unique: true, index: true },

@@ -10,7 +10,7 @@ const {
   getPerformanceDropdown,
 } = require("../controllers/performanceController"); 
 
-router.post("/create", createPerformance);
+router.post("/create", createPerformance); 
 
 router.get("/all", getAllPerformance);
 

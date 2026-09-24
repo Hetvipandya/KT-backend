@@ -104,6 +104,17 @@ const applySuccessfulLoginState = (user, { deviceId = null } = {}) => {
 
   return user;
 };
+
+const shouldRequireApproval = (role) => {
+  if (!role) {
+    return false;
+  }
+
+  const normalized = String(role).trim().toLowerCase();
+  const exemptRoles = ["admin", "hr", "accountant", "ca"];
+
+  return !exemptRoles.includes(normalized);
+};
  
 const buildResetPasswordUrl = (req, token) => {
   const host = req.get("host");
@@ -1130,7 +1141,7 @@ const loginUser = async (req, res) => {
 
     const role = normalizeRole(user.role);
 
-    if (role !== "admin" && role !== "hr" && !user.isApproved) {
+    if (shouldRequireApproval(role) && !user.isApproved) {
       return res.status(403).json({
         success: false,
         message: "Admin approval pending",
@@ -1708,6 +1719,7 @@ const { sendOTP, verifyOTP } = require("./otpController");
 
 module.exports = {
   buildLoginLookupQuery,
+  shouldRequireApproval,
   __test__applyPasswordUpdate: applyPasswordUpdate,
   __test__applySuccessfulLoginState: applySuccessfulLoginState,
 

@@ -2,7 +2,7 @@ const mongoose = require("mongoose");
 
 const dailyReportSchema =
   new mongoose.Schema(
-    {
+    { 
       employeeId: {
         type:
           mongoose.Schema.Types.ObjectId,

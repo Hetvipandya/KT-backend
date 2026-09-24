@@ -4,6 +4,7 @@ const {
   buildLoginLookupQuery,
   __test__applyPasswordUpdate,
   __test__applySuccessfulLoginState,
+  shouldRequireApproval,
 } = require("../controllers/userControllers");
 
 describe("password safety for user updates", () => {
@@ -80,5 +81,12 @@ describe("password safety for user updates", () => {
 
     expect(user.mustChangePassword).toBe(false);
     expect(user.isFirstLogin).toBe(false);
+  });
+
+  it("allows accountant and CA accounts to log in without approval", () => {
+    expect(shouldRequireApproval("accountant")).toBe(false);
+    expect(shouldRequireApproval("CA")).toBe(false);
+    expect(shouldRequireApproval("employee")).toBe(true);
+    expect(shouldRequireApproval("team lead")).toBe(true);
   });
 });

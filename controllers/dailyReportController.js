@@ -169,7 +169,7 @@ exports.getAllDailyReports = async (req, res) => {
 // GET SINGLE DAILY REPORT
 // ==========================
 exports.getSingleDailyReport =
-  async (req, res) => {
+  async (req, res) => { 
     try {
       const report =
         await DailyReport.findById(
