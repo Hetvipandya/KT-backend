@@ -4,6 +4,7 @@ require("../models/projectModel");
 const TaskManagement = require("../models/taskModel");
 const User = require("../models/User");
 const Employee = require("../models/Employee");
+const projectController = require("../controllers/projectController");
 const taskManagementController = require("../controllers/taskManagementController");
 
 let mongoServer;
@@ -38,6 +39,87 @@ describe("task management milestone handling", () => {
 
     await expect(task.validate()).resolves.toBeUndefined();
     expect(task.milestoneId).toBeUndefined();
+  });
+
+  it("does not auto-create tasks when a project is created with assigned employees", async () => {
+    const user = await User.create({
+      name: "Aisha Patel",
+      email: "aisha@example.com",
+      password: "StrongPass123",
+      role: "employee",
+      isApproved: true,
+    });
+
+    const res = {
+      statusCode: null,
+      body: null,
+      status(code) {
+        this.statusCode = code;
+        return this;
+      },
+      json(payload) {
+        this.body = payload;
+        return this;
+      },
+    };
+
+    await projectController.createProject(
+      {
+        body: {
+          projectName: "Website Revamp",
+          clientName: "Acme",
+          employees: [user._id.toString()],
+          interns: [],
+        },
+        user: { _id: user._id },
+      },
+      res,
+    );
+
+    expect(res.statusCode).toBe(201);
+    expect(await TaskManagement.countDocuments()).toBe(0);
+  });
+
+  it("does not auto-create tasks when assigning employees to a project", async () => {
+    const user = await User.create({
+      name: "Nitin Rao",
+      email: "nitin@example.com",
+      password: "StrongPass123",
+      role: "employee",
+      isApproved: true,
+    });
+
+    const project = await (require("../models/projectModel")).create({
+      projectName: "CRM Migration",
+      clientName: "Contoso",
+      employees: [],
+      interns: [],
+    });
+
+    const res = {
+      statusCode: null,
+      body: null,
+      status(code) {
+        this.statusCode = code;
+        return this;
+      },
+      json(payload) {
+        this.body = payload;
+        return this;
+      },
+    };
+
+    await projectController.assignEmployees(
+      {
+        params: { id: project._id.toString() },
+        body: { employeeIds: [user._id] },
+        user: { _id: user._id },
+      },
+      res,
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(await TaskManagement.countDocuments()).toBe(0);
   });
 
   it("returns tasks when employee lookup resolves to the linked user id", async () => {

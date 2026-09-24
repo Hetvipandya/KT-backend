@@ -376,118 +376,9 @@ const buildProjectAssignmentTasks = ({
   return tasks;
 };
 
-// Helper: Auto Create Tasks on Project Save / Member Assignment
-const autoCreateProjectTasks = async ({ project, assignedBy }) => {
-  if (!project) return [];
-  
-  const employees = Array.isArray(project.employees) ? project.employees : [];
-  const interns = Array.isArray(project.interns) ? project.interns : [];
-  
-  // Get team lead info
-  const teamLeadUser = await resolveProjectTeamLeadUser(project);
-  const teamLeadEmployee = await resolveProjectTeamLeadEmployee(project);
-  
-  // Create a task for team lead to oversee the project
-  const teamLeadTask = {
-    projectId: project._id,
-    milestoneId: null,
-    taskTitle: `${project.projectName} - Team Lead Oversight`,
-    taskDescription: `Team lead oversight for project ${project.projectName}`,
-    assignedBy: assignedBy || teamLeadUser || null,
-    assignedTeamLeadUser: teamLeadUser || null,
-    assignedTeamLeadEmployee: teamLeadEmployee || null,
-    dueDate: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
-    estimatedHours: 0,
-    priority: "high",
-    status: "pending",
-    progress: 0
-  };
-  
-  const allTasks = [];
-  
-  // Add team lead task if team lead exists
-  if (teamLeadUser || teamLeadEmployee) {
-    allTasks.push(teamLeadTask);
-  }
-  
-  // Create tasks for employees
-  employees.forEach((employeeId, index) => {
-    const empId = employeeId._id || employeeId;
-    const task = {
-      projectId: project._id,
-      milestoneId: null,
-      taskTitle: `${project.projectName} - Employee Task ${index + 1}`,
-      taskDescription: `Project assignment for ${project.projectName}.`,
-      assignedBy: assignedBy || teamLeadUser || null,
-      assignedTeamLeadUser: teamLeadUser || null,
-      assignedTeamLeadEmployee: teamLeadEmployee || null,
-      assignedEmployee: empId,
-      assignedIntern: null,
-      dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-      estimatedHours: 0,
-      priority: "medium",
-      status: "pending",
-      progress: 0
-    };
-    allTasks.push(task);
-  });
-  
-  // Create tasks for interns
-  interns.forEach((internId, index) => {
-    const intId = internId._id || internId;
-    const task = {
-      projectId: project._id,
-      milestoneId: null,
-      taskTitle: `${project.projectName} - Intern Task ${index + 1}`,
-      taskDescription: `Project assignment for ${project.projectName}.`,
-      assignedBy: assignedBy || teamLeadUser || null,
-      assignedTeamLeadUser: teamLeadUser || null,
-      assignedTeamLeadEmployee: teamLeadEmployee || null,
-      assignedEmployee: null,
-      assignedIntern: intId,
-      dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-      estimatedHours: 0,
-      priority: "medium",
-      status: "pending",
-      progress: 0
-    };
-    allTasks.push(task);
-  });
-  
-  // Create all tasks with deduplication and backfill team lead if missing
-  const createdTasks = [];
-  for (const task of allTasks) {
-    const existingTask = await Task.findOne({
-      projectId: task.projectId,
-      taskTitle: task.taskTitle,
-      $or: [
-        { assignedEmployee: task.assignedEmployee },
-        { assignedIntern: task.assignedIntern },
-        { assignedTeamLeadUser: task.assignedTeamLeadUser }
-      ]
-    });
-    
-    if (existingTask) {
-      let updated = false;
-      if (!existingTask.assignedTeamLeadUser && task.assignedTeamLeadUser) {
-        existingTask.assignedTeamLeadUser = task.assignedTeamLeadUser;
-        updated = true;
-      }
-      if (!existingTask.assignedTeamLeadEmployee && task.assignedTeamLeadEmployee) {
-        existingTask.assignedTeamLeadEmployee = task.assignedTeamLeadEmployee;
-        updated = true;
-      }
-      if (updated) {
-        await existingTask.save();
-      }
-      createdTasks.push(existingTask);
-    } else {
-      const createdTask = await Task.create(task);
-      createdTasks.push(createdTask);
-    }
-  }
-  
-  return createdTasks;
+// Explicit task creation only: project/member assignment should never create tasks automatically.
+const autoCreateProjectTasks = async () => {
+  return [];
 };
 
 // Helper: Cascading Progress Update (Task Progress -> Milestone Progress -> Project Progress)
@@ -642,11 +533,6 @@ exports.createProject = async (req, res) => {
       .populate("teamLeadEmployee", "firstName lastName email")
       .populate("employees", "firstName lastName email")
       .populate("interns", "name email");
-
-    await autoCreateProjectTasks({
-      project: populatedProject || project,
-      assignedBy: req.user?._id || req.body.assignedBy || project.teamLeadUser || null,
-    });
 
     res.status(201).json({
       success: true,
@@ -945,11 +831,6 @@ exports.assignEmployees = async (req, res) => {
       });
     }
 
-    await autoCreateProjectTasks({
-      project,
-      assignedBy: req.user?._id || req.body.assignedBy || null,
-    });
-
     return res.status(200).json({
       success: true,
       data: project,
@@ -1000,11 +881,6 @@ exports.assignInterns = async (req, res) => {
         message: "Project not found",
       });
     }
-
-    await autoCreateProjectTasks({
-      project,
-      assignedBy: req.user?._id || req.body.assignedBy || null,
-    });
 
     return res.status(200).json({
       success: true,
