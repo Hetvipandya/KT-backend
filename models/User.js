@@ -132,7 +132,9 @@ const userSchema =
           "hr",
           "employee",
           "intern",
-          "team lead",
+          "team lead", 
+          "Accountant",
+          "CA",
         ], 
       },
 

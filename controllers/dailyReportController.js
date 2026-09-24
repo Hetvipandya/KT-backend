@@ -84,6 +84,16 @@ exports.createDailyReport =
       // ==================================
       // DAILY REPORT CREATE FLOW
       // ==================================
+      const shouldCreateReport = req.body.submit === true || req.body.submit === "true";
+
+      if (!shouldCreateReport) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Daily report creation is disabled by default. Please send submit: true to save the report.",
+        });
+      }
+
       if (
         !employeeId ||
         !projectId ||
