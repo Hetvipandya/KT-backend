@@ -1,5 +1,5 @@
 const TaskManagement =
-  require("../models/TaskManagement");
+  require("../models/taskModel");
 
 const getBaseUrl = (req) => {
   if (process.env.BASE_URL) return process.env.BASE_URL.replace(/\/$/, "");
@@ -17,7 +17,7 @@ const formatFileUrl = (url, req) => {
   const trimmed = url.trim();
   if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
     return trimmed;
-  }
+  } 
   const baseUrl = getBaseUrl(req);
   const cleanPath = trimmed.replace(/\\/g, "/");
   if (cleanPath.startsWith("/uploads/")) {
@@ -63,24 +63,53 @@ const sanitizeTaskWithAttachments = (taskDoc, req) => {
 exports.formatFileUrl = formatFileUrl;
 exports.sanitizeTaskWithAttachments = sanitizeTaskWithAttachments;
 
+const normalizeTaskStatus = (status) => {
+  if (!status || typeof status !== "string") return "pending";
+
+  const trimmed = status.trim();
+  if (!trimmed) return "pending";
+
+  const map = {
+    assigned: "pending",
+    pending: "pending",
+    "in progress": "in_progress",
+    in_progress: "in_progress",
+    testing: "testing",
+    review: "review",
+    completed: "completed",
+    cancelled: "cancelled",
+    delayed: "delayed",
+  };
+
+  const key = trimmed.toLowerCase();
+  return map[key] || key.replace(/\s+/g, "_");
+};
+
 const getProgressForStatus = (status) => {
-  switch (status) {
-    case "Assigned":
+  const normalized = normalizeTaskStatus(status);
+
+  switch (normalized) {
+    case "assigned":
+    case "pending":
       return 5;
-    case "In Progress":
+    case "in_progress":
       return 10;
-    case "Testing":
+    case "testing":
       return 75;
-    case "Review":
+    case "review":
       return 90;
-    case "Completed":
+    case "completed":
       return 100;
+    case "cancelled":
+      return 0;
+    case "delayed":
+      return 25;
     default:
       return null;
   }
 }; 
 
-const isCompletedStatus = (status) => status === "Completed";
+const isCompletedStatus = (status) => normalizeTaskStatus(status) === "completed";
 
 const isTaskOverdue = (dueDate) => {
   if (!dueDate) {
@@ -100,8 +129,11 @@ const applyDelayedStatus = (taskData) => {
     return taskData;
   }
 
-  if (isTaskOverdue(taskData.dueDate) && taskData.status !== "Delayed") {
-    taskData.status = "Delayed";
+  const normalizedStatus = normalizeTaskStatus(taskData.status);
+  if (isTaskOverdue(taskData.dueDate) && normalizedStatus !== "delayed") {
+    taskData.status = "delayed";
+  } else if (taskData.status) {
+    taskData.status = normalizedStatus;
   }
 
   return taskData;
@@ -112,7 +144,10 @@ const applyProgressFromStatus = (taskData) => {
     return taskData;
   }
 
-  const autoProgress = getProgressForStatus(taskData.status);
+  const normalizedStatus = normalizeTaskStatus(taskData.status);
+  taskData.status = normalizedStatus;
+
+  const autoProgress = getProgressForStatus(normalizedStatus);
   if (autoProgress !== null) {
     taskData.progress = autoProgress;
   }
@@ -121,12 +156,13 @@ const applyProgressFromStatus = (taskData) => {
 };
 
 const ensureDelayedStatusForDocument = async (task) => {
-  if (!task || !task.dueDate || isCompletedStatus(task.status) || task.status === "Delayed") {
+  if (!task || !task.dueDate || isCompletedStatus(task.status) || normalizeTaskStatus(task.status) === "delayed") {
     return task;
   }
 
   if (isTaskOverdue(task.dueDate)) {
-    task.status = "Delayed";
+    task.status = "delayed";
+    task.progress = getProgressForStatus(task.status) ?? task.progress;
     await task.save();
   }
 
@@ -520,15 +556,16 @@ exports.createStatus = async (req, res) => {
       });
     }
 
-    task.status = status;
+    task.status = normalizeTaskStatus(status);
 
-    const autoProgress = getProgressForStatus(status);
+    const autoProgress = getProgressForStatus(task.status);
     if (autoProgress !== null) {
       task.progress = autoProgress;
     }
 
+    if (!Array.isArray(task.taskHistory)) task.taskHistory = [];
     task.taskHistory.push({
-      action: `Status created: ${status}`,
+      action: `Status created: ${task.status}`,
     });
 
     await task.save();
@@ -593,11 +630,10 @@ exports.updateTaskStatus =
           });
       }
 
-      task.status =
-        status;
+      task.status = normalizeTaskStatus(status);
 
-      if (!isCompletedStatus(status) && isTaskOverdue(task.dueDate)) {
-        task.status = "Delayed";
+      if (!isCompletedStatus(task.status) && isTaskOverdue(task.dueDate)) {
+        task.status = "delayed";
       }
 
       const autoProgress = getProgressForStatus(task.status);
@@ -605,13 +641,13 @@ exports.updateTaskStatus =
         task.progress = autoProgress;
       }
 
-      if (task.status === "Completed") {
+      if (task.status === "completed") {
         task.completedAt = new Date();
       } else if (task.completedAt) {
         task.completedAt = undefined;
       }
 
-      // Add history
+      if (!Array.isArray(task.taskHistory)) task.taskHistory = [];
       task.taskHistory.push({
         action:
           `Status changed to ${task.status}`,

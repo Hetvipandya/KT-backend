@@ -14,7 +14,7 @@ const taskSchema = new mongoose.Schema(
       trim: true,
     },
 
-    taskDescription: {
+    taskDescription: { 
       type: String,
       default: "",
     },
@@ -22,7 +22,7 @@ const taskSchema = new mongoose.Schema(
     // For employee assignments (User ID)
     assignedEmployee: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "Employee",
+      ref: "User",
       default: null,
     },
 
@@ -87,8 +87,32 @@ assignedTeamLeadEmployee: {
         "review",
         "completed",
         "cancelled",
+        "delayed",
+        "Assigned",
+        "Pending",
+        "In Progress",
+        "Testing",
+        "Review",
+        "Completed",
+        "Cancelled",
+        "Delayed",
       ],
       default: "pending",
+    },
+
+    taskHistory: {
+      type: [
+        {
+          action: { type: String, default: "" },
+          updatedBy: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "User",
+            default: null,
+          },
+          createdAt: { type: Date, default: Date.now },
+        },
+      ],
+      default: [],
     },
 
     taskDependencies: {
@@ -111,7 +135,9 @@ assignedTeamLeadEmployee: {
       type: [
         {
           userId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+          commentedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
           text: String,
+          comment: String,
           createdAt: { type: Date, default: Date.now },
         },
       ],

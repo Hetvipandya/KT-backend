@@ -23,7 +23,7 @@ const upload = require("../middleware/uploadMiddleware");
 
  
 
-router.get("/employee/:employeeId", getTasksByEmployeeId);
+router.get("/employee/:employeeId", getTasksByEmployeeId); 
 
 // Create Task
 router.post("/create", upload.array("attachments"), createTask);

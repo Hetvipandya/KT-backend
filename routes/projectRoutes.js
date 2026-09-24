@@ -11,7 +11,7 @@ const {
   getProjectMembers, 
   assignTeamLead, 
   assignEmployees, 
-  assignInterns,
+  assignInterns, 
   updateProject,
   deleteProject,
 

@@ -61,7 +61,7 @@ const projectSchema = new mongoose.Schema(
         "testing",
         "review",
         "completed",
-        "cancelled",
+        "cancelled", 
       ],
       default: "pending",
     },

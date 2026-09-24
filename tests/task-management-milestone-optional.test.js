@@ -1,7 +1,7 @@
 const mongoose = require("mongoose");
 const { MongoMemoryServer } = require("mongodb-memory-server");
 require("../models/projectModel");
-const TaskManagement = require("../models/TaskManagement");
+const TaskManagement = require("../models/taskModel");
 const User = require("../models/User");
 const Employee = require("../models/Employee");
 const taskManagementController = require("../controllers/taskManagementController");
@@ -86,5 +86,44 @@ describe("task management milestone handling", () => {
     expect(res.body.success).toBe(true);
     expect(res.body.count).toBe(1);
     expect(res.body.data[0].assignedEmployee?._id?.toString() || res.body.data[0].assignedEmployee?.toString()).toBe(user._id.toString());
+  });
+
+  it("updates the persisted task status and progress when a status changes", async () => {
+    const task = await TaskManagement.create({
+      projectId: new mongoose.Types.ObjectId(),
+      taskTitle: "QA signoff",
+      assignedEmployee: new mongoose.Types.ObjectId(),
+      assignedBy: new mongoose.Types.ObjectId(),
+      dueDate: new Date(Date.now() + 86400000),
+      status: "pending",
+      progress: 0,
+    });
+
+    const res = {
+      statusCode: null,
+      body: null,
+      status(code) {
+        this.statusCode = code;
+        return this;
+      },
+      json(payload) {
+        this.body = payload;
+        return this;
+      },
+    };
+
+    await taskManagementController.updateTaskStatus(
+      { params: { id: task._id.toString() }, body: { status: "Completed" } },
+      res,
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.data.status).toBe("completed");
+    expect(res.body.data.progress).toBe(100);
+
+    const persisted = await TaskManagement.findById(task._id);
+    expect(persisted.status).toBe("completed");
+    expect(persisted.progress).toBe(100);
   });
 });
