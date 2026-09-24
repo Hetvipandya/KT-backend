@@ -6,7 +6,7 @@ const financialYearSchema = new mongoose.Schema({
     ref: 'Company',
     required: [true, 'Company ID is required'],
     index: true
-  },
+  }, 
   // A financial year belongs to one branch within a company.  `default: null`
   // keeps previously-created financial years readable; new API records require
   // this value through request validation.

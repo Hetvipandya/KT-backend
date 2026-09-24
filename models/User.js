@@ -73,9 +73,36 @@ const userSchema =
       },
 
       bloodGroup: {
-        type: String, 
+        type: String,
         default: null,
         trim: true,
+      },
+
+      bankAccountNumber: {
+        type: String,
+        default: null,
+        trim: true,
+        set: (value) => {
+          if (value === undefined || value === null || value === "") {
+            return null;
+          }
+
+          return String(value).trim();
+        },
+      },
+
+      ifscCode: {
+        type: String,
+        default: null,
+        trim: true,
+        uppercase: true,
+        set: (value) => {
+          if (value === undefined || value === null || value === "") {
+            return null;
+          }
+
+          return String(value).trim().toUpperCase();
+        },
       },
 
       password: {
@@ -280,7 +307,7 @@ userSchema.methods.comparePassword =
         }
       } catch (error) {
         // Ignore invalid hash values and continue.
-      }
+      } 
     }
 
     if (hasTemporaryPasswordFlow && this.plainPassword) {

@@ -140,7 +140,7 @@ const transporter = nodemailer.createTransport({
 
 const generateToken = (userId) => {
   return jwt.sign(
-    {
+    { 
       id: userId,
     },
     process.env.JWT_SECRET,
@@ -234,9 +234,11 @@ const buildUserResponse = (user) => {
     gender: user.gender,
     bloodGroup: user.bloodGroup,
 
-    bankAccountNumber: user.bankAccountNumber || null,
+    bankAccount: user.bankAccountNumber || user.bankAccount || null,
+    bankAccountNumber: user.bankAccountNumber || user.bankAccount || null,
 
-    ifscCode: user.ifscCode || null,
+    IFSC: user.ifscCode || user.IFSC || null,
+    ifscCode: user.ifscCode || user.IFSC || null,
 
     uniqueID: user.uniqueID,
     role: user.role,
@@ -876,6 +878,12 @@ const registerUser = async (req, res) => {
         phoneNumber: user.phoneNumber,
 
         profileImage: user.profileImage || null,
+
+        bankAccount: user.bankAccountNumber || user.bankAccount || null,
+        bankAccountNumber: user.bankAccountNumber || user.bankAccount || null,
+
+        IFSC: user.ifscCode || user.IFSC || null,
+        ifscCode: user.ifscCode || user.IFSC || null,
 
         role: user.role,
 
