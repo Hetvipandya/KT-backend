@@ -14,7 +14,7 @@ const upload = require("../middleware/uploadMiddleware");
 router.post(
   "/upload",
   upload.single("file"),
-  uploadDocument
+  uploadDocument 
 );
 
 // Get all

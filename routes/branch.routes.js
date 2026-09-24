@@ -11,7 +11,7 @@ const router = express.Router();
 router.use(authenticate);
 
 /**
- * @openapi
+ * @openapi 
  * /api/branch:
  *   post:
  *     summary: Add a new branch

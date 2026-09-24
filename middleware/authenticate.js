@@ -66,7 +66,13 @@ const authenticate = async (req, res, next) => {
 
     const financeUser = await FinanceUser.findOne({ userId: user._id }).lean();
     if (financeUser) {
-      Object.assign(user, financeUser);
+      const originalUserId = user._id;
+      const financeUserData = { ...financeUser };
+      delete financeUserData._id;
+      delete financeUserData.userId;
+      Object.assign(user, financeUserData);
+      user._id = originalUserId;
+      user.userId = originalUserId;
     }
 
     // Check if user account is locked
