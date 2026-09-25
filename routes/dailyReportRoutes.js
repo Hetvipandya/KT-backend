@@ -15,6 +15,31 @@ const {
   "../controllers/dailyReportController"
 );
 
+const jwt = require("jsonwebtoken");
+const User = require("../models/User");
+
+const optionalAuth = async (req, res, next) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith("Bearer ")) {
+      const token = authHeader.split(" ")[1];
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      if (decoded && (decoded.id || decoded.userId)) {
+        const userId = decoded.id || decoded.userId;
+        const user = await User.findById(userId).select("-password").lean();
+        if (user) {
+          req.user = user;
+        }
+      }
+    }
+  } catch (e) {
+    // Ignore token verification errors in optionalAuth
+  }
+  next();
+};
+
+router.use(optionalAuth);
+
 // Approve Report
 router.put(
   "/approve/:id",

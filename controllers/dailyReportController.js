@@ -154,15 +154,152 @@ exports.createDailyReport =
     }
   };
 
+const getTeamMemberIdsForLead = async (leadId) => {
+  if (!leadId || !mongoose.Types.ObjectId.isValid(leadId)) {
+    return { userIds: [], employeeIds: [], allIds: [] };
+  }
+
+  const Team = require("../models/Team");
+  const User = require("../models/User");
+  const Employee = require("../models/Employee");
+
+  const userIds = new Set();
+  const employeeIds = new Set();
+
+  const user = await User.findById(leadId).select("_id").lean();
+  const employee = await Employee.findById(leadId).select("_id userID userId").lean();
+
+  if (user) userIds.add(user._id.toString());
+  if (employee) {
+    employeeIds.add(employee._id.toString());
+    if (employee.userID) userIds.add(employee.userID.toString());
+    if (employee.userId) userIds.add(employee.userId.toString());
+  }
+
+  if (!employee && user) {
+    const linkedEmp = await Employee.findOne({
+      $or: [{ userID: user._id }, { userId: user._id }]
+    }).select("_id").lean();
+    if (linkedEmp) employeeIds.add(linkedEmp._id.toString());
+  }
+
+  const leadUserObjectIds = Array.from(userIds).map(id => new mongoose.Types.ObjectId(id));
+  const leadEmpObjectIds = Array.from(employeeIds).map(id => new mongoose.Types.ObjectId(id));
+
+  const teams = await Team.find({
+    $or: [
+      { teamLeadUser: { $in: leadUserObjectIds } },
+      { teamLeadEmployee: { $in: leadEmpObjectIds } },
+      { teamLeadUser: leadId },
+      { teamLeadEmployee: leadId }
+    ]
+  }).lean();
+
+  const memberUserIds = new Set(userIds);
+  const memberEmployeeIds = new Set(employeeIds);
+
+  for (const team of teams) {
+    const rawMembers = [
+      ...(team.employees || []),
+      ...(team.interns || []),
+      ...(team.developers || []),
+      ...(team.designers || []),
+      ...(team.testers || [])
+    ];
+
+    for (const memberId of rawMembers) {
+      if (!memberId) continue;
+      const strId = memberId.toString();
+
+      const empDoc = await Employee.findById(memberId).select("_id userID userId").lean();
+      if (empDoc) {
+        memberEmployeeIds.add(empDoc._id.toString());
+        if (empDoc.userID) memberUserIds.add(empDoc.userID.toString());
+        if (empDoc.userId) memberUserIds.add(empDoc.userId.toString());
+      } else {
+        memberUserIds.add(strId);
+      }
+    }
+  }
+
+  const directSubordinates = await Employee.find({
+    $or: [
+      { teamLeadUser: { $in: leadUserObjectIds } },
+      { teamLeadEmployee: { $in: leadEmpObjectIds } }
+    ]
+  }).select("_id userID userId").lean();
+
+  for (const sub of directSubordinates) {
+    memberEmployeeIds.add(sub._id.toString());
+    if (sub.userID) memberUserIds.add(sub.userID.toString());
+    if (sub.userId) memberUserIds.add(sub.userId.toString());
+  }
+
+  const combined = Array.from(new Set([...memberUserIds, ...memberEmployeeIds]));
+
+  return {
+    userIds: Array.from(memberUserIds),
+    employeeIds: Array.from(memberEmployeeIds),
+    allIds: combined
+  };
+};
+
 // ==========================
 // GET ALL DAILY REPORTS
 // ==========================
 exports.getAllDailyReports = async (req, res) => {
   try {
-    const reports = await DailyReport.find()
+    const { teamLeadId, employeeId, projectId, status } = req.query;
+
+    let filter = {};
+
+    const currentUser = req.user || null;
+    const currentUserId = currentUser ? currentUser._id.toString() : null;
+    const userRole = String(currentUser?.role || req.query.role || '').toLowerCase();
+
+    const isTLRole = ['teamlead', 'team leader', 'team_lead', 'tl'].includes(userRole);
+    const targetLeadId = teamLeadId || (isTLRole ? currentUserId : null);
+
+    let isTeamLeadFilterApplied = false;
+
+    if (targetLeadId) {
+      const leadMembers = await getTeamMemberIdsForLead(targetLeadId);
+      if (leadMembers.allIds.length > 0) {
+        isTeamLeadFilterApplied = true;
+        const objectIdList = leadMembers.allIds
+          .filter(id => mongoose.Types.ObjectId.isValid(id))
+          .map(id => new mongoose.Types.ObjectId(id));
+        filter.employeeId = { $in: objectIdList };
+      }
+    } else if (currentUserId) {
+      const leadMembers = await getTeamMemberIdsForLead(currentUserId);
+      if (leadMembers.allIds.length > 1) {
+        isTeamLeadFilterApplied = true;
+        const objectIdList = leadMembers.allIds
+          .filter(id => mongoose.Types.ObjectId.isValid(id))
+          .map(id => new mongoose.Types.ObjectId(id));
+        filter.employeeId = { $in: objectIdList };
+      }
+    }
+
+    if (!isTeamLeadFilterApplied && employeeId) {
+      if (mongoose.Types.ObjectId.isValid(employeeId)) {
+        filter.employeeId = new mongoose.Types.ObjectId(employeeId);
+      }
+    }
+
+    if (projectId && mongoose.Types.ObjectId.isValid(projectId)) {
+      filter.projectId = new mongoose.Types.ObjectId(projectId);
+    }
+
+    if (status) {
+      filter.status = status;
+    }
+
+    const reports = await DailyReport.find(filter)
       .populate({
         path: "employeeId",
-        select: "name role",
+        select: "name role email firstName lastName customerName",
       })
       .populate({
         path: "projectId",
@@ -179,6 +316,8 @@ exports.getAllDailyReports = async (req, res) => {
 
     return res.status(200).json({
       success: true,
+      count: reports.length,
+      isFilteredByTeamLead: isTeamLeadFilterApplied,
       data: reports,
     });
   } catch (error) {
