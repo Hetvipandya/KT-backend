@@ -106,7 +106,6 @@ app.use((req, res, next) => {
 // ============================================================
 const ktUserRoutes = require('./routes/userRoutes');
 const ktRoleRoutes = require('./routes/roleRoutes');
-const ktCompanyRoutes = require('./routes/companyRoutes');
 const ktDepartmentRoutes = require('./routes/departmentRoutes');
 const ktTeamRoutes = require('./routes/teamRoutes');
 const ktEmployeeRoutes = require('./routes/employeeRoutes');
@@ -228,8 +227,7 @@ app.use('/api/fileManagement', ktFileManagementRoutes);
 app.use('/api/milestone', ktMilestoneRoutes);
 app.use('/api/client', ktClientProjectRoutes);
 
-// Overlapping routes: KT endpoints first, followed by FIN RESTful endpoints
-app.use('/api/company', ktCompanyRoutes);
+// Company endpoints use one authenticated, validated controller and route entry.
 app.use('/api/company', finCompanyRoutes);
 
 app.use('/api/department', ktDepartmentRoutes);

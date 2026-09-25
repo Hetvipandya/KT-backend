@@ -5,6 +5,9 @@ The merged backend maintains **100% backward compatibility** for all existing KT
 
 ---
 
+
+
+
 ## 1. Existing KT API Verification
 | Area | Original Route | Merged Route | Status | Notes |
 | :--- | :--- | :--- | :--- | :--- |
