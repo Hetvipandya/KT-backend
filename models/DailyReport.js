@@ -51,6 +51,12 @@ const dailyReportSchema =
         type: String,
       },
 
+      status: {
+        type: String,
+        enum: ["Pending", "Under Review", "Approved", "Rejected"],
+        default: "Pending",
+      },
+
       reviewedBy: {
         type:
           mongoose.Schema.Types.ObjectId,
