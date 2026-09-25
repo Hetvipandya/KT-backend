@@ -6,7 +6,7 @@ const dailyUpdateSchema =
       taskId: {
         type:
           mongoose.Schema.Types.ObjectId,
-        ref: "Task",
+        ref: "Task", 
         required: true,
       },
 

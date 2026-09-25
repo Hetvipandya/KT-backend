@@ -8,7 +8,7 @@ const {
   createDailyReport,
   getAllDailyReports, 
   getSingleDailyReport, 
-  updateReportStatus, 
+  updateReportStatus,  
   addComment,
   deleteDailyReport,
 } = require(
