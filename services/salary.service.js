@@ -10,11 +10,34 @@ const { createNotification } = require('./notification.service');
 const fail = (m, c = 400, e) => Object.assign(new Error(m), { statusCode: c, errorCode: e });
 
 exports.create = async (d, u) => {
+  let netPayableNum;
+  if (typeof d.netPayable === 'number') {
+    netPayableNum = d.netPayable;
+  } else if (typeof d.netAmount === 'number') {
+    netPayableNum = d.netAmount;
+  } else {
+    netPayableNum = (Number(d.grossSalary) || 0) - (Number(d.deductions) || 0);
+  }
+
+  const validPaymentModes = ['BANK_TRANSFER', 'CASH', 'OTHER'];
+  let paymentModeStr = 'BANK_TRANSFER';
+  if (typeof d.paymentMode === 'string' && validPaymentModes.includes(d.paymentMode.toUpperCase())) {
+    paymentModeStr = d.paymentMode.toUpperCase();
+  } else if (typeof d.netPayable === 'string' && validPaymentModes.includes(d.netPayable.toUpperCase())) {
+    paymentModeStr = d.netPayable.toUpperCase();
+  }
+
+  d = {
+    ...d,
+    netPayable: netPayableNum,
+    paymentMode: paymentModeStr
+  };
+
   const fy = await FY.findOne({ _id: d.financialYearId, companyId: d.companyId, branchId: d.branchId });
   const b = await B.findOne({ _id: d.branchId, companyId: d.companyId });
   if (!fy || !b) throw fail('Branch or financial year does not belong to the company', 400, 'INVALID_BRANCH_FINANCIAL_YEAR');
   if (new Date(d.periodStart) > new Date(d.periodEnd)) throw fail('periodStart cannot be after periodEnd', 400, 'INVALID_PERIOD');
-  if (Math.abs(d.netPayable - (d.grossSalary - d.deductions)) > .01) throw fail('netPayable is inconsistent', 400, 'INVALID_TOTALS');
+  if (Math.abs(d.netPayable - ((Number(d.grossSalary) || 0) - (Number(d.deductions) || 0))) > .01) throw fail('netPayable is inconsistent', 400, 'INVALID_TOTALS');
   const accounts = await COA.find({ _id: { $in: [d.salaryExpenseAccountId, d.payableAccountId] }, companyId: d.companyId, isActive: true, isGroup: false });
   if (accounts.length !== 2) throw fail('Salary accounts not found', 404, 'ACCOUNT_NOT_FOUND');
   const x = await S.create({ ...d, periodStart: new Date(d.periodStart), periodEnd: new Date(d.periodEnd), createdBy: u, updatedBy: u });
