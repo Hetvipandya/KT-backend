@@ -133,6 +133,7 @@ const ktHolidayRoutes = require('./routes/holidayRoutes');
 const ktAppRoutes = require('./routes/appRoutes');
 const ktContactRoutes = require('./routes/contactRoutes');
 const ktPositionRoutes = require('./routes/positionRoutes');
+const sessionRoutes = require('./routes/sessionRoutes');
 const ktPortfolioRoutes = require('./routes/portfolioRoutes');
 const ktAdjustmentRequestRoutes = require('./routes/adjustmentRequestRoutes');
 const ktPerformanceRoutes = require('./routes/performanceRoutes');
@@ -226,6 +227,7 @@ app.use('/api/projectAnalytics', ktProjectAnalyticsRoutes);
 app.use('/api/fileManagement', ktFileManagementRoutes);
 app.use('/api/milestone', ktMilestoneRoutes);
 app.use('/api/client', ktClientProjectRoutes);
+app.use('/api/session', sessionRoutes);
 
 // Company endpoints use one authenticated, validated controller and route entry.
 app.use('/api/company', finCompanyRoutes);

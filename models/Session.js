@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+const crypto = require("crypto");
 
 const sessionSchema = new mongoose.Schema(
   {
@@ -6,17 +7,20 @@ const sessionSchema = new mongoose.Schema(
       type: String,
       required: true,
       unique: true,
+      default: () => crypto.randomUUID(),
     },
 
     userId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       required: true,
+      index: true,
     },
 
     attendanceId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Attendance",
+      default: null,
     },
 
     startTime: {
@@ -50,4 +54,6 @@ const sessionSchema = new mongoose.Schema(
   }
 );
 
-module.exports = mongoose.model("Session", sessionSchema);
+const Session = mongoose.models.Session || mongoose.model("Session", sessionSchema);
+
+module.exports = Session;
