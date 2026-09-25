@@ -232,6 +232,16 @@ const createCompany = async (req, res, next) => {
       coaSeedWarning = seedErr.message || 'Default configuration seeding failed; retry manually';
     }
 
+    const { notify } = require('../utils/sendNotification');
+    notify({
+      userId: req.user?._id,
+      companyId: company._id.toString(),
+      type: 'COMPANY_CREATED',
+      title: 'Company Created',
+      message: `Company "${company.name}" has been created successfully.`,
+      meta: { companyId: company._id.toString() }
+    });
+
     return res.status(201).json({
       success: true,
       data: {

@@ -123,6 +123,16 @@ exports.createDailyReport =
           reportDate: req.body.reportDate || new Date(),
         });
 
+      const { notify } = require('../utils/sendNotification');
+      notify({
+        userId: req.user?._id,
+        companyId: req.user?.companyId,
+        type: 'DAILY_REPORT_CREATED',
+        title: 'Daily Report Submitted',
+        message: `Daily report for ${new Date(report.reportDate).toLocaleDateString()} submitted successfully.`,
+        meta: { reportId: report._id.toString() }
+      });
+
       return res.status(201).json({
         success: true,
         message:

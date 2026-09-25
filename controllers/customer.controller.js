@@ -70,6 +70,16 @@ const createCustomer = async (req, res, next) => {
       isActive: true
     });
 
+    const { notify } = require('../utils/sendNotification');
+    notify({
+      userId: req.user?._id,
+      companyId,
+      type: 'CUSTOMER_CREATED',
+      title: 'New Customer Created',
+      message: `Customer "${customer.name}" was added successfully.`,
+      meta: { customerId: customer._id.toString() }
+    });
+
     return res.status(201).json({
       success: true,
       data: customer

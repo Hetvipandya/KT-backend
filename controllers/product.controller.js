@@ -95,6 +95,16 @@ const createProduct = async (req, res, next) => {
       updatedBy: req.user._id
     });
 
+    const { notify } = require('../utils/sendNotification');
+    notify({
+      userId: req.user?._id,
+      companyId,
+      type: 'PRODUCT_CREATED',
+      title: 'New Product Created',
+      message: `Product "${product.name}" (${product.code || 'No Code'}) was added successfully.`,
+      meta: { productId: product._id.toString() }
+    });
+
     return res.status(201).json({
       success: true,
       data: serializeProduct(product)
