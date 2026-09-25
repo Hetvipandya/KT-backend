@@ -179,34 +179,35 @@ exports.getAllDailyReports = async (req, res) => {
 // GET SINGLE DAILY REPORT
 // ==========================
 exports.getSingleDailyReport =
-  async (req, res) => { 
+  async (req, res) => {
     try {
-      const report =
-        await DailyReport.findById(
-          req.params.id
-        )
-          .populate(
-            "employeeId"
-          )
-          .populate(
-            "projectId"
-          )
-          .populate(
-            "taskReferences"
-          )
-          .populate(
-            "reviewedBy"
-          );
+      const { id } = req.params;
 
-      const comments =
-        await DailyReportComment.find(
-          {
-            dailyReportId:
-              req.params.id,
-          }
-        ).populate(
-          "commentBy"
-        );
+      if (!mongoose.Types.ObjectId.isValid(id)) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid daily report id",
+        });
+      }
+
+      const report = await DailyReport.findById(id)
+        .populate("employeeId")
+        .populate("projectId")
+        .populate("taskReferences")
+        .populate("reviewedBy");
+
+      if (!report) {
+        return res.status(404).json({
+          success: false,
+          message: "Daily report not found",
+        });
+      }
+
+      const comments = await DailyReportComment.find({
+        dailyReportId: id,
+      })
+        .populate("commentBy")
+        .sort({ createdAt: -1 });
 
       return res.status(200).json({
         success: true,
@@ -216,8 +217,7 @@ exports.getSingleDailyReport =
     } catch (error) {
       return res.status(500).json({
         success: false,
-        message:
-          error.message,
+        message: error.message,
       });
     }
   };
