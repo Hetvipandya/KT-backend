@@ -22,7 +22,8 @@ router.post("/create", createSalaryStructure);
 // Get All
 router.get("/all", getAllSalaryStructures);
 
-// Get By ID
+// Get By User ID or Structure ID
+router.get("/user/:userId", getSalaryStructureById);
 router.get("/:id", getSalaryStructureById);
 
 // Full Update

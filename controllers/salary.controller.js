@@ -126,17 +126,82 @@ const getAllSalaryStructures = async (req, res) => {
 // =====================================================
 const getSalaryStructureById = async (req, res) => {
   try {
-    const { id } = req.params;
+    const id = req.params.id || req.params.userId;
 
-    if (!mongoose.Types.ObjectId.isValid(id)) {
+    if (!id || !mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({
         success: false,
-        message: "Invalid salary structure ID",
+        message: "Invalid salary structure ID or User ID",
       });
     }
 
-    const salary = await SalaryStructure.findById(id)
+    // 1. Try finding by SalaryStructure _id
+    let salary = await SalaryStructure.findById(id)
       .populate("userId", "name email uniqueID role");
+
+    // 2. Try finding active SalaryStructure by userId or employeeId
+    if (!salary) {
+      salary = await SalaryStructure.findOne({
+        $or: [{ userId: id }, { employeeId: id }],
+        isActive: true,
+      }).populate("userId", "name email uniqueID role");
+    }
+
+    // 3. Try finding any SalaryStructure by userId or employeeId
+    if (!salary) {
+      salary = await SalaryStructure.findOne({
+        $or: [{ userId: id }, { employeeId: id }],
+      })
+        .sort({ createdAt: -1 })
+        .populate("userId", "name email uniqueID role");
+    }
+
+    // 4. Try finding in Finance Salary model (models/Salary.js)
+    if (!salary) {
+      try {
+        const Salary = require("../models/Salary");
+        const finSalary = await Salary.findById(id).lean();
+        if (finSalary) {
+          return res.status(200).json({
+            success: true,
+            message: "Salary record fetched successfully",
+            data: finSalary,
+          });
+        }
+      } catch (err) {}
+    }
+
+    // 5. Fallback: If User or Employee exists, return default salary structure
+    if (!salary) {
+      try {
+        const user = await User.findById(id).lean();
+        const Employee = require("../models/Employee");
+        const emp = await Employee.findOne({ $or: [{ _id: id }, { userID: id }] }).lean();
+
+        if (user || emp) {
+          salary = {
+            _id: null,
+            userId: user?._id || emp?.userID || emp?._id || id,
+            basicSalary: 0,
+            hra: 0,
+            allowance: 0,
+            fixedBonus: 0,
+            fixedDeduction: 0,
+            tdsPercentage: 0,
+            grossSalary: 0,
+            totalDeduction: 0,
+            netSalary: 0,
+            isActive: true,
+            user: user || emp || null
+          };
+          return res.status(200).json({
+            success: true,
+            message: "Default salary structure returned",
+            data: salary,
+          });
+        }
+      } catch (err) {}
+    }
 
     if (!salary) {
       return res.status(404).json({
