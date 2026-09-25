@@ -488,3 +488,159 @@ exports.markSalaryPaid = async (req, res) => {
     });
   }
 };
+
+// ===============================
+// Download / View Printable Payslip (HTML UI)
+// ===============================
+exports.downloadPrintablePayslip = async (req, res) => {
+  try {
+    const targetId = req.params.id || req.query.id || req.query.payslipId || req.query.payrollId;
+
+    if (!targetId || !require("mongoose").Types.ObjectId.isValid(targetId)) {
+      return res.status(400).send("<h3>Invalid or missing Payslip/Payroll ID</h3>");
+    }
+
+    const Payslip = require("../models/Payslip");
+    const Payroll = require("../models/Payroll");
+    const User = require("../models/User");
+    const Employee = require("../models/Employee");
+    const Company = require("../models/Company");
+    const payslipRenderService = require("../services/payslipRenderService");
+
+    let payslip = await Payslip.findById(targetId).lean();
+    let payroll = null;
+
+    if (!payslip) {
+      payroll = await Payroll.findById(targetId).lean();
+      if (payroll) {
+        payslip = {
+          _id: payroll._id,
+          payrollId: payroll._id,
+          userId: payroll.userId,
+          month: payroll.month,
+          year: payroll.year,
+          basicSalary: payroll.basicSalary,
+          hra: payroll.hra,
+          allowance: payroll.allowance,
+          fixedBonus: payroll.fixedBonus,
+          extraBonus: payroll.extraBonus,
+          grossSalary: payroll.grossSalary,
+          fixedDeduction: payroll.fixedDeduction,
+          extraDeduction: payroll.extraDeduction,
+          totalDeduction: payroll.totalDeduction,
+          tdsPercentage: payroll.tdsPercentage,
+          tdsAmount: payroll.tdsAmount,
+          netSalary: payroll.netSalary,
+          generatedDate: payroll.paymentDate || payroll.createdAt
+        };
+      }
+    }
+
+    if (!payslip) {
+      return res.status(404).send("<h3>Payslip or Payroll record not found</h3>");
+    }
+
+    const userId = payslip.userId;
+    const [userDoc, empDoc, companyDoc] = await Promise.all([
+      User.findById(userId).lean(),
+      Employee.findOne({ $or: [{ userID: userId }, { userId }, { _id: userId }] }).lean(),
+      Company.findOne().lean()
+    ]);
+
+    const employeeData = {
+      ...(userDoc || {}),
+      ...(empDoc || {}),
+      name: userDoc?.name || empDoc?.name || (empDoc?.firstName ? `${empDoc.firstName} ${empDoc.lastName || ''}`.trim() : "Employee")
+    };
+
+    const companyData = companyDoc || {
+      name: "KEVALON TECHNOLOGY",
+      address: "Solaris Business Hub, Ahmedabad, Gujarat, India",
+      phone: "+91 78620 24638",
+      email: "hr@kevalontechnology.in"
+    };
+
+    const html = payslipRenderService.renderPayslipHtml(payslip, employeeData, companyData);
+
+    res.setHeader("Content-Type", "text/html");
+    return res.send(html);
+  } catch (error) {
+    return res.status(500).send(`<h3>Error generating printable payslip: ${error.message}</h3>`);
+  }
+};
+
+// ===============================
+// Download Payslip PDF Stream
+// ===============================
+exports.downloadPayslipPdf = async (req, res) => {
+  try {
+    const targetId = req.params.id || req.query.id || req.query.payslipId || req.query.payrollId;
+
+    if (!targetId || !require("mongoose").Types.ObjectId.isValid(targetId)) {
+      return res.status(400).json({ success: false, message: "Invalid or missing Payslip/Payroll ID" });
+    }
+
+    const Payslip = require("../models/Payslip");
+    const Payroll = require("../models/Payroll");
+    const User = require("../models/User");
+    const Employee = require("../models/Employee");
+    const Company = require("../models/Company");
+    const payslipRenderService = require("../services/payslipRenderService");
+
+    let payslip = await Payslip.findById(targetId).lean();
+
+    if (!payslip) {
+      const payroll = await Payroll.findById(targetId).lean();
+      if (payroll) {
+        payslip = {
+          _id: payroll._id,
+          payrollId: payroll._id,
+          userId: payroll.userId,
+          month: payroll.month,
+          year: payroll.year,
+          basicSalary: payroll.basicSalary,
+          hra: payroll.hra,
+          allowance: payroll.allowance,
+          fixedBonus: payroll.fixedBonus,
+          extraBonus: payroll.extraBonus,
+          grossSalary: payroll.grossSalary,
+          fixedDeduction: payroll.fixedDeduction,
+          extraDeduction: payroll.extraDeduction,
+          totalDeduction: payroll.totalDeduction,
+          tdsPercentage: payroll.tdsPercentage,
+          tdsAmount: payroll.tdsAmount,
+          netSalary: payroll.netSalary,
+          generatedDate: payroll.paymentDate || payroll.createdAt
+        };
+      }
+    }
+
+    if (!payslip) {
+      return res.status(404).json({ success: false, message: "Payslip record not found" });
+    }
+
+    const userId = payslip.userId;
+    const [userDoc, empDoc, companyDoc] = await Promise.all([
+      User.findById(userId).lean(),
+      Employee.findOne({ $or: [{ userID: userId }, { userId }, { _id: userId }] }).lean(),
+      Company.findOne().lean()
+    ]);
+
+    const employeeData = {
+      ...(userDoc || {}),
+      ...(empDoc || {}),
+      name: userDoc?.name || empDoc?.name || (empDoc?.firstName ? `${empDoc.firstName} ${empDoc.lastName || ''}`.trim() : "Employee")
+    };
+
+    const companyData = companyDoc || {
+      name: "KEVALON TECHNOLOGY",
+      address: "Solaris Business Hub, Ahmedabad, Gujarat, India",
+      phone: "+91 78620 24638",
+      email: "hr@kevalontechnology.in"
+    };
+
+    payslipRenderService.renderPayslipPdf(res, payslip, employeeData, companyData);
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
