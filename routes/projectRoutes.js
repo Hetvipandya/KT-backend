@@ -252,7 +252,7 @@ router.delete(
 // Add Daily Update
 router.post(
   "/daily-update/add",
-  addDailyUpdate
+  addDailyUpdate 
 );
 
 // Get Task Updates

@@ -4,10 +4,10 @@ const DailyReportComment = require("../models/DailyReportComment");
 
 // ==========================
 // CREATE DAILY REPORT / COMMENT
-// ==========================
+// ========================== 
 exports.createDailyReport =
   async (req, res) => {
-    try {
+    try { 
       console.log(
         "BODY ===>",
         req.body
@@ -152,7 +152,7 @@ exports.getAllDailyReports = async (req, res) => {
     const reports = await DailyReport.find()
       .populate({
         path: "employeeId",
-        select: "name role", // je fields joiye e
+        select: "name role",
       })
       .populate({
         path: "projectId",
@@ -160,7 +160,8 @@ exports.getAllDailyReports = async (req, res) => {
       })
       .populate({
         path: "taskReferences",
-        select: "taskTitle",
+        model: "Task",
+        select: "taskTitle status progress projectId",
       })
       .sort({
         createdAt: -1,
@@ -196,7 +197,11 @@ exports.getSingleDailyReport =
       const report = await DailyReport.findById(id)
         .populate("employeeId")
         .populate("projectId")
-        .populate("taskReferences")
+        .populate({
+          path: "taskReferences",
+          model: "Task",
+          select: "taskTitle status progress projectId",
+        })
         .populate("reviewedBy");
 
       if (!report) {
