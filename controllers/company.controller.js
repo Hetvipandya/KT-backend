@@ -204,7 +204,7 @@ const createCompany = async (req, res, next) => {
           ]
         }
       },
-      { upsert: true, new: true }
+      { upsert: true, new: true, ...sessionOpts }
     );
 
     const { invalidateUserCache } = require('../middleware/authenticate');

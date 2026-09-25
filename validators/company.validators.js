@@ -6,12 +6,26 @@ const pincodeRegex = /^[1-9][0-9]{5}$/;
 
 const preprocessCompanyInput = (data) => {
   if (data && typeof data === 'object') {
-    if (data.gstin && (!data.pan || data.pan.trim() === '')) {
-      const extractedPan = extractPanFromGstin(data.gstin);
+    const copy = { ...data };
+    if (!copy.name && copy.companyName) {
+      copy.name = copy.companyName;
+    }
+    if (!copy.gstin && copy.gstNumber) {
+      copy.gstin = copy.gstNumber;
+    }
+    if (!copy.pan && copy.panNumber) {
+      copy.pan = copy.panNumber;
+    }
+    if (!copy.logoUrl && copy.companyLogo) {
+      copy.logoUrl = copy.companyLogo;
+    }
+    if (copy.gstin && (!copy.pan || String(copy.pan).trim() === '')) {
+      const extractedPan = extractPanFromGstin(copy.gstin);
       if (extractedPan) {
-        data.pan = extractedPan;
+        copy.pan = extractedPan;
       }
     }
+    return copy;
   }
   return data;
 };
@@ -30,7 +44,7 @@ const createCompanySchema = z.preprocess(
     email: z.string().email('Invalid email address').optional().or(z.literal('')),
     phone: z.string().optional().or(z.literal('')),
     logoUrl: z.string().url('Invalid logo URL').optional().or(z.literal(''))
-  }).strict()
+  }).passthrough()
 );
 
 const updateCompanySchema = z.preprocess(
@@ -47,7 +61,7 @@ const updateCompanySchema = z.preprocess(
     email: z.string().email('Invalid email address').optional().or(z.literal('')),
     phone: z.string().optional().or(z.literal('')),
     logoUrl: z.string().url('Invalid logo URL').optional().or(z.literal(''))
-  }).strict()
+  }).passthrough()
 );
 
 const createBranchSchema = z.object({
