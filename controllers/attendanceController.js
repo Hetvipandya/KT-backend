@@ -44,6 +44,14 @@ const normalizeRoleValue = (value) => {
     return "admin";
   }
 
+  if (compact === "accountant") {
+    return "accountant";
+  }
+
+  if (compact === "ca") {
+    return "ca";
+  }
+
   return normalized;
 };
 

@@ -1,5 +1,7 @@
+const mongoose = require("mongoose");
 const sanitizeUserUpdatePayload = require("../utils/userPayloadSanitizer");
 const User = require("../models/User");
+const Attendance = require("../models/Attendance");
 const {
   buildLoginLookupQuery,
   __test__applyPasswordUpdate,
@@ -100,5 +102,24 @@ describe("password safety for user updates", () => {
     expect(__test__normalizeRoleValue("team_lead")).toBe("team lead");
     expect(__test__normalizeRoleValue("Employee")).toBe("employee");
     expect(__test__normalizeRoleValue("  employee  ")).toBe("employee");
+    expect(__test__normalizeRoleValue("Accountant")).toBe("accountant");
+    expect(__test__normalizeRoleValue("CA")).toBe("ca");
+  });
+
+  it("accepts accountant and CA as valid attendance user types", () => {
+    const accountantAttendance = new Attendance({
+      userId: new mongoose.Types.ObjectId(),
+      userType: "accountant",
+      date: "2026-09-25",
+    });
+
+    const caAttendance = new Attendance({
+      userId: new mongoose.Types.ObjectId(),
+      userType: "ca",
+      date: "2026-09-25",
+    });
+
+    expect(accountantAttendance.validateSync()).toBeUndefined();
+    expect(caAttendance.validateSync()).toBeUndefined();
   });
 });
