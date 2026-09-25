@@ -90,9 +90,9 @@ exports.downloadPrintableInvoice = send(async (req, res) => {
   let companyData = companyDoc || {
     name: "KEVALON TECHNOLOGY",
     companyName: "KEVALON TECHNOLOGY",
-    address: "Solaris Business Hub, Memnagar, Ahmedabad, Gujarat - 380052, India",
-    phone: "+91 78620 24638",
-    email: "contact@kevalontechnology.in",
+    address: "913, Solaris Business Hub, Near Parshwanath Jain Temple BRTS, Ahmedabad, Gujarat - 380061",
+    phone: "9725247990",
+    email: "sales@kevalontechnology.in",
     gstin: "24BQSPH0154B1Z9",
     pan: "BQSPH0154"
   };
@@ -100,6 +100,9 @@ exports.downloadPrintableInvoice = send(async (req, res) => {
   if (companyData.name && companyData.name.toLowerCase().includes('tapzy')) {
     companyData.name = 'KEVALON TECHNOLOGY';
     companyData.companyName = 'KEVALON TECHNOLOGY';
+    companyData.address = '913, Solaris Business Hub, Near Parshwanath Jain Temple BRTS, Ahmedabad, Gujarat - 380061';
+    companyData.email = 'sales@kevalontechnology.in';
+    companyData.phone = '9725247990';
   }
 
   const customerData = customerDoc || (invoice.customerId && typeof invoice.customerId === 'object' ? invoice.customerId : {

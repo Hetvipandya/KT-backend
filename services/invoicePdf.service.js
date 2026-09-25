@@ -61,10 +61,10 @@ const generateInvoicePdf = async (invoice) => {
     const compAddrArr = [company?.address, company?.city, company?.state, company?.pincode].filter(Boolean);
     const compAddr = (compAddrArr.length && !company?.address?.toLowerCase().includes('tapzy'))
       ? compAddrArr.join(', ')
-      : 'Solaris Business Hub, Memnagar, Ahmedabad, Gujarat - 380052, India';
+      : '913, Solaris Business Hub, Near Parshwanath Jain Temple BRTS, Ahmedabad, Gujarat - 380061';
 
-    const compPhoneStr = company?.phone || '+91 78620 24638';
-    const compEmailStr = company?.email || 'contact@kevalontechnology.in';
+    const compPhoneStr = company?.phone || '9725247990';
+    const compEmailStr = company?.email || 'sales@kevalontechnology.in';
     const compContact = `Ph: ${compPhoneStr}  |  ${compEmailStr}`;
 
     doc.fontSize(8.5).font('Helvetica');
