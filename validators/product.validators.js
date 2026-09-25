@@ -12,6 +12,7 @@ const uomEnum = z.enum([
 
 const createProductSchema = z.object({
   companyId: objectId,
+  branchId: objectId.optional().nullable().or(z.literal('')),
   name: z.string().trim().min(1, 'Product name cannot be empty'),
   code: optionalText,
   description: optionalText,
@@ -24,10 +25,11 @@ const createProductSchema = z.object({
   isStockItem: z.boolean().optional(),
   unitOfMeasure: uomEnum,
   isActive: z.boolean().optional()
-}).strict();
+}).passthrough();
 
 const updateProductSchema = z.object({
   companyId: z.any().optional(), // allow but reject in controller
+  branchId: objectId.optional().nullable().or(z.literal('')),
   name: z.string().trim().min(1, 'Product name cannot be empty').optional(),
   code: optionalText,
   description: optionalText,
@@ -40,7 +42,7 @@ const updateProductSchema = z.object({
   isStockItem: z.boolean().optional(),
   unitOfMeasure: uomEnum,
   isActive: z.boolean().optional()
-}).strict();
+}).passthrough();
 
 module.exports = {
   createProductSchema,
