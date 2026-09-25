@@ -43,7 +43,7 @@ const dailyReportSchema =
         {
           type:
             mongoose.Schema.Types.ObjectId,
-          ref: "TaskManagement",
+          ref: "Task",
         },
       ],
 
