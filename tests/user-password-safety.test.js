@@ -6,6 +6,9 @@ const {
   __test__applySuccessfulLoginState,
   shouldRequireApproval,
 } = require("../controllers/userControllers");
+const {
+  __test__normalizeRoleValue,
+} = require("../controllers/attendanceController");
 
 describe("password safety for user updates", () => {
   it("strips password fields from normal profile update payloads", () => {
@@ -88,5 +91,14 @@ describe("password safety for user updates", () => {
     expect(shouldRequireApproval("CA")).toBe(false);
     expect(shouldRequireApproval("employee")).toBe(true);
     expect(shouldRequireApproval("team lead")).toBe(true);
+  });
+
+  it("normalizes team lead and employee role variants for attendance check-ins", () => {
+    expect(__test__normalizeRoleValue("teamlead")).toBe("team lead");
+    expect(__test__normalizeRoleValue("teamleader")).toBe("team lead");
+    expect(__test__normalizeRoleValue("Team Lead")).toBe("team lead");
+    expect(__test__normalizeRoleValue("team_lead")).toBe("team lead");
+    expect(__test__normalizeRoleValue("Employee")).toBe("employee");
+    expect(__test__normalizeRoleValue("  employee  ")).toBe("employee");
   });
 });

@@ -7,7 +7,7 @@ const bankAccountService = require('../services/bankAccount.service');
 
 /**
  * POST /api/customer
- * Create a new customer
+ * Create a new customer 
  */
 const createCustomer = async (req, res, next) => {
   try {

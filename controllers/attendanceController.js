@@ -4,7 +4,7 @@ const Attendance = require("../models/Attendance");
 const User = require("../models/User");
 const {
   OFFICE_LOCATION,
-  validateAttendanceGeofence,
+  validateAttendanceGeofence, 
 } = require("../utils/geofence");
 
 // ============================================================
@@ -19,9 +19,29 @@ const normalizeRoleValue = (value) => {
   }
 
   const normalized = String(value).trim().toLowerCase();
+  const compact = normalized.replace(/[\s_-]+/g, "");
 
-  if (normalized === "teamlead" || normalized === "team_lead") {
+  if (
+    compact === "teamlead" ||
+    compact === "teamleader"
+  ) {
     return "team lead";
+  }
+
+  if (compact === "employee" || compact === "staff") {
+    return "employee";
+  }
+
+  if (compact === "intern") {
+    return "intern";
+  }
+
+  if (compact === "hr") {
+    return "hr";
+  }
+
+  if (compact === "admin") {
+    return "admin";
   }
 
   return normalized;

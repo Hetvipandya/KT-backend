@@ -49,7 +49,7 @@ const createFinancialYear = async (req, res, next) => {
     }
 
     const { companyId, branchId, startDate, endDate, yearLabel, isLocked, status } = req.body;
-
+ 
     // A branch cannot be associated with another company's financial year.
     const branchQuery = Branch.findOne({ _id: branchId, companyId });
     if (transactionStarted) branchQuery.session(session);
