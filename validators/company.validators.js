@@ -34,8 +34,8 @@ const createCompanySchema = z.preprocess(
   preprocessCompanyInput,
   z.object({
     name: z.string({ required_error: 'Company name is required' }).min(1, 'Company name cannot be empty'),
-    gstin: z.string({ required_error: 'GSTIN is required' }).toUpperCase().regex(gstinRegex, 'Invalid Indian GSTIN format'),
-    pan: z.string({ required_error: 'PAN is required' }).toUpperCase().regex(panRegex, 'Invalid Indian PAN format'),
+    gstin: z.string().toUpperCase().regex(gstinRegex, 'Invalid Indian GSTIN format').optional().or(z.literal('')),
+    pan: z.string().toUpperCase().regex(panRegex, 'Invalid Indian PAN format').optional().or(z.literal('')),
     address: z.string().optional().or(z.literal('')),
     city: z.string().optional().or(z.literal('')),
     state: z.string().optional().or(z.literal('')),

@@ -111,38 +111,43 @@ const createCompany = async (req, res, next) => {
     }
 
     const { name, gstin, pan, address, city, state, pincode, country, email, phone, logoUrl } = req.body;
-    const effectivePan = (pan || extractPanFromGstin(gstin) || '').toUpperCase();
+    const gstinUpper = gstin ? String(gstin).toUpperCase() : '';
+    const effectivePan = (pan || (gstin ? extractPanFromGstin(gstin) : '') || '').toString().toUpperCase();
 
     // Check for existing GSTIN or PAN conflicts
-    const existingGstin = transactionStarted
-      ? await Company.findOne({ gstin: gstin.toUpperCase() }).session(session)
-      : await Company.findOne({ gstin: gstin.toUpperCase() });
-    if (existingGstin) {
-      if (transactionStarted) await session.abortTransaction();
-      return res.status(409).json({
-        success: false,
-        message: 'A company with this GSTIN is already registered',
-        errorCode: 'GSTIN_ALREADY_EXISTS'
-      });
+    if (gstinUpper) {
+      const existingGstin = transactionStarted
+        ? await Company.findOne({ gstin: gstinUpper }).session(session)
+        : await Company.findOne({ gstin: gstinUpper });
+      if (existingGstin) {
+        if (transactionStarted) await session.abortTransaction();
+        return res.status(409).json({
+          success: false,
+          message: 'A company with this GSTIN is already registered',
+          errorCode: 'GSTIN_ALREADY_EXISTS'
+        });
+      }
     }
 
-    const existingPan = transactionStarted
-      ? await Company.findOne({ pan: effectivePan }).session(session)
-      : await Company.findOne({ pan: effectivePan });
-    if (existingPan) {
-      if (transactionStarted) await session.abortTransaction();
-      return res.status(409).json({
-        success: false,
-        message: 'A company with this PAN is already registered',
-        errorCode: 'PAN_ALREADY_EXISTS'
-      });
+    if (effectivePan) {
+      const existingPan = transactionStarted
+        ? await Company.findOne({ pan: effectivePan }).session(session)
+        : await Company.findOne({ pan: effectivePan });
+      if (existingPan) {
+        if (transactionStarted) await session.abortTransaction();
+        return res.status(409).json({
+          success: false,
+          message: 'A company with this PAN is already registered',
+          errorCode: 'PAN_ALREADY_EXISTS'
+        });
+      }
     }
 
     const [company] = await Company.create([
       {
         name,
-        gstin: gstin.toUpperCase(),
-        pan: effectivePan,
+        gstin: gstinUpper || undefined,
+        pan: effectivePan || undefined,
         address,
         city,
         state,
