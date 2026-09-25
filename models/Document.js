@@ -11,7 +11,7 @@ const documentSchema = new mongoose.Schema(
       type: String,
       default: "",
     },
-
+ 
     documentType: {
       type: String,
       enum: [

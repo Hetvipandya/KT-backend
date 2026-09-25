@@ -1,1 +1,2 @@
 const express = require('express'); const authenticate = require('../middleware/authenticate'); const access = require('../middleware/companyAccess'); const validate = require('../middleware/validateRequest'); const { paySupplierSchema } = require('../validators/purchase.validators'); const controller = require('../controllers/paySupplier.controller'); const router = express.Router(); router.post('/pay-supplier', authenticate, validate(paySupplierSchema), access, controller.create); module.exports = router;
+ 

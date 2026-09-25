@@ -32,7 +32,7 @@ router.get(
   getSalaryStructure
 );
 
-router.get(
+router.get( 
   "/salary/user/:userId",
   getSalaryStructureByUserId
 );
