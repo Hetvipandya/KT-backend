@@ -11,7 +11,7 @@ const {
   generatePayslip,  
   getPayroll,
   getPayslips,
-  markSalaryPaid, 
+  markSalaryPaid,  
 } = require(
   "../controllers/payrollController"
 );
@@ -30,7 +30,7 @@ router.get(
   getSalaryStructure
 );
 
-router.get(
+router.get( 
   "/salary/user/:userId",
   getSalaryStructureByUserId
 );

@@ -8,7 +8,7 @@ const salaryStructureSchema = new mongoose.Schema(
       ref: "User",
       required: true,
     },
-
+ 
     basicSalary: {
       type: Number,
       required: true,
