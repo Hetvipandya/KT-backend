@@ -48,11 +48,19 @@ const mapStatusLabel = (status) => {
 };
 
 const renderInvoiceHtml = (invoice, company = {}, customer = {}) => {
-  const compName = company.name || company.companyName || 'KEVALON TECHNOLOGY';
-  const compGstin = company.gstin || company.gstNumber || '—';
-  const compPan = company.pan || '—';
+  let compName = company.name || company.companyName || 'KEVALON TECHNOLOGY';
+  if (!compName || compName.toLowerCase().includes('tapzy')) {
+    compName = 'KEVALON TECHNOLOGY';
+  }
+
+  const compGstin = (company.gstin && company.gstin !== '—') ? company.gstin : (company.gstNumber || '24BQSPH0154B1Z9');
+  const compPan = (company.pan && company.pan !== '—') ? company.pan : (company.panNumber || 'BQSPH0154');
+  
   const compAddressArr = [company.address, company.city, company.state, company.pincode].filter(Boolean);
-  const compAddress = compAddressArr.length ? compAddressArr.join(', ') : 'Solaris Business Hub, Ahmedabad, Gujarat, India';
+  const compAddress = (compAddressArr.length && !company.address?.toLowerCase().includes('tapzy'))
+    ? compAddressArr.join(', ')
+    : 'Solaris Business Hub, Memnagar, Ahmedabad, Gujarat - 380052, India';
+
   const compPhone = company.phone || '+91 78620 24638';
   const compEmail = company.email || 'contact@kevalontechnology.in';
 

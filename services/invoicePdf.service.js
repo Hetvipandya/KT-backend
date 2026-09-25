@@ -45,15 +45,27 @@ const generateInvoicePdf = async (invoice) => {
     doc.on('error', reject);
 
     // ── 1. Calculate Dynamic Header Height ──────────────────────────────────
-    const compName = company?.name || 'Your Company';
+    let compName = company?.name || company?.companyName || 'KEVALON TECHNOLOGY';
+    if (!compName || compName.toLowerCase().includes('tapzy')) {
+      compName = 'KEVALON TECHNOLOGY';
+    }
     const compFontSize = compName.length > 30 ? 14 : 16;
     
     doc.fontSize(compFontSize).font('Helvetica-Bold');
     const compNameHeight = doc.heightOfString(compName, { width: 330 });
 
-    const taxDetails = `GSTIN: ${company?.gstin || '—'}${company?.pan ? '   PAN: ' + company.pan : ''}`;
-    const compAddr = [company?.address, company?.city, company?.state, company?.pincode].filter(Boolean).join(', ');
-    const compContact = `${company?.phone ? 'Ph: ' + company.phone : ''}${company?.email ? (company?.phone ? '  |  ' : '') + company.email : ''}`;
+    const compGstin = company?.gstin || company?.gstNumber || '24BQSPH0154B1Z9';
+    const compPan = company?.pan || company?.panNumber || 'BQSPH0154';
+    const taxDetails = `GSTIN: ${compGstin}   PAN: ${compPan}`;
+    
+    const compAddrArr = [company?.address, company?.city, company?.state, company?.pincode].filter(Boolean);
+    const compAddr = (compAddrArr.length && !company?.address?.toLowerCase().includes('tapzy'))
+      ? compAddrArr.join(', ')
+      : 'Solaris Business Hub, Memnagar, Ahmedabad, Gujarat - 380052, India';
+
+    const compPhoneStr = company?.phone || '+91 78620 24638';
+    const compEmailStr = company?.email || 'contact@kevalontechnology.in';
+    const compContact = `Ph: ${compPhoneStr}  |  ${compEmailStr}`;
 
     doc.fontSize(8.5).font('Helvetica');
     const taxHeight = doc.heightOfString(taxDetails, { width: 330 });

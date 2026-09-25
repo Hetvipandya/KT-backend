@@ -87,12 +87,20 @@ exports.downloadPrintableInvoice = send(async (req, res) => {
     Customer.findById(invoice.customerId?._id || invoice.customerId).lean()
   ]);
 
-  const companyData = companyDoc || {
+  let companyData = companyDoc || {
     name: "KEVALON TECHNOLOGY",
-    address: "Solaris Business Hub, Ahmedabad, Gujarat, India",
+    companyName: "KEVALON TECHNOLOGY",
+    address: "Solaris Business Hub, Memnagar, Ahmedabad, Gujarat - 380052, India",
     phone: "+91 78620 24638",
-    email: "contact@kevalontechnology.in"
+    email: "contact@kevalontechnology.in",
+    gstin: "24BQSPH0154B1Z9",
+    pan: "BQSPH0154"
   };
+
+  if (companyData.name && companyData.name.toLowerCase().includes('tapzy')) {
+    companyData.name = 'KEVALON TECHNOLOGY';
+    companyData.companyName = 'KEVALON TECHNOLOGY';
+  }
 
   const customerData = customerDoc || (invoice.customerId && typeof invoice.customerId === 'object' ? invoice.customerId : {
     name: invoice.customerName || "Customer"
