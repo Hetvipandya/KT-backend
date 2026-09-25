@@ -55,17 +55,18 @@ const createCustomer = async (req, res, next) => {
       companyId,
       branchId,
       name,
+      customerName: name || req.body.customerName,
       gstin: gstin ? gstin.toUpperCase() : null,
       pan: req.body.pan ? req.body.pan.toUpperCase() : null,
       email,
       phone,
       billingAddress,
       shippingAddress: shippingAddress || billingAddress,
-      creditLimit,
-      creditPeriodDays,
+      creditLimit: creditLimit || 0,
+      creditPeriodDays: creditPeriodDays || 0,
       coaAccountId,
-      openingBalance,
-      openingBalanceType,
+      openingBalance: openingBalance || 0,
+      openingBalanceType: openingBalanceType || 'Dr',
       isActive: true
     });
 
