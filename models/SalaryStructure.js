@@ -15,7 +15,7 @@ const salaryStructureSchema = new mongoose.Schema(
       default: 0,
     },
 
-    hra: {
+    hra: { 
       type: Number,
       default: 0,
     },
