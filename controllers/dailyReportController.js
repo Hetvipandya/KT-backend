@@ -119,6 +119,8 @@ exports.createDailyReport =
           taskReferences:
             taskReferences || [],
           remarks,
+          status: req.body.status || "Pending",
+          reportDate: req.body.reportDate || new Date(),
         });
 
       return res.status(201).json({
@@ -126,6 +128,7 @@ exports.createDailyReport =
         message:
           "Daily report created successfully",
         data: report,
+        report,
       });
     } catch (error) {
       console.log(
@@ -212,7 +215,10 @@ exports.getSingleDailyReport =
       return res.status(200).json({
         success: true,
         data: report,
+        report,
+        dailyReport: report,
         comments,
+        totalComments: comments.length,
       });
     } catch (error) {
       return res.status(500).json({

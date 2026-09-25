@@ -43,12 +43,18 @@ const dailyReportSchema =
         {
           type:
             mongoose.Schema.Types.ObjectId,
-          ref: "TaskManagement",
+          ref: "Task",
         },
       ],
 
       remarks: {
         type: String,
+      },
+
+      status: {
+        type: String,
+        enum: ["Pending", "Under Review", "Approved", "Rejected"],
+        default: "Pending",
       },
 
       reviewedBy: {
