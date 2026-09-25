@@ -65,3 +65,42 @@ exports.pdf = send(async (req, res) => {
     }
   }
 });
+
+exports.downloadPrintableInvoice = send(async (req, res) => {
+  const targetId = req.params.id || req.query.id || req.query.invoiceId;
+  if (!targetId || !require('mongoose').Types.ObjectId.isValid(targetId)) {
+    return res.status(400).send('<h3>Invalid or missing Invoice ID</h3>');
+  }
+
+  const Invoice = require('../models/Invoice');
+  const Company = require('../models/Company');
+  const Customer = require('../models/Customer');
+  const invoiceRenderService = require('../services/invoiceRenderService');
+
+  const invoice = await Invoice.findById(targetId).populate('customerId').lean();
+  if (!invoice) {
+    return res.status(404).send('<h3>Invoice not found</h3>');
+  }
+
+  const [companyDoc, customerDoc] = await Promise.all([
+    Company.findById(invoice.companyId).lean(),
+    Customer.findById(invoice.customerId?._id || invoice.customerId).lean()
+  ]);
+
+  const companyData = companyDoc || {
+    name: "KEVALON TECHNOLOGY",
+    address: "Solaris Business Hub, Ahmedabad, Gujarat, India",
+    phone: "+91 78620 24638",
+    email: "contact@kevalontechnology.in"
+  };
+
+  const customerData = customerDoc || (invoice.customerId && typeof invoice.customerId === 'object' ? invoice.customerId : {
+    name: invoice.customerName || "Customer"
+  });
+
+  const html = invoiceRenderService.renderInvoiceHtml(invoice, companyData, customerData);
+
+  res.setHeader('Content-Type', 'text/html');
+  return res.send(html);
+});
+

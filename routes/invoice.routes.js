@@ -5,6 +5,12 @@ const validateRequest = require('../middleware/validateRequest');
 const { createInvoiceSchema, invoiceQuerySchema, validateQuery, updateInvoiceSchema } = require('../validators/invoice.validators');
 const controller = require('../controllers/invoice.controller');
 const router = express.Router();
+router.get('/print/:id', controller.downloadPrintableInvoice);
+router.get('/download/:id', controller.downloadPrintableInvoice);
+router.get('/html/:id', controller.downloadPrintableInvoice);
+router.get('/:id/print', controller.downloadPrintableInvoice);
+router.get('/:id/html', controller.downloadPrintableInvoice);
+
 router.post('/', authenticate, validateRequest(createInvoiceSchema), checkCompanyAccess, controller.create);
 router.get('/', authenticate, validateQuery(invoiceQuerySchema), checkCompanyAccess, controller.list);
 router.get('/:id/pdf', authenticate, checkCompanyAccess, controller.pdf);
@@ -20,3 +26,4 @@ router.put('/:id', authenticate, (req, res, next) => {
 }, checkCompanyAccess, controller.update);
 router.delete('/:id', authenticate, checkCompanyAccess, controller.cancel);
 module.exports = router;
+
