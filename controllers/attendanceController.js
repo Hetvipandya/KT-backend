@@ -1843,237 +1843,151 @@ exports.approveAttendance =
 // CHECK OUT
 // ============================================================
 
-exports.checkOut =
-  async (req, res) => {
-    try {
-      const { userId } =
-        req.body;
+exports.checkOut = async (req, res) => {
+  try {
+    const userId = req.body.userId || req.user?._id || req.user?.id;
 
-      if (!userId) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "userId is required",
-        });
-      }
+    if (!userId) {
+      return res.status(400).json({
+        success: false,
+        message: "userId is required",
+      });
+    }
 
-      // ======================================================
-      // GPS GEOFENCING VALIDATION
-      // ======================================================
-      const geofenceResult = validateAttendanceGeofence(req.body);
-      if (!geofenceResult.isInside) {
-        return res.status(400).json({
-          success: false,
-          message:
-            geofenceResult.error ||
-            "You are outside the office location. Please reach the office to continue.",
-          distance: geofenceResult.distance,
-          allowedRadius: OFFICE_LOCATION.radiusMeters,
-        });
-      }
+    const today = getToday();
+    let attendance = await Attendance.findOne({
+      userId,
+      date: today,
+    });
 
-      const attendance =
-        await Attendance.findOne({
-          userId,
-          date: getToday(),
-        });
+    if (!attendance) {
+      attendance = await Attendance.findOne({
+        userId,
+        checkInTime: { $ne: null },
+        checkOutTime: null,
+      }).sort({ createdAt: -1 });
+    }
 
-      if (!attendance) {
-        return res.status(404).json({
-          success: false,
-          message:
-            "Attendance not found",
-        });
-      }
+    if (!attendance) {
+      return res.status(404).json({
+        success: false,
+        message: "Active check-in record not found for today.",
+      });
+    }
 
-      // ======================================================
-      // APPROVAL REQUIRED
-      // ======================================================
+    if (attendance.checkOutTime) {
+      return res.status(400).json({
+        success: false,
+        message: "Already checked out",
+        data: formatAttendanceDocument(attendance),
+      });
+    }
 
-      if (
-        attendance.approvalStatus !==
-        "approved"
-      ) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "Your check-in request is not approved yet. Please wait for admin approval.",
-        });
-      }
+    const checkInTime = attendance.approvedCheckInTime || attendance.checkInTime;
 
-      if (attendance.checkOutTime) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "Already checked out",
-        });
-      }
+    if (!checkInTime) {
+      return res.status(400).json({
+        success: false,
+        message: "Check-in time not found.",
+      });
+    }
 
-      // ======================================================
-      // CHECK ACTIVE BREAK
-      // ======================================================
+    // Geofence resolution for location logging (does not block checkout if outside)
+    const geofenceResult = validateAttendanceGeofence(req.body);
 
-      const activeBreak =
-        attendance.breaks?.find(
-          (item) => !item.endTime
-        );
+    const checkoutTime = getISTNow();
 
-      if (activeBreak) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "Please end your active break before checking out.",
-        });
-      }
-
-      // ======================================================
-      // ACTUAL CHECK-IN
-      // ======================================================
-
-      const checkInTime =
-        attendance.approvedCheckInTime ||
-        attendance.checkInTime;
-
-      if (!checkInTime) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "Check-in time not found.",
-        });
-      }
-
-      // ======================================================
-      // SETTINGS
-      //
-      // ALWAYS USE SETTINGS STORED IN ATTENDANCE
-      // ======================================================
-
-      const settings =
-        getAttendanceSettings({
-          officeStartTime:
-            attendance.officeStartTime,
-
-          lateCutoffTime:
-            attendance.lateCutoffTime,
-
-          absentCutoffTime:
-            attendance.absentCutoffTime,
-
-          officeEndTime:
-            attendance.officeEndTime,
-
-          presentHours:
-            attendance.presentHours,
-
-          halfDayHours:
-            attendance.halfDayHours,
-
-          breakLimit:
-            attendance.breakLimit,
-        });
-
-      // ======================================================
-      // CHECKOUT
-      // ======================================================
-
-      const checkoutTime =
-        getISTNow();
-
-      attendance.checkOutTime =
-        checkoutTime;
-
-      attendance.checkOutLocation = {
+    // Auto-close any active break if user checks out while on break
+    const activeBreak = attendance.breaks?.find((item) => !item.endTime);
+    if (activeBreak) {
+      activeBreak.endTime = checkoutTime;
+      const breakDurationMs = checkoutTime.getTime() - new Date(activeBreak.startTime).getTime();
+      activeBreak.duration = Math.round(breakDurationMs / (1000 * 60));
+      activeBreak.endLocation = {
         latitude: geofenceResult.latitude,
         longitude: geofenceResult.longitude,
         distanceFromOffice: geofenceResult.distance,
       };
 
-      // ======================================================
-      // WORKING HOURS
-      // ======================================================
-
-      const totalHours =
-        getWorkingHours(
-          checkInTime,
-          checkoutTime,
-          attendance.totalBreakTime
-        );
-
-      attendance.totalWorkTime =
-        Number(
-          totalHours.toFixed(2)
-        );
-
-      // ======================================================
-      // RECALCULATE LATE / ABSENT
-      // USING ACTUAL CHECK-IN
-      // ======================================================
-
-      const attendanceStatus =
-        calculateAttendanceStatus(
-          checkInTime,
-          settings
-        );
-
-      attendance.isLate =
-        attendanceStatus.isLate;
-
-      // ======================================================
-      // STATUS
-      // ======================================================
-
-      if (
-        attendanceStatus.isAbsentDueToLate
-      ) {
-        attendance.status =
-          "absent";
-      } else if (
-        attendanceStatus.status === "half-day" ||
-        attendance.totalWorkTime <
-          settings.presentHours
-      ) {
-        attendance.status =
-          "half-day";
-      } else {
-        attendance.status =
-          "present";
-      }
-
-      await attendance.save();
-
-      return res.status(200).json({
-        success: true,
-
-        message:
-          "Check-Out Successful",
-
-        totalWorkTime:
-          attendance.totalWorkTime,
-
-        totalBreakTime:
-          attendance.totalBreakTime,
-
-        timerStartTime:
-          attendance.approvedCheckInTime ||
-          attendance.checkInTime,
-
-        data:
-          formatAttendanceDocument(
-            attendance
-          ),
-      });
-    } catch (err) {
-      console.error(
-        "CheckOut Error:",
-        err
+      // Recalculate totalBreakTime
+      const completedBreaks = attendance.breaks.filter((b) => b.endTime);
+      attendance.totalBreakTime = completedBreaks.reduce(
+        (sum, b) => sum + (Number(b.duration) || 0),
+        0
       );
-
-      return res.status(500).json({
-        success: false,
-        message: err.message,
-      });
     }
-  };
+
+    attendance.checkOutTime = checkoutTime;
+    attendance.checkOutLocation = {
+      latitude: geofenceResult.latitude,
+      longitude: geofenceResult.longitude,
+      distanceFromOffice: geofenceResult.distance,
+    };
+    attendance.isActiveSession = false;
+
+    const settings = getAttendanceSettings({
+      officeStartTime: attendance.officeStartTime,
+      lateCutoffTime: attendance.lateCutoffTime,
+      absentCutoffTime: attendance.absentCutoffTime,
+      officeEndTime: attendance.officeEndTime,
+      presentHours: attendance.presentHours,
+      halfDayHours: attendance.halfDayHours,
+      breakLimit: attendance.breakLimit,
+    });
+
+    const totalHours = getWorkingHours(
+      checkInTime,
+      checkoutTime,
+      attendance.totalBreakTime
+    );
+
+    attendance.totalWorkTime = Number(totalHours.toFixed(2));
+
+    const attendanceStatus = calculateAttendanceStatus(
+      checkInTime,
+      settings
+    );
+
+    attendance.isLate = attendanceStatus.isLate;
+
+    if (attendanceStatus.isAbsentDueToLate) {
+      attendance.status = "absent";
+    } else if (
+      attendanceStatus.status === "half-day" ||
+      attendance.totalWorkTime < (settings.presentHours || 8)
+    ) {
+      attendance.status = "half-day";
+    } else {
+      attendance.status = "present";
+    }
+
+    await attendance.save();
+
+    // Terminate active sessions for user
+    try {
+      const Session = require("../models/Session");
+      await Session.updateMany(
+        { userId, status: { $in: ["active", "break"] } },
+        { $set: { status: "terminated", endTime: new Date() } }
+      );
+    } catch (_) {}
+
+    return res.status(200).json({
+      success: true,
+      message: "Check-Out Successful",
+      totalWorkTime: attendance.totalWorkTime,
+      totalBreakTime: attendance.totalBreakTime,
+      timerStartTime: checkInTime,
+      data: formatAttendanceDocument(attendance),
+    });
+  } catch (err) {
+    console.error("CheckOut Error:", err);
+    return res.status(500).json({
+      success: false,
+      message: err.message,
+    });
+  }
+};
 
 // ============================================================
 // BREAK START
