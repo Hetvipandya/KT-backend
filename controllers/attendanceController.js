@@ -3860,3 +3860,169 @@ exports.recalculateAllAttendance = async (req, res) => {
     });
   }
 };
+
+// ============================================================
+// CHECK LOCATION GEOFENCE & AUTO CHECKOUT
+//
+// Rules:
+// 1. Auto checkout when device location is outside office radius.
+// 2. If active break is running (break start = true), skip auto checkout.
+// 3. If working time is active (checked in, not checked out, NOT on break), execute auto checkout.
+// 4. Works for both Laptop & Phone - whichever device triggers first outside radius.
+// ============================================================
+
+exports.checkLocationGeofence = async (req, res) => {
+  try {
+    const userId = req.user?._id || req.user?.id || req.body.userId;
+    const deviceType =
+      req.body.deviceType ||
+      req.body.device ||
+      req.body.platform ||
+      (req.headers["user-agent"]?.toLowerCase().includes("mobile") ? "phone" : "laptop");
+
+    if (!userId) {
+      return res.status(400).json({
+        success: false,
+        message: "userId is required",
+      });
+    }
+
+    const geofenceResult = validateAttendanceGeofence(req.body);
+    const today = getToday();
+    const attendance = await Attendance.findOne({
+      userId,
+      date: today,
+    });
+
+    if (!attendance) {
+      return res.status(200).json({
+        success: true,
+        isInside: geofenceResult.isInside,
+        distance: geofenceResult.distance,
+        allowedRadius: OFFICE_LOCATION.radiusMeters,
+        isCheckedIn: false,
+        autoCheckedOut: false,
+        message: geofenceResult.isInside
+          ? "Device is inside office radius. No active check-in."
+          : "Device is outside office radius. No active check-in.",
+      });
+    }
+
+    // Check if already checked out or not checked in
+    if (!attendance.checkInTime || attendance.checkOutTime) {
+      return res.status(200).json({
+        success: true,
+        isInside: geofenceResult.isInside,
+        distance: geofenceResult.distance,
+        allowedRadius: OFFICE_LOCATION.radiusMeters,
+        isCheckedIn: !!attendance.checkInTime,
+        isCheckedOut: !!attendance.checkOutTime,
+        autoCheckedOut: false,
+        message: attendance.checkOutTime
+          ? "Already checked out."
+          : "Not checked in yet.",
+      });
+    }
+
+    // Check for active break
+    const activeBreak = attendance.breaks?.find((b) => !b.endTime);
+    const isOnBreak = !!activeBreak;
+
+    // IF INSIDE GEOFENCE:
+    if (geofenceResult.isInside) {
+      return res.status(200).json({
+        success: true,
+        isInside: true,
+        distance: geofenceResult.distance,
+        allowedRadius: OFFICE_LOCATION.radiusMeters,
+        isOnBreak,
+        autoCheckedOut: false,
+        deviceType,
+        message: "Device is inside office radius.",
+        data: formatAttendanceDocument(attendance),
+      });
+    }
+
+    // IF OUTSIDE GEOFENCE:
+    // Rule: If break is active, DO NOT auto checkout!
+    if (isOnBreak) {
+      return res.status(200).json({
+        success: true,
+        isInside: false,
+        distance: geofenceResult.distance,
+        allowedRadius: OFFICE_LOCATION.radiusMeters,
+        isOnBreak: true,
+        autoCheckedOut: false,
+        deviceType,
+        message: "Device is outside radius, but break is active. Auto-checkout skipped.",
+        data: formatAttendanceDocument(attendance),
+      });
+    }
+
+    // Working time is active (checked in, not on break, not checked out) AND outside radius
+    // -> EXECUTE AUTO CHECKOUT!
+    const checkoutTime = getISTNow();
+    attendance.checkOutTime = checkoutTime;
+    attendance.checkOutLocation = {
+      latitude: geofenceResult.latitude,
+      longitude: geofenceResult.longitude,
+      distanceFromOffice: geofenceResult.distance,
+    };
+    attendance.isActiveSession = false;
+
+    const checkInTime = attendance.approvedCheckInTime || attendance.checkInTime;
+    const totalHours = getWorkingHours(
+      checkInTime,
+      checkoutTime,
+      attendance.totalBreakTime
+    );
+    attendance.totalWorkTime = Number(totalHours.toFixed(2));
+
+    const settings = getAttendanceSettings({
+      officeStartTime: attendance.officeStartTime,
+      lateCutoffTime: attendance.lateCutoffTime,
+      absentCutoffTime: attendance.absentCutoffTime,
+      officeEndTime: attendance.officeEndTime,
+      presentHours: attendance.presentHours,
+      halfDayHours: attendance.halfDayHours,
+      breakLimit: attendance.breakLimit,
+    });
+
+    if (attendance.totalWorkTime >= (settings.presentHours || 8)) {
+      attendance.status = "present";
+    } else if (attendance.totalWorkTime >= (settings.halfDayHours || 4)) {
+      attendance.status = "half-day";
+    } else {
+      attendance.status = "absent";
+    }
+
+    await attendance.save();
+
+    // Close session
+    try {
+      const Session = require("../models/Session");
+      await Session.updateMany(
+        { userId, status: { $in: ["active", "break"] } },
+        { $set: { status: "auto_checkout", endTime: new Date() } }
+      );
+    } catch (_) {}
+
+    return res.status(200).json({
+      success: true,
+      isInside: false,
+      distance: geofenceResult.distance,
+      allowedRadius: OFFICE_LOCATION.radiusMeters,
+      isOnBreak: false,
+      autoCheckedOut: true,
+      triggeredByDevice: deviceType,
+      message: `Auto-checkout triggered by ${deviceType} going outside office radius (${geofenceResult.distance}m away).`,
+      data: formatAttendanceDocument(attendance),
+    });
+  } catch (err) {
+    console.error("Check Location Geofence Error:", err);
+    return res.status(500).json({
+      success: false,
+      message: err.message,
+    });
+  }
+};

@@ -17,10 +17,36 @@ const {
   getSingleAttendance, 
   getMonthlyAttendance,
   getAllAbsentAttendance,
-  recalculateAllAttendance
+  recalculateAllAttendance,
+  checkLocationGeofence
 } = require("../controllers/attendanceController");
 
 const { protect } = require("../middleware/authMiddleware");
+
+// ================= LOCATION GEOFENCE CHECK & AUTO CHECKOUT =================
+router.post(
+  "/check-location",
+  protect,
+  checkLocationGeofence
+);
+
+router.post(
+  "/location-ping",
+  protect,
+  checkLocationGeofence
+);
+
+router.post(
+  "/ping-location",
+  protect,
+  checkLocationGeofence
+);
+
+router.post(
+  "/geofence-check",
+  protect,
+  checkLocationGeofence
+);
 
 // ================= RECALCULATE ALL ATTENDANCE =================
 router.post(

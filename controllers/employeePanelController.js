@@ -543,7 +543,7 @@ exports.startAttendanceSession = async (req, res) => {
 exports.sessionHeartbeat = async (req, res) => {
   try {
     const userId = req.user._id;
-    const { sessionId } = req.body;
+    const { sessionId, deviceType } = req.body;
 
     const session = await Session.findOne({
       sessionId,
@@ -554,6 +554,64 @@ exports.sessionHeartbeat = async (req, res) => {
       return res
         .status(404)
         .json({ success: false, message: "Active session not found" });
+    }
+
+    // Check geofence if location coordinates are passed in heartbeat
+    if (
+      req.body.latitude !== undefined ||
+      req.body.lat !== undefined ||
+      req.body.location
+    ) {
+      const geofenceResult = validateAttendanceGeofence(req.body);
+      if (!geofenceResult.isInside) {
+        const today = getTodayIST();
+        const attendance = await Attendance.findOne({ userId, date: today });
+        const activeBreak = attendance?.breaks?.find((b) => !b.endTime);
+
+        // Rule: If working time is active (checked in, not checked out, NOT on break), auto checkout!
+        if (
+          attendance &&
+          attendance.checkInTime &&
+          !attendance.checkOutTime &&
+          !activeBreak
+        ) {
+          session.status = "auto_checkout";
+          session.endTime = new Date();
+          await session.save();
+
+          attendance.isActiveSession = false;
+          attendance.checkOutTime = new Date();
+          attendance.checkOutLocation = {
+            latitude: geofenceResult.latitude,
+            longitude: geofenceResult.longitude,
+            distanceFromOffice: geofenceResult.distance,
+          };
+          const checkIn = new Date(
+            attendance.approvedCheckInTime || attendance.checkInTime,
+          );
+          const checkOut = new Date(attendance.checkOutTime);
+          let totalMin =
+            (checkOut.getTime() - checkIn.getTime()) / (1000 * 60);
+          totalMin -= Math.min(attendance.totalBreakTime || 0, 60);
+          const hours = Math.max(0, totalMin / 60);
+          attendance.totalWorkTime = Number(hours.toFixed(2));
+
+          if (attendance.totalWorkTime >= 8) attendance.status = "present";
+          else if (attendance.totalWorkTime >= 4)
+            attendance.status = "half-day";
+          else attendance.status = "absent";
+
+          await attendance.save();
+
+          return res.status(200).json({
+            success: true,
+            isInside: false,
+            autoCheckedOut: true,
+            distance: geofenceResult.distance,
+            message: `Auto-checkout performed by ${deviceType || "device"} going outside office radius.`,
+          });
+        }
+      }
     }
 
     session.lastActiveTime = new Date();
