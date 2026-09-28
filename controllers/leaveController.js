@@ -7,17 +7,48 @@ const { calculateWorkingLeaveDays } = require("../utils/leaveUtils");
 // ================= APPLY LEAVE =================
 exports.applyLeave = async (req, res) => {
   try {
-    const {
-      userId,
-      leaveType,
-      startDate,
-      endDate,
-      reason,
-      isHalfDay,
-      halfDayType,
-    } = req.body;
+    const targetUserId =
+      req.body.userId ||
+      req.body.employeeId ||
+      req.body.userID ||
+      req.user?._id ||
+      req.user?.id;
 
-    const user = await User.findById(userId);
+    if (!targetUserId) {
+      return res.status(400).json({
+        success: false,
+        message: "userId is required",
+      });
+    }
+
+    let user = await User.findById(targetUserId);
+
+    if (!user) {
+      const Employee = require("../models/Employee");
+      const emp = await Employee.findOne({
+        $or: [
+          { _id: targetUserId },
+          { userID: targetUserId },
+          { userId: targetUserId },
+        ],
+      });
+
+      if (emp) {
+        const actualUserId = emp.userID || emp.userId || emp._id;
+        user = await User.findById(actualUserId);
+        if (!user) {
+          user = {
+            _id: emp._id,
+            role: (emp.role || emp.designation || "employee").toLowerCase(),
+            name: [emp.firstName, emp.middleName, emp.lastName].filter(Boolean).join(" ") || "Employee"
+          };
+        }
+      }
+    }
+
+    if (!user && req.user) {
+      user = req.user;
+    }
 
     if (!user) {
       return res.status(404).json({
@@ -25,6 +56,8 @@ exports.applyLeave = async (req, res) => {
         message: "User not found",
       });
     }
+
+    const userId = user._id || targetUserId;
 
     const actualStartDate =
       startDate || req.body.leaveDate || req.body.date || req.body.fromDate;
