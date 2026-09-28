@@ -7,9 +7,20 @@ const { calculateWorkingLeaveDays } = require("../utils/leaveUtils");
 // ================= APPLY LEAVE =================
 exports.applyLeave = async (req, res) => {
   try {
+    const {
+      userId: bodyUserId,
+      employeeId,
+      leaveType,
+      startDate,
+      endDate,
+      reason,
+      isHalfDay,
+      halfDayType,
+    } = req.body;
+
     const targetUserId =
-      req.body.userId ||
-      req.body.employeeId ||
+      bodyUserId ||
+      employeeId ||
       req.body.userID ||
       req.user?._id ||
       req.user?.id;
@@ -60,8 +71,8 @@ exports.applyLeave = async (req, res) => {
     const userId = user._id || targetUserId;
 
     const actualStartDate =
-      startDate || req.body.leaveDate || req.body.date || req.body.fromDate;
-    const actualEndDate = endDate || req.body.toDate || actualStartDate;
+      startDate || req.body.startDate || req.body.leaveDate || req.body.date || req.body.fromDate;
+    const actualEndDate = endDate || req.body.endDate || req.body.toDate || actualStartDate;
 
     const isHalfDayBool =
       isHalfDay === true ||
