@@ -575,6 +575,153 @@ const getWorkingHours = (
 };
 
 // ============================================================
+// CALCULATE BREAK TIMER STATE & REMINDER NOTIFICATIONS
+// ============================================================
+
+const calculateBreakTimerState = (attendance) => {
+  const maxSeconds = 3600; // 60 minutes max limit
+
+  if (!attendance || !Array.isArray(attendance.breaks)) {
+    return {
+      isOnBreak: false,
+      status: "no_active_break",
+      statusDisplay: "No Active Break",
+      maxDurationMinutes: 60,
+      maxDurationSeconds: maxSeconds,
+      startTime: null,
+      startTimeDisplay: null,
+      startTimeFullDisplay: null,
+      elapsedSeconds: 0,
+      elapsedMinutes: 0,
+      elapsedTimeDisplay: "0h 0m",
+      remainingSeconds: maxSeconds,
+      remainingMinutes: 60,
+      remainingTimeDisplay: "1h 0m",
+      isOverdue: false,
+      overdueMinutes: 0,
+      reminder: null,
+      reminderTitle: null,
+      reminderMessage: null,
+      showPopup: false,
+      popupType: null,
+      serverTime: new Date().toISOString(),
+      serverTimestamp: Date.now(),
+    };
+  }
+
+  const activeBreak = attendance.breaks.find((b) => !b.endTime);
+
+  if (!activeBreak || !activeBreak.startTime) {
+    return {
+      isOnBreak: false,
+      status: "no_active_break",
+      statusDisplay: "No Active Break",
+      maxDurationMinutes: 60,
+      maxDurationSeconds: maxSeconds,
+      startTime: null,
+      startTimeDisplay: null,
+      startTimeFullDisplay: null,
+      elapsedSeconds: 0,
+      elapsedMinutes: 0,
+      elapsedTimeDisplay: "0h 0m",
+      remainingSeconds: maxSeconds,
+      remainingMinutes: 60,
+      remainingTimeDisplay: "1h 0m",
+      isOverdue: false,
+      overdueMinutes: 0,
+      reminder: null,
+      reminderTitle: null,
+      reminderMessage: null,
+      showPopup: false,
+      popupType: null,
+      serverTime: new Date().toISOString(),
+      serverTimestamp: Date.now(),
+    };
+  }
+
+  const now = new Date();
+  const startTime = new Date(activeBreak.startTime);
+  const elapsedSeconds = Math.max(0, Math.floor((now.getTime() - startTime.getTime()) / 1000));
+  const elapsedMinutes = Math.floor(elapsedSeconds / 60);
+
+  const remainingSeconds = Math.max(0, maxSeconds - elapsedSeconds);
+  const remainingMinutes = Math.ceil(remainingSeconds / 60);
+
+  const isOverdue = elapsedSeconds >= maxSeconds;
+  const overdueMinutes = isOverdue ? Math.floor((elapsedSeconds - maxSeconds) / 60) : 0;
+
+  let status = "on_break";
+  let statusDisplay = "On Break";
+  let reminder = null;
+  let reminderTitle = null;
+  let reminderMessage = null;
+  let showPopup = false;
+  let popupType = null;
+
+  if (isOverdue) {
+    status = "break_time_exceeded";
+    statusDisplay = "Break Time Exceeded";
+    reminder = "break_over";
+    reminderTitle = "Break Time Over";
+    reminderMessage = "Your break time is over. Please return to work.";
+    showPopup = true;
+    popupType = "overdue";
+  } else if (remainingSeconds <= 300) { // 5 minutes or less
+    status = "on_break";
+    statusDisplay = "On Break (5m Left)";
+    reminder = "5_min_left";
+    reminderTitle = "5 Minutes Remaining";
+    reminderMessage = "5 minutes remaining. Please return to work.";
+    showPopup = true;
+    popupType = "urgent";
+  } else if (remainingSeconds <= 600) { // 10 minutes or less
+    status = "on_break";
+    statusDisplay = "On Break (10m Left)";
+    reminder = "10_min_left";
+    reminderTitle = "10 Minutes Remaining";
+    reminderMessage = "10 minutes remaining. Please return to work soon.";
+    showPopup = true;
+    popupType = "warning";
+  }
+
+  const elapsedHours = Math.floor(elapsedMinutes / 60);
+  const elapsedMinsRem = elapsedMinutes % 60;
+  const elapsedTimeDisplay = `${elapsedHours}h ${elapsedMinsRem}m`;
+
+  const remainingHours = Math.floor(remainingMinutes / 60);
+  const remainingMinsRem = remainingMinutes % 60;
+  const remainingTimeDisplay = `${remainingHours}h ${remainingMinsRem}m`;
+
+  return {
+    isOnBreak: true,
+    status,
+    statusDisplay,
+    maxDurationMinutes: 60,
+    maxDurationSeconds: maxSeconds,
+    startTime: activeBreak.startTime,
+    startTimeDisplay: formatISTTime(activeBreak.startTime),
+    startTimeFullDisplay: formatISTDateTime(activeBreak.startTime),
+    elapsedSeconds,
+    elapsedMinutes,
+    elapsedTimeDisplay,
+    remainingSeconds,
+    remainingMinutes,
+    remainingTimeDisplay,
+    isOverdue,
+    overdueMinutes,
+    reminder,
+    reminderTitle,
+    reminderMessage,
+    showPopup,
+    popupType,
+    serverTime: now.toISOString(),
+    serverTimestamp: now.getTime(),
+  };
+};
+
+exports.calculateBreakTimerState = calculateBreakTimerState;
+
+// ============================================================
 // FORMAT ATTENDANCE
 // ============================================================
 
@@ -714,6 +861,8 @@ const formatAttendanceDocument = (
     plainAttendance.totalBreakTimeDisplay =
       `${hours}h ${minutes}m`;
   }
+
+  plainAttendance.breakTimer = calculateBreakTimerState(plainAttendance);
 
   return plainAttendance;
 };
@@ -2241,6 +2390,9 @@ exports.endBreak =
           safeDuration.toFixed(2)
         );
 
+      activeBreak.isOverdue = safeDuration > 60;
+      activeBreak.overdueMinutes = safeDuration > 60 ? Number((safeDuration - 60).toFixed(2)) : 0;
+
       attendance.totalBreakTime =
         Number(
           (
@@ -2287,6 +2439,47 @@ exports.endBreak =
       });
     }
   };
+
+// ============================================================
+// GET BREAK STATUS & TIMER
+// ============================================================
+
+exports.getBreakStatus = async (req, res) => {
+  try {
+    const userId = req.user?._id || req.user?.id || req.query.userId;
+    if (!userId) {
+      return res.status(400).json({
+        success: false,
+        message: "userId is required",
+      });
+    }
+
+    const today = getToday();
+    let attendance = await Attendance.findOne({ userId, date: today });
+    if (!attendance) {
+      attendance = await Attendance.findOne({
+        userId,
+        checkInTime: { $ne: null },
+        checkOutTime: null,
+      }).sort({ createdAt: -1 });
+    }
+
+    const breakTimer = calculateBreakTimerState(attendance);
+
+    return res.status(200).json({
+      success: true,
+      data: breakTimer,
+      breakTimer,
+      attendance: attendance ? formatAttendanceDocument(attendance) : null,
+    });
+  } catch (err) {
+    console.error("GetBreakStatus Error:", err);
+    return res.status(500).json({
+      success: false,
+      message: err.message,
+    });
+  }
+};
 
 // ============================================================
 // REJECT ATTENDANCE

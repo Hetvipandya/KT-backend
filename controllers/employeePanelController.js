@@ -20,6 +20,7 @@ const {
   isBreakStartActive,
 } = require("../utils/geofence");
 const { calculateWorkingLeaveDays } = require("../utils/leaveUtils");
+const { calculateBreakTimerState } = require("./attendanceController");
 
 // Helper for IST Today Date String (YYYY-MM-DD)
 const getTodayIST = () => {
@@ -230,10 +231,13 @@ exports.getEmployeeDashboard = async (req, res) => {
       (l) => l.status === "approved" && new Date(l.startDate) > new Date(),
     ).length;
 
+    const breakTimer = calculateBreakTimerState(attendance);
+
     return res.status(200).json({
       success: true,
       data: {
         employeeInfo,
+        breakTimer,
         todayAttendance: {
           status: attendanceStatus,
           checkInTime,
@@ -246,6 +250,7 @@ exports.getEmployeeDashboard = async (req, res) => {
           autoLogout: !!(attendance?.checkOutTime || attendanceStatus === "checked_out"),
           shouldLogout: !!(attendance?.checkOutTime || attendanceStatus === "checked_out"),
           sessionId: currentSession?.sessionId || attendance?.sessionId || null,
+          breakTimer,
         },
         statistics: {
           todayWorkingHours: currentWorkingHours,
@@ -660,10 +665,15 @@ exports.sessionHeartbeat = async (req, res) => {
     session.lastActiveTime = new Date();
     await session.save();
 
+    const today = getTodayIST();
+    const attendance = await Attendance.findOne({ userId, date: today });
+    const breakTimer = calculateBreakTimerState(attendance);
+
     return res.status(200).json({
       success: true,
       message: "Heartbeat updated",
       lastActiveTime: session.lastActiveTime,
+      breakTimer,
     });
   } catch (error) {
     return res.status(500).json({ success: false, message: error.message });

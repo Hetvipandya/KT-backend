@@ -7,6 +7,7 @@ const {
   checkOut,
   startBreak,  
   endBreak, 
+  getBreakStatus,
   getTodayAttendance,
   getAttendanceById,
   getPendingAttendance, 
@@ -94,6 +95,19 @@ router.post(
   "/break/end",
   protect,
   endBreak
+);
+
+// ================= BREAK STATUS & TIMER =================
+router.get(
+  "/break/status",
+  protect,
+  getBreakStatus
+);
+
+router.get(
+  "/break/timer",
+  protect,
+  getBreakStatus
 );
 
 // ================= PENDING ATTENDANCE =================

@@ -17,6 +17,16 @@ const breakSchema = new mongoose.Schema(
       default: 0, // Minutes
     },
 
+    isOverdue: {
+      type: Boolean,
+      default: false,
+    },
+
+    overdueMinutes: {
+      type: Number,
+      default: 0,
+    },
+
     startLocation: {
       latitude: Number,
       longitude: Number,
