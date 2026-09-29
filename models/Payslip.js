@@ -6,7 +6,7 @@ const payslipSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "Payroll",
       required: true,
-      unique: true,
+      unique: true, 
     },
 
     userId: {

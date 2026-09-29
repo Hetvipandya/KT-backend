@@ -35,7 +35,7 @@ const {
   resendVerificationEmailSchema
 } = require('../validators/auth.validators');
 
-const router = express.Router();
+const router = express.Router(); 
 
 // 1. Register a new user
 router.post('/register', authLimiter, validateRequest(registerSchema), register);

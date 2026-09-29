@@ -209,7 +209,7 @@ const getSalaryStructureById = async (req, res) => {
         message: "Salary structure not found",
       });
     }
-
+ 
     return res.status(200).json({
       success: true,
       message: "Salary structure fetched successfully",

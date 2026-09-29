@@ -9,7 +9,7 @@ const sessionSchema = new mongoose.Schema(
       unique: true,
       default: () => crypto.randomUUID(),
     },
-
+ 
     userId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
@@ -30,7 +30,7 @@ const sessionSchema = new mongoose.Schema(
 
     endTime: {
       type: Date,
-      default: null,
+      default: null, 
     },
 
     lastActiveTime: {

@@ -12,7 +12,7 @@ exports.startSession = async (req, res) => {
         message: "User ID is required to start a session",
       });
     }
-
+ 
     const { sessionId, attendanceId, deviceInfo, status } = req.body;
 
     // Terminate any existing active sessions for this user
