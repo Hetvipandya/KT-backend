@@ -479,6 +479,8 @@ exports.startAttendanceSession = async (req, res) => {
         .status(404)
         .json({ success: false, message: "User not found" });
 
+    const userId = targetUserId;
+
     let attendance = await Attendance.findOne({
       userId: targetUserId,
       date: today,
@@ -677,16 +679,33 @@ exports.endAttendanceSession = async (req, res) => {
       await session.save();
     }
 
-    const attendance = await Attendance.findOne({ userId, date: today });
+    let attendance = await Attendance.findOne({ userId, date: today });
+    if (!attendance) {
+      attendance = await Attendance.findOne({
+        userId,
+        checkInTime: { $ne: null },
+        checkOutTime: null,
+      }).sort({ createdAt: -1 });
+    }
+
     if (attendance) {
       attendance.isActiveSession = false;
       if (!attendance.checkOutTime && attendance.checkInTime) {
-        attendance.checkOutTime = session ? session.lastActiveTime : new Date();
-        const checkIn = new Date(
-          attendance.approvedCheckInTime || attendance.checkInTime,
-        );
-        const checkOut = new Date(attendance.checkOutTime);
-        let totalMin = (checkOut.getTime() - checkIn.getTime()) / (1000 * 60);
+        const checkOutDate = session ? session.lastActiveTime : new Date();
+        attendance.checkOutTime = checkOutDate;
+
+        const checkInTimeVal = attendance.approvedCheckInTime || attendance.checkInTime;
+        let checkInDate = new Date(checkInTimeVal);
+        if (Number.isNaN(checkInDate.getTime()) && typeof checkInTimeVal === "string" && checkInTimeVal.includes(":")) {
+          const [h, m] = checkInTimeVal.split(":").map(Number);
+          checkInDate = new Date();
+          checkInDate.setHours(h, m, 0, 0);
+        }
+
+        let totalMin = 0;
+        if (!Number.isNaN(checkInDate.getTime()) && !Number.isNaN(new Date(checkOutDate).getTime())) {
+          totalMin = (new Date(checkOutDate).getTime() - checkInDate.getTime()) / (1000 * 60);
+        }
         totalMin -= Math.min(attendance.totalBreakTime || 0, 60);
         const hours = Math.max(0, totalMin / 60);
         attendance.totalWorkTime = Number(hours.toFixed(2));
