@@ -547,15 +547,25 @@ exports.sessionHeartbeat = async (req, res) => {
     const userId = req.user._id;
     const { sessionId, deviceType } = req.body;
 
-    const session = await Session.findOne({
+    let session = await Session.findOne({
       sessionId,
       userId,
       status: "active",
     });
     if (!session) {
-      return res
-        .status(404)
-        .json({ success: false, message: "Active session not found" });
+      session = await Session.findOne({
+        userId,
+        status: { $in: ["active", "break"] },
+      }).sort({ createdAt: -1 });
+    }
+    if (!session) {
+      return res.status(200).json({
+        success: true,
+        active: false,
+        autoCheckedOut: true,
+        shouldLogout: true,
+        message: "Active session not found. Please log in again.",
+      });
     }
 
     // Check geofence if location coordinates are passed in heartbeat

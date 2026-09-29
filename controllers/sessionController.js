@@ -67,14 +67,29 @@ exports.getSession = async (req, res) => {
     if (session) {
       session.lastActiveTime = new Date();
       await session.save();
+
+      const user = await User.findById(userId).select("deviceId lastLogin name email role").lean();
+      return res.status(200).json({
+        success: true,
+        active: true,
+        autoCheckedOut: false,
+        shouldLogout: false,
+        session,
+        user,
+      });
     }
 
+    const lastSession = await Session.findOne({ userId }).sort({ createdAt: -1 });
     const user = await User.findById(userId).select("deviceId lastLogin name email role").lean();
+    const isAutoCheckedOut = lastSession?.status === "auto_checkout";
 
     return res.status(200).json({
       success: true,
-      active: !!session,
-      session: session || {
+      active: false,
+      autoCheckedOut: isAutoCheckedOut,
+      autoLogout: isAutoCheckedOut || lastSession?.status === "terminated",
+      shouldLogout: true,
+      session: lastSession || {
         deviceId: user?.deviceId || null,
         lastLogin: user?.lastLogin || null,
       },
@@ -103,9 +118,15 @@ exports.updateSessionStatus = async (req, res) => {
 
     const session = await Session.findOne(query).sort({ createdAt: -1 });
     if (!session) {
-      return res.status(404).json({
-        success: false,
-        message: "Active session not found",
+      const lastSession = await Session.findOne({ userId }).sort({ createdAt: -1 });
+      const isAutoCheckedOut = lastSession?.status === "auto_checkout";
+      return res.status(200).json({
+        success: true,
+        active: false,
+        autoCheckedOut: isAutoCheckedOut,
+        autoLogout: true,
+        shouldLogout: true,
+        message: "Active session not found. Please log in again.",
       });
     }
 
@@ -119,8 +140,13 @@ exports.updateSessionStatus = async (req, res) => {
 
     await session.save();
 
+    const isAutoCheckedOut = session.status === "auto_checkout";
+
     return res.status(200).json({
       success: true,
+      active: ["active", "break"].includes(session.status),
+      autoCheckedOut: isAutoCheckedOut,
+      shouldLogout: ["terminated", "auto_checkout"].includes(session.status),
       message: `Session status updated to ${session.status}`,
       session,
     });
