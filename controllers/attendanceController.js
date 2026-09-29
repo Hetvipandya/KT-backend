@@ -4,7 +4,8 @@ const Attendance = require("../models/Attendance");
 const User = require("../models/User");
 const {
   OFFICE_LOCATION,
-  validateAttendanceGeofence, 
+  validateAttendanceGeofence,
+  isBreakStartActive,
 } = require("../utils/geofence");
 
 // ============================================================
@@ -2088,6 +2089,14 @@ exports.startBreak =
 
       await attendance.save();
 
+      try {
+        const Session = require("../models/Session");
+        await Session.updateMany(
+          { userId, status: "active" },
+          { $set: { status: "break", lastActiveTime: new Date() } }
+        );
+      } catch (_) {}
+
       return res.status(200).json({
         success: true,
 
@@ -2242,6 +2251,14 @@ exports.endBreak =
         );
 
       await attendance.save();
+
+      try {
+        const Session = require("../models/Session");
+        await Session.updateMany(
+          { userId, status: { $in: ["break", "break-start", "break_start", "on_break"] } },
+          { $set: { status: "active", lastActiveTime: new Date() } }
+        );
+      } catch (_) {}
 
       return res.status(200).json({
         success: true,
@@ -3787,12 +3804,13 @@ exports.recalculateAllAttendance = async (req, res) => {
 
 exports.checkLocationGeofence = async (req, res) => {
   try {
-    const userId = req.user?._id || req.user?.id || req.body.userId;
+    const payload = { ...req.query, ...req.body };
+    const userId = payload.userId || req.user?._id || req.user?.id;
     const deviceType =
-      req.body.deviceType ||
-      req.body.device ||
-      req.body.platform ||
-      (req.headers["user-agent"]?.toLowerCase().includes("mobile") ? "phone" : "laptop");
+      payload.deviceType ||
+      payload.device ||
+      payload.platform ||
+      (req.headers?.["user-agent"]?.toLowerCase().includes("mobile") ? "phone" : "laptop");
 
     if (!userId) {
       return res.status(400).json({
@@ -3801,79 +3819,113 @@ exports.checkLocationGeofence = async (req, res) => {
       });
     }
 
-    const geofenceResult = validateAttendanceGeofence(req.body);
+    const geofenceResult = validateAttendanceGeofence(payload);
+
+    // If coordinates/distance are missing or invalid, do not perform auto checkout
+    if (geofenceResult.distance === null) {
+      return res.status(400).json({
+        success: false,
+        message: geofenceResult.error || "Valid GPS coordinates or distance are required.",
+      });
+    }
+
     const today = getToday();
-    const attendance = await Attendance.findOne({
+    let attendance = await Attendance.findOne({
       userId,
       date: today,
     });
 
     if (!attendance) {
+      attendance = await Attendance.findOne({
+        userId,
+        checkInTime: { $ne: null },
+        checkOutTime: null,
+      }).sort({ createdAt: -1 });
+    }
+
+    // Check if not checked in or already checked out
+    if (!attendance || !attendance.checkInTime) {
       return res.status(200).json({
         success: true,
         isInside: geofenceResult.isInside,
         distance: geofenceResult.distance,
         allowedRadius: OFFICE_LOCATION.radiusMeters,
         isCheckedIn: false,
+        isCheckedOut: false,
+        isOnBreak: false,
         autoCheckedOut: false,
         message: geofenceResult.isInside
-          ? "Device is inside office radius. No active check-in."
-          : "Device is outside office radius. No active check-in.",
+          ? "Device is inside office radius (<= 70m). User is not checked in."
+          : `Device is outside office radius (${geofenceResult.distance}m > 70m). User is not checked in.`,
       });
     }
 
-    // Check if already checked out or not checked in
-    if (!attendance.checkInTime || attendance.checkOutTime) {
+    if (attendance.checkOutTime) {
       return res.status(200).json({
         success: true,
         isInside: geofenceResult.isInside,
         distance: geofenceResult.distance,
         allowedRadius: OFFICE_LOCATION.radiusMeters,
-        isCheckedIn: !!attendance.checkInTime,
-        isCheckedOut: !!attendance.checkOutTime,
+        isCheckedIn: true,
+        isCheckedOut: true,
+        isOnBreak: false,
         autoCheckedOut: false,
-        message: attendance.checkOutTime
-          ? "Already checked out."
-          : "Not checked in yet.",
+        message: "User is already checked out today.",
+        data: formatAttendanceDocument(attendance),
       });
     }
 
-    // Check for active break
-    const activeBreak = attendance.breaks?.find((b) => !b.endTime);
-    const isOnBreak = !!activeBreak;
+    // Fetch active session if any
+    let currentSession = null;
+    try {
+      const Session = require("../models/Session");
+      currentSession = await Session.findOne({
+        userId,
+        status: { $in: ["active", "break", "break-start", "break_start", "on_break"] },
+      }).sort({ createdAt: -1 });
+    } catch (_) {}
 
-    // IF INSIDE GEOFENCE:
+    // Check for break-start status
+    const isOnBreak = isBreakStartActive(attendance, currentSession, payload);
+
+    // IF INSIDE GEOFENCE (<= 70 meters):
     if (geofenceResult.isInside) {
       return res.status(200).json({
         success: true,
         isInside: true,
         distance: geofenceResult.distance,
         allowedRadius: OFFICE_LOCATION.radiusMeters,
+        isCheckedIn: true,
+        isCheckedOut: false,
         isOnBreak,
+        status: isOnBreak ? "break-start" : "checked-in",
         autoCheckedOut: false,
         deviceType,
-        message: "Device is inside office radius.",
+        message: "Device is inside office radius (within 70m).",
         data: formatAttendanceDocument(attendance),
       });
     }
 
-    // IF OUTSIDE GEOFENCE:
-    // Rule: If break is active, DO NOT auto checkout!
+    // IF OUTSIDE GEOFENCE (> 70 meters):
+    // RULE: If status is break-start (active break running), DO NOT auto checkout!
     if (isOnBreak) {
       return res.status(200).json({
         success: true,
         isInside: false,
         distance: geofenceResult.distance,
         allowedRadius: OFFICE_LOCATION.radiusMeters,
+        isCheckedIn: true,
+        isCheckedOut: false,
         isOnBreak: true,
+        status: "break-start",
         autoCheckedOut: false,
         deviceType,
-        message: "Device is outside radius, but break is active. Auto-checkout skipped.",
+        message: `Device is outside 70m office radius (${geofenceResult.distance}m away), but status is break-start. Auto-checkout skipped.`,
         data: formatAttendanceDocument(attendance),
       });
     }
 
-    // Working time is active (checked in, not on break, not checked out) AND outside radius
+    // Working time is active (checked in, not on break, not checked out) AND outside 70m radius
     // -> EXECUTE AUTO CHECKOUT!
     const checkoutTime = getISTNow();
     attendance.checkOutTime = checkoutTime;
@@ -3902,12 +3954,21 @@ exports.checkLocationGeofence = async (req, res) => {
       breakLimit: attendance.breakLimit,
     });
 
-    if (attendance.totalWorkTime >= (settings.presentHours || 8)) {
-      attendance.status = "present";
-    } else if (attendance.totalWorkTime >= (settings.halfDayHours || 4)) {
+    const attendanceStatus = calculateAttendanceStatus(
+      checkInTime,
+      settings
+    );
+    attendance.isLate = attendanceStatus.isLate;
+
+    if (attendanceStatus.isAbsentDueToLate) {
+      attendance.status = "absent";
+    } else if (
+      attendanceStatus.status === "half-day" ||
+      attendance.totalWorkTime < (settings.presentHours || 8)
+    ) {
       attendance.status = "half-day";
     } else {
-      attendance.status = "absent";
+      attendance.status = "present";
     }
 
     await attendance.save();
@@ -3916,7 +3977,7 @@ exports.checkLocationGeofence = async (req, res) => {
     try {
       const Session = require("../models/Session");
       await Session.updateMany(
-        { userId, status: { $in: ["active", "break"] } },
+        { userId, status: { $in: ["active", "break", "break-start", "break_start", "on_break"] } },
         { $set: { status: "auto_checkout", endTime: new Date() } }
       );
     } catch (_) {}
@@ -3926,10 +3987,12 @@ exports.checkLocationGeofence = async (req, res) => {
       isInside: false,
       distance: geofenceResult.distance,
       allowedRadius: OFFICE_LOCATION.radiusMeters,
+      isCheckedIn: true,
+      isCheckedOut: true,
       isOnBreak: false,
       autoCheckedOut: true,
       triggeredByDevice: deviceType,
-      message: `Auto-checkout triggered by ${deviceType} going outside office radius (${geofenceResult.distance}m away).`,
+      message: `Auto-checkout triggered: Device is outside 70m office radius (${geofenceResult.distance}m away) while checked-in and not on break.`,
       data: formatAttendanceDocument(attendance),
     });
   } catch (err) {
@@ -3939,4 +4002,6 @@ exports.checkLocationGeofence = async (req, res) => {
       message: err.message,
     });
   }
-};
+};
+
+exports.isBreakStartActive = isBreakStartActive;

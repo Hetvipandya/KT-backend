@@ -74,6 +74,31 @@ function validateAttendanceGeofence(body) {
       ? body.location.longitude
       : null;
 
+  const directDistance =
+    body.distance !== undefined
+      ? parseFloat(body.distance)
+      : body.distanceFromOffice !== undefined
+      ? parseFloat(body.distanceFromOffice)
+      : null;
+
+  if (
+    (rawLat === null || rawLat === undefined || rawLon === null || rawLon === undefined) &&
+    directDistance !== null &&
+    !Number.isNaN(directDistance)
+  ) {
+    const roundedDist = Math.round(directDistance);
+    const isInside = roundedDist <= OFFICE_LOCATION.radiusMeters;
+    return {
+      isInside,
+      distance: roundedDist,
+      latitude: null,
+      longitude: null,
+      error: isInside
+        ? null
+        : `You are outside the office location (${roundedDist}m away). Attendance can only be marked within ${OFFICE_LOCATION.radiusMeters} meters of the office.`,
+    };
+  }
+
   if (rawLat === null || rawLat === undefined || rawLon === null || rawLon === undefined) {
     return {
       isInside: false,
@@ -140,8 +165,76 @@ function validateAttendanceGeofence(body) {
   };
 }
 
+/**
+ * Determines whether the user/attendance is currently on break ("break-start").
+ * Rules:
+ * - If request body indicates status is break-start / on break
+ * - If Attendance document has an active break (breaks array item without endTime)
+ * - If Session has status 'break' or 'break-start'
+ * - If Attendance status is break-start
+ * 
+ * @param {object} attendance 
+ * @param {object} session 
+ * @param {object} body 
+ * @returns {boolean}
+ */
+function isBreakStartActive(attendance, session = null, body = {}) {
+  // 1. Check body payload flags or statuses
+  const rawStatus = (
+    body.status ||
+    body.attendanceStatus ||
+    body.currentStatus ||
+    body.breakStatus ||
+    body.action ||
+    ""
+  )
+    .toString()
+    .trim()
+    .toLowerCase()
+    .replace(/[\s_-]+/g, "");
+
+  if (
+    rawStatus === "breakstart" ||
+    rawStatus === "break" ||
+    rawStatus === "onbreak" ||
+    rawStatus === "breakstarted" ||
+    body.isBreak === true ||
+    body.onBreak === true ||
+    body.isOnBreak === true
+  ) {
+    return true;
+  }
+
+  // 2. Check if attendance document has an active running break (break started, no end time)
+  if (attendance && Array.isArray(attendance.breaks)) {
+    const hasActiveBreak = attendance.breaks.some((b) => !b.endTime);
+    if (hasActiveBreak) {
+      return true;
+    }
+  }
+
+  // 3. Check attendance status field if present
+  if (attendance && typeof attendance.status === "string") {
+    const attStatus = attendance.status.trim().toLowerCase().replace(/[\s_-]+/g, "");
+    if (attStatus === "breakstart" || attStatus === "break" || attStatus === "onbreak") {
+      return true;
+    }
+  }
+
+  // 4. Check active session status
+  if (session && typeof session.status === "string") {
+    const sessStatus = session.status.trim().toLowerCase().replace(/[\s_-]+/g, "");
+    if (sessStatus === "break" || sessStatus === "breakstart" || sessStatus === "onbreak") {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 module.exports = {
   OFFICE_LOCATION,
   calculateDistanceMeters,
   validateAttendanceGeofence,
+  isBreakStartActive,
 };
