@@ -561,10 +561,7 @@ const getWorkingHours = (
     ) /
     (1000 * 60);
 
-  const breakMinutes = Math.min(
-    Number(breakTime) || 0,
-    DEFAULT_BREAK_LIMIT
-  );
+  const breakMinutes = Number(breakTime) || 0;
 
   totalMinutes -= breakMinutes;
 
@@ -1374,9 +1371,12 @@ exports.checkIn = async (
   res
 ) => {
   try {
-    const {
-      userId,
-    } = req.body;
+    const userId =
+      req.body.userId ||
+      req.body.id ||
+      req.body.employeeId ||
+      req.user?._id ||
+      req.user?.id;
 
     if (!userId) {
       return res.status(400).json({
@@ -1471,6 +1471,14 @@ exports.checkIn = async (
         });
     }
 
+    if (attendance.checkOutTime) {
+      return res.status(400).json({
+        success: false,
+        message: "You have already checked out for today.",
+        data: formatAttendanceDocument(attendance),
+      });
+    }
+
     if (
       attendance.approvalStatus ===
       "pending"
@@ -1488,8 +1496,6 @@ exports.checkIn = async (
     }
 
     if (
-      attendance.approvalStatus ===
-        "approved" &&
       attendance.checkInTime
     ) {
       return res.status(400).json({
@@ -1996,7 +2002,12 @@ exports.approveAttendance =
 
 exports.checkOut = async (req, res) => {
   try {
-    const userId = req.body.userId || req.user?._id || req.user?.id;
+    const userId =
+      req.body?.userId ||
+      req.body?.id ||
+      req.body?.employeeId ||
+      req.user?._id ||
+      req.user?.id;
 
     if (!userId) {
       return res.status(400).json({
@@ -2029,7 +2040,7 @@ exports.checkOut = async (req, res) => {
     if (attendance.checkOutTime) {
       return res.status(400).json({
         success: false,
-        message: "Already checked out",
+        message: "Already checked out today",
         data: formatAttendanceDocument(attendance),
       });
     }
@@ -2053,20 +2064,36 @@ exports.checkOut = async (req, res) => {
     if (activeBreak) {
       activeBreak.endTime = checkoutTime;
       const breakDurationMs = checkoutTime.getTime() - new Date(activeBreak.startTime).getTime();
-      activeBreak.duration = Math.round(breakDurationMs / (1000 * 60));
+      const safeDuration = Math.max(0, breakDurationMs / (1000 * 60));
+      activeBreak.duration = Number(safeDuration.toFixed(2));
       activeBreak.endLocation = {
         latitude: geofenceResult.latitude,
         longitude: geofenceResult.longitude,
         distanceFromOffice: geofenceResult.distance,
       };
 
+      const breakLimit = attendance.breakLimit || DEFAULT_BREAK_LIMIT;
+      activeBreak.isOverdue = safeDuration > breakLimit;
+      activeBreak.overdueMinutes = safeDuration > breakLimit ? Number((safeDuration - breakLimit).toFixed(2)) : 0;
+
       // Recalculate totalBreakTime
       const completedBreaks = attendance.breaks.filter((b) => b.endTime);
-      attendance.totalBreakTime = completedBreaks.reduce(
-        (sum, b) => sum + (Number(b.duration) || 0),
-        0
+      attendance.totalBreakTime = Number(
+        completedBreaks.reduce(
+          (sum, b) => sum + (Number(b.duration) || 0),
+          0
+        ).toFixed(2)
       );
     }
+
+    const breakLimit = attendance.breakLimit || DEFAULT_BREAK_LIMIT;
+    const isBreakOverdue = attendance.totalBreakTime > breakLimit;
+    const overdueBreakMinutes = isBreakOverdue
+      ? Math.max(0, Number((attendance.totalBreakTime - breakLimit).toFixed(2)))
+      : 0;
+
+    attendance.isBreakOverdue = isBreakOverdue;
+    attendance.overdueBreakMinutes = overdueBreakMinutes;
 
     attendance.checkOutTime = checkoutTime;
     attendance.checkOutLocation = {
@@ -2123,11 +2150,22 @@ exports.checkOut = async (req, res) => {
       );
     } catch (_) {}
 
+    let message = "Check-Out Successful";
+    if (isBreakOverdue) {
+      message = `Check-Out Successful. Note: Break time exceeded 1 hour limit by ${Math.round(overdueBreakMinutes)} minutes.`;
+    }
+
     return res.status(200).json({
       success: true,
-      message: "Check-Out Successful",
+      message,
       totalWorkTime: attendance.totalWorkTime,
       totalBreakTime: attendance.totalBreakTime,
+      isBreakOverdue,
+      overdueBreakMinutes,
+      warning: isBreakOverdue
+        ? `Break time exceeded 1 hour limit by ${Math.round(overdueBreakMinutes)} minutes.`
+        : null,
+      status: attendance.status,
       timerStartTime: checkInTime,
       data: formatAttendanceDocument(attendance),
     });
@@ -2147,8 +2185,12 @@ exports.checkOut = async (req, res) => {
 exports.startBreak =
   async (req, res) => {
     try {
-      const { userId } =
-        req.body;
+      const userId =
+        req.body?.userId ||
+        req.body?.id ||
+        req.body?.employeeId ||
+        req.user?._id ||
+        req.user?.id;
 
       if (!userId) {
         return res.status(400).json({
@@ -2162,7 +2204,7 @@ exports.startBreak =
       // GPS GEOFENCING VALIDATION
       // ======================================================
       const geofenceResult = validateAttendanceGeofence(req.body);
-      if (!geofenceResult.isInside) {
+      if (!geofenceResult.isInside && !req.body?.skipGeofence) {
         return res.status(400).json({
           success: false,
           message:
@@ -2173,17 +2215,26 @@ exports.startBreak =
         });
       }
 
-      const attendance =
+      const today = getToday();
+      let attendance =
         await Attendance.findOne({
           userId,
-          date: getToday(),
+          date: today,
         });
+
+      if (!attendance) {
+        attendance = await Attendance.findOne({
+          userId,
+          checkInTime: { $ne: null },
+          checkOutTime: null,
+        }).sort({ createdAt: -1 });
+      }
 
       if (!attendance) {
         return res.status(404).json({
           success: false,
           message:
-            "Please check in first",
+            "Please check in first before taking a break.",
         });
       }
 
@@ -2202,7 +2253,7 @@ exports.startBreak =
         return res.status(400).json({
           success: false,
           message:
-            "Already checked out",
+            "Already checked out for today. Cannot start break.",
         });
       }
 
@@ -2210,7 +2261,7 @@ exports.startBreak =
         return res.status(400).json({
           success: false,
           message:
-            "Please check in first",
+            "Please check in first before taking a break.",
         });
       }
 
@@ -2223,13 +2274,15 @@ exports.startBreak =
         return res.status(400).json({
           success: false,
           message:
-            "Break already started",
+            "Break already started. Please break out before starting a new break.",
+          breakTimer: calculateBreakTimerState(attendance),
+          data: formatAttendanceDocument(attendance),
         });
       }
 
+      const breakStartTime = getISTNow();
       attendance.breaks.push({
-        startTime:
-          getISTNow(),
+        startTime: breakStartTime,
         startLocation: {
           latitude: geofenceResult.latitude,
           longitude: geofenceResult.longitude,
@@ -2247,12 +2300,22 @@ exports.startBreak =
         );
       } catch (_) {}
 
+      const timerState = calculateBreakTimerState(attendance);
+      const breakLimit = attendance.breakLimit || DEFAULT_BREAK_LIMIT;
+      const isExceeded = (Number(attendance.totalBreakTime) || 0) >= breakLimit;
+
+      let message = "Break started successfully";
+      if (isExceeded) {
+        message = `Break started. Warning: You have already used ${attendance.totalBreakTime} mins of break today (1 hour limit).`;
+      }
+
       return res.status(200).json({
         success: true,
-
-        message:
-          "Break started successfully",
-
+        message,
+        isOnBreak: true,
+        status: timerState.status,
+        timerState,
+        breakTimer: timerState,
         data:
           formatAttendanceDocument(
             attendance
@@ -2278,8 +2341,12 @@ exports.startBreak =
 exports.endBreak =
   async (req, res) => {
     try {
-      const { userId } =
-        req.body;
+      const userId =
+        req.body?.userId ||
+        req.body?.id ||
+        req.body?.employeeId ||
+        req.user?._id ||
+        req.user?.id;
 
       if (!userId) {
         return res.status(400).json({
@@ -2293,7 +2360,7 @@ exports.endBreak =
       // GPS GEOFENCING VALIDATION
       // ======================================================
       const geofenceResult = validateAttendanceGeofence(req.body);
-      if (!geofenceResult.isInside) {
+      if (!geofenceResult.isInside && !req.body?.skipGeofence) {
         return res.status(400).json({
           success: false,
           message:
@@ -2304,11 +2371,20 @@ exports.endBreak =
         });
       }
 
-      const attendance =
+      const today = getToday();
+      let attendance =
         await Attendance.findOne({
           userId,
-          date: getToday(),
+          date: today,
         });
+
+      if (!attendance) {
+        attendance = await Attendance.findOne({
+          userId,
+          checkInTime: { $ne: null },
+          checkOutTime: null,
+        }).sort({ createdAt: -1 });
+      }
 
       if (!attendance) {
         return res.status(404).json({
@@ -2341,7 +2417,7 @@ exports.endBreak =
         return res.status(400).json({
           success: false,
           message:
-            "Already checked out.",
+            "Already checked out today.",
         });
       }
 
@@ -2354,7 +2430,7 @@ exports.endBreak =
         return res.status(400).json({
           success: false,
           message:
-            "No active break found.",
+            "No active break found. You are not currently on break.",
         });
       }
 
@@ -2390,18 +2466,30 @@ exports.endBreak =
           safeDuration.toFixed(2)
         );
 
-      activeBreak.isOverdue = safeDuration > 60;
-      activeBreak.overdueMinutes = safeDuration > 60 ? Number((safeDuration - 60).toFixed(2)) : 0;
+      const breakLimit = attendance.breakLimit || DEFAULT_BREAK_LIMIT;
+      activeBreak.isOverdue = safeDuration > breakLimit;
+      activeBreak.overdueMinutes =
+        safeDuration > breakLimit
+          ? Number((safeDuration - breakLimit).toFixed(2))
+          : 0;
 
-      attendance.totalBreakTime =
-        Number(
-          (
-            Number(
-              attendance.totalBreakTime ||
-                0
-            ) + safeDuration
-          ).toFixed(2)
-        );
+      // Recalculate totalBreakTime across completed breaks
+      const completedBreaks = attendance.breaks.filter((b) => b.endTime);
+      attendance.totalBreakTime = Number(
+        completedBreaks
+          .reduce((sum, b) => sum + (Number(b.duration) || 0), 0)
+          .toFixed(2)
+      );
+
+      const isOverallOverdue =
+        attendance.totalBreakTime > breakLimit || activeBreak.isOverdue;
+      const totalOverdueMinutes = Math.max(
+        0,
+        Number((attendance.totalBreakTime - breakLimit).toFixed(2))
+      );
+
+      attendance.isBreakOverdue = isOverallOverdue;
+      attendance.overdueBreakMinutes = totalOverdueMinutes;
 
       await attendance.save();
 
@@ -2413,15 +2501,25 @@ exports.endBreak =
         );
       } catch (_) {}
 
+      const timerState = calculateBreakTimerState(attendance);
+      let message = "Break ended successfully";
+      if (isOverallOverdue || activeBreak.isOverdue) {
+        const overMins = Math.round(totalOverdueMinutes || activeBreak.overdueMinutes);
+        message = `Break ended. Warning: Break exceeded 1 hour (${breakLimit} mins) limit by ${overMins} minutes.`;
+      }
+
       return res.status(200).json({
         success: true,
-
-        message:
-          "Break ended successfully",
-
-        totalBreakTime:
-          attendance.totalBreakTime,
-
+        message,
+        breakDuration: activeBreak.duration,
+        totalBreakTime: attendance.totalBreakTime,
+        isOverdue: isOverallOverdue,
+        overdueMinutes: totalOverdueMinutes || activeBreak.overdueMinutes,
+        warning: isOverallOverdue
+          ? `Break time exceeded 1 hour limit by ${Math.round(totalOverdueMinutes || activeBreak.overdueMinutes)} minutes.`
+          : null,
+        timerState,
+        breakTimer: timerState,
         data:
           formatAttendanceDocument(
             attendance
@@ -2446,7 +2544,13 @@ exports.endBreak =
 
 exports.getBreakStatus = async (req, res) => {
   try {
-    const userId = req.user?._id || req.user?.id || req.query.userId;
+    const userId =
+      req.user?._id ||
+      req.user?.id ||
+      req.query.userId ||
+      req.query.id ||
+      req.body?.userId;
+
     if (!userId) {
       return res.status(400).json({
         success: false,
@@ -4091,7 +4195,7 @@ exports.checkLocationGeofence = async (req, res) => {
       payload.device ||
       payload.platform ||
       payload.source ||
-      (req.headers["user-agent"]?.toLowerCase().includes("mobile") ? "phone" : "laptop");
+      (req.headers?.["user-agent"]?.toLowerCase().includes("mobile") ? "phone" : "laptop");
 
     if (!userId) {
       return res.status(400).json({

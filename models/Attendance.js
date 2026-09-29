@@ -92,6 +92,16 @@ const attendanceSchema = new mongoose.Schema(
       default: 0, // Minutes
     },
 
+    isBreakOverdue: {
+      type: Boolean,
+      default: false,
+    },
+
+    overdueBreakMinutes: {
+      type: Number,
+      default: 0,
+    },
+
     totalWorkTime: {
       type: Number,
       default: 0, // Hours

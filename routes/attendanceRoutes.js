@@ -75,6 +75,11 @@ router.post(
   protect,
   checkIn 
 );
+router.post(
+  "/checkin",
+  protect,
+  checkIn 
+);
 
 // ================= CHECK OUT =================
 router.post(
@@ -82,17 +87,62 @@ router.post(
   protect,
   checkOut
 );
+router.post(
+  "/checkout",
+  protect,
+  checkOut
+);
 
-// ================= BREAK START =================
+// ================= BREAK START / BREAK IN =================
 router.post(
   "/break/start",
   protect,
   startBreak
 );
+router.post(
+  "/break-in",
+  protect,
+  startBreak
+);
+router.post(
+  "/break/in",
+  protect,
+  startBreak
+);
+router.post(
+  "/breakin",
+  protect,
+  startBreak
+);
+router.post(
+  "/start-break",
+  protect,
+  startBreak
+);
 
-// ================= BREAK END =================
+// ================= BREAK END / BREAK OUT =================
 router.post(
   "/break/end",
+  protect,
+  endBreak
+);
+router.post(
+  "/break-out",
+  protect,
+  endBreak
+);
+router.post(
+  "/break/out",
+  protect,
+  endBreak
+);
+router.post(
+  "/breakout",
+  protect,
+  endBreak
+);
+router.post(
+  "/end-break",
   protect,
   endBreak
 );
@@ -106,6 +156,18 @@ router.get(
 
 router.get(
   "/break/timer",
+  protect,
+  getBreakStatus
+);
+
+router.get(
+  "/break-status",
+  protect,
+  getBreakStatus
+);
+
+router.get(
+  "/break-timer",
   protect,
   getBreakStatus
 );

@@ -593,7 +593,9 @@ exports.sessionHeartbeat = async (req, res) => {
     if (
       req.body.latitude !== undefined ||
       req.body.lat !== undefined ||
-      req.body.location
+      req.body.location ||
+      req.body.distance !== undefined ||
+      req.body.distanceFromOffice !== undefined
     ) {
       const geofenceResult = validateAttendanceGeofence(req.body);
       if (
@@ -604,13 +606,14 @@ exports.sessionHeartbeat = async (req, res) => {
         const today = getTodayIST();
         const attendance = await Attendance.findOne({ userId, date: today });
         const activeBreak = attendance?.breaks?.find((b) => !b.endTime);
+        const isOnBreak = !!activeBreak || isBreakStartActive(attendance, session, req.body);
 
         // Rule: If working time is active (checked in, not checked out, NOT on break), auto checkout!
         if (
           attendance &&
           attendance.checkInTime &&
           !attendance.checkOutTime &&
-          !activeBreak
+          !isOnBreak
         ) {
           session.status = "auto_checkout";
           session.endTime = new Date();
@@ -640,7 +643,7 @@ exports.sessionHeartbeat = async (req, res) => {
           if (!Number.isNaN(checkInDate.getTime())) {
             totalMin = (checkoutTime.getTime() - checkInDate.getTime()) / (1000 * 60);
           }
-          totalMin -= Math.min(attendance.totalBreakTime || 0, 60);
+          totalMin -= (attendance.totalBreakTime || 0);
           const hours = Math.max(0, totalMin / 60);
           attendance.totalWorkTime = Number(hours.toFixed(2));
 
@@ -657,6 +660,15 @@ exports.sessionHeartbeat = async (req, res) => {
             isOnBreak: false,
             distance: geofenceResult.distance,
             message: `Auto-checkout performed by ${deviceType || "device"} going outside office radius.`,
+          });
+        } else if (isOnBreak) {
+          return res.status(200).json({
+            success: true,
+            isInside: false,
+            autoCheckedOut: false,
+            isOnBreak: true,
+            distance: geofenceResult.distance,
+            message: "Auto-checkout skipped: User is on break.",
           });
         }
       }
