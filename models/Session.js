@@ -4,6 +4,12 @@ const crypto = require("crypto");
 const sessionSchema = new mongoose.Schema(
   {
  
+    sessionId: {
+      type: String,
+      default: () => crypto.randomUUID(),
+      index: true,
+    },
+
     userId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
@@ -34,10 +40,18 @@ const sessionSchema = new mongoose.Schema(
 
     status: {
       type: String,
-      enum: ["active", "break", "terminated", "auto_checkout"],
+      enum: [
+        "active",
+        "break",
+        "break-start",
+        "break_start",
+        "on_break",
+        "terminated",
+        "auto_checkout",
+      ],
       default: "active",
     },
-
+ 
     deviceInfo: {
       type: String,
       default: "",

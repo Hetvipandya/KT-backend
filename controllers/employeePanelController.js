@@ -14,7 +14,11 @@ const Notification = require("../models/notification");
 const Project = require("../models/Project");
 const crypto = require("crypto");
 const { sanitizeTaskWithAttachments } = require("./taskManagementController");
-const { validateAttendanceGeofence } = require("../utils/geofence");
+const {
+  validateAttendanceGeofence,
+  OFFICE_LOCATION,
+  isBreakStartActive,
+} = require("../utils/geofence");
 const { calculateWorkingLeaveDays } = require("../utils/leaveUtils");
 
 // Helper for IST Today Date String (YYYY-MM-DD)
@@ -550,7 +554,7 @@ exports.sessionHeartbeat = async (req, res) => {
     let session = await Session.findOne({
       sessionId,
       userId,
-      status: "active",
+      status: { $in: ["active", "break", "break-start", "break_start", "on_break"] },
     });
     if (!session) {
       session = await Session.findOne({
@@ -568,48 +572,28 @@ exports.sessionHeartbeat = async (req, res) => {
       });
     }
 
-    // Check geofence if location coordinates are passed in heartbeat
+    // Check geofence if location coordinates or distance are passed in heartbeat
     if (
       req.body.latitude !== undefined ||
       req.body.lat !== undefined ||
-      req.body.location ||
-      req.body.isOutside !== undefined ||
-      req.body.geofenceExit !== undefined
+      req.body.location
     ) {
       const geofenceResult = validateAttendanceGeofence(req.body);
-      if (!geofenceResult.isInside) {
+      if (
+        !geofenceResult.isInside &&
+        geofenceResult.distance !== null &&
+        geofenceResult.distance > OFFICE_LOCATION.radiusMeters
+      ) {
         const today = getTodayIST();
-        let attendance = await Attendance.findOne({ userId, date: today });
-        if (!attendance) {
-          attendance = await Attendance.findOne({
-            userId,
-            checkInTime: { $ne: null },
-            checkOutTime: null,
-          }).sort({ createdAt: -1 });
-        }
-
-        const activeBreak = Array.isArray(attendance?.breaks)
-          ? attendance.breaks.find((b) => !b.endTime)
-          : null;
-        const isOnBreak = !!activeBreak || attendance?.isOnBreak === true || attendance?.status === "break";
-
-        // Rule: If break is active, DO NOT auto checkout!
-        if (isOnBreak) {
-          return res.status(200).json({
-            success: true,
-            isInside: false,
-            autoCheckedOut: false,
-            isOnBreak: true,
-            distance: geofenceResult.distance,
-            message: "Device is outside office radius, but break is active. Auto-checkout skipped.",
-          });
-        }
+        const attendance = await Attendance.findOne({ userId, date: today });
+        const activeBreak = attendance?.breaks?.find((b) => !b.endTime);
 
         // Rule: If working time is active (checked in, not checked out, NOT on break), auto checkout!
         if (
           attendance &&
           attendance.checkInTime &&
-          !attendance.checkOutTime
+          !attendance.checkOutTime &&
+          !activeBreak
         ) {
           session.status = "auto_checkout";
           session.endTime = new Date();
@@ -655,8 +639,7 @@ exports.sessionHeartbeat = async (req, res) => {
             autoCheckedOut: true,
             isOnBreak: false,
             distance: geofenceResult.distance,
-            triggeredByDevice: deviceType || "laptop",
-            message: `Auto-checkout performed by ${deviceType || "laptop"} going outside office radius.`,
+            message: `Auto-checkout performed by ${deviceType || "device"} going outside office radius.`,
           });
         }
       }

@@ -112,7 +112,7 @@ const getSupplier = async (req, res, next) => {
     return res.status(200).json({ success: true, data: serializeSupplier(populated || req.supplier) });
   } catch (error) {
     next(error);
-  }
+  } 
 };
 
 const updateSupplier = async (req, res, next) => {

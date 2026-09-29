@@ -15,7 +15,7 @@ exports.createScreenshot = async (req, res) => {
 
     if (typeof sessionId !== "string" || !sessionId.trim() || !imageUrl) {
       return res.status(400).json({
-        success: false,
+        success: false, 
         message: "sessionId and imageUrl are required",
       });
     }

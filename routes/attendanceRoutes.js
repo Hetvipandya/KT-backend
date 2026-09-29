@@ -49,6 +49,18 @@ router.post(
   checkLocationGeofence
 );
 
+router.get(
+  "/check-location",
+  protect,
+  checkLocationGeofence
+);
+
+router.get(
+  "/geofence-check",
+  protect,
+  checkLocationGeofence
+);
+
 // ================= RECALCULATE ALL ATTENDANCE =================
 router.post(
   "/recalculate-all",
