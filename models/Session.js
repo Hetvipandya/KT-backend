@@ -3,12 +3,6 @@ const crypto = require("crypto");
 
 const sessionSchema = new mongoose.Schema(
   {
-    sessionId: {
-      type: String,
-      required: true,
-      unique: true,
-      default: () => crypto.randomUUID(),
-    },
  
     userId: {
       type: mongoose.Schema.Types.ObjectId,
