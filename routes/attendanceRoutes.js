@@ -7,6 +7,7 @@ const {
   checkOut,
   startBreak,  
   endBreak, 
+  getTodayAttendance,
   getAttendanceById,
   getPendingAttendance, 
   getAllAttendanceForAdmin, 
@@ -96,6 +97,13 @@ router.get(
   getAllAttendanceForAdmin
 );
  
+// ================= TODAY ATTENDANCE =================
+router.get(
+  "/today",
+  protect,
+  getTodayAttendance
+);
+
 // ================= ATTENDANCE REPORT =================
 router.get(
   "/:id",

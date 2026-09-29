@@ -1,5 +1,6 @@
 
 
+const mongoose = require("mongoose");
 const Attendance = require("../models/Attendance");
 const User = require("../models/User");
 const {
@@ -2595,6 +2596,75 @@ exports.getAllAttendanceForAdmin =
   };
 
 // ============================================================
+// GET TODAY ATTENDANCE
+// ============================================================
+
+exports.getTodayAttendance = async (req, res) => {
+  try {
+    const userId = req.query.userId || req.user?._id || req.user?.id;
+
+    if (!userId) {
+      return res.status(400).json({
+        success: false,
+        message: "userId is required",
+      });
+    }
+
+    const today = getToday();
+
+    let attendance = await Attendance.findOne({
+      userId,
+      date: today,
+    })
+      .populate(
+        "userId",
+        "name email phone uniqueID department role"
+      )
+      .populate(
+        "approvedBy",
+        "name email role uniqueID"
+      );
+
+    if (!attendance) {
+      attendance = await Attendance.findOne({
+        userId,
+        checkInTime: { $ne: null },
+        checkOutTime: null,
+      })
+        .sort({ createdAt: -1 })
+        .populate(
+          "userId",
+          "name email phone uniqueID department role"
+        )
+        .populate(
+          "approvedBy",
+          "name email role uniqueID"
+        );
+    }
+
+    if (!attendance) {
+      return res.status(404).json({
+        success: false,
+        message: "Attendance record not found for today",
+        data: null,
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: formatAttendanceDocument(attendance),
+    });
+  } catch (err) {
+    console.error("GetTodayAttendance Error:", err);
+
+    return res.status(500).json({
+      success: false,
+      message: err.message,
+    });
+  }
+};
+
+// ============================================================
 // GET ATTENDANCE BY ID
 // ============================================================
 
@@ -2603,6 +2673,17 @@ exports.getAttendanceById =
     try {
       const { id } =
         req.params;
+
+      if (id === "today") {
+        return exports.getTodayAttendance(req, res);
+      }
+
+      if (!mongoose.Types.ObjectId.isValid(id)) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid attendance ID format",
+        });
+      }
 
       const attendance =
         await Attendance.findById(
@@ -3787,11 +3868,19 @@ exports.recalculateAllAttendance = async (req, res) => {
 
 exports.checkLocationGeofence = async (req, res) => {
   try {
-    const userId = req.user?._id || req.user?.id || req.body.userId;
+    const userId =
+      req.user?._id ||
+      req.user?.id ||
+      req.body?.userId ||
+      req.body?.user_id ||
+      req.body?.id ||
+      req.query?.userId;
+
     const deviceType =
-      req.body.deviceType ||
-      req.body.device ||
-      req.body.platform ||
+      req.body?.deviceType ||
+      req.body?.device ||
+      req.body?.platform ||
+      req.body?.source ||
       (req.headers["user-agent"]?.toLowerCase().includes("mobile") ? "phone" : "laptop");
 
     if (!userId) {
@@ -3803,10 +3892,19 @@ exports.checkLocationGeofence = async (req, res) => {
 
     const geofenceResult = validateAttendanceGeofence(req.body);
     const today = getToday();
-    const attendance = await Attendance.findOne({
+
+    let attendance = await Attendance.findOne({
       userId,
       date: today,
     });
+
+    if (!attendance) {
+      attendance = await Attendance.findOne({
+        userId,
+        checkInTime: { $ne: null },
+        checkOutTime: null,
+      }).sort({ createdAt: -1 });
+    }
 
     if (!attendance) {
       return res.status(200).json({
@@ -3839,8 +3937,10 @@ exports.checkLocationGeofence = async (req, res) => {
     }
 
     // Check for active break
-    const activeBreak = attendance.breaks?.find((b) => !b.endTime);
-    const isOnBreak = !!activeBreak;
+    const activeBreak = Array.isArray(attendance.breaks)
+      ? attendance.breaks.find((b) => !b.endTime)
+      : null;
+    const isOnBreak = !!activeBreak || attendance.isOnBreak === true || attendance.status === "break";
 
     // IF INSIDE GEOFENCE:
     if (geofenceResult.isInside) {
@@ -3881,8 +3981,11 @@ exports.checkLocationGeofence = async (req, res) => {
       latitude: geofenceResult.latitude,
       longitude: geofenceResult.longitude,
       distanceFromOffice: geofenceResult.distance,
+      device: deviceType,
     };
     attendance.isActiveSession = false;
+    attendance.autoCheckedOut = true;
+    attendance.autoCheckedOutBy = deviceType;
 
     const checkInTime = attendance.approvedCheckInTime || attendance.checkInTime;
     const totalHours = getWorkingHours(
@@ -3912,7 +4015,7 @@ exports.checkLocationGeofence = async (req, res) => {
 
     await attendance.save();
 
-    // Close session
+    // Close session for web/laptop
     try {
       const Session = require("../models/Session");
       await Session.updateMany(

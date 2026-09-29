@@ -54,6 +54,17 @@ function validateAttendanceGeofence(body) {
     };
   }
 
+  // Support explicit exit / out-of-radius flags sent directly by background listeners
+  if (body.isOutside === true || body.geofenceExit === true || body.event === "exit" || body.outOfRadius === true) {
+    return {
+      isInside: false,
+      distance: body.distance ? Math.round(Number(body.distance)) : 100,
+      latitude: body.latitude || body.lat || null,
+      longitude: body.longitude || body.lng || null,
+      error: "Device reported out-of-radius geofence exit.",
+    };
+  }
+
   const rawLat =
     body.latitude !== undefined
       ? body.latitude
@@ -61,6 +72,14 @@ function validateAttendanceGeofence(body) {
       ? body.lat
       : body.location?.latitude !== undefined
       ? body.location.latitude
+      : body.location?.lat !== undefined
+      ? body.location.lat
+      : body.coords?.latitude !== undefined
+      ? body.coords.latitude
+      : body.position?.coords?.latitude !== undefined
+      ? body.position.coords.latitude
+      : body.currentLocation?.latitude !== undefined
+      ? body.currentLocation.latitude
       : null;
 
   const rawLon =
@@ -72,6 +91,14 @@ function validateAttendanceGeofence(body) {
       ? body.long
       : body.location?.longitude !== undefined
       ? body.location.longitude
+      : body.location?.lng !== undefined
+      ? body.location.lng
+      : body.coords?.longitude !== undefined
+      ? body.coords.longitude
+      : body.position?.coords?.longitude !== undefined
+      ? body.position.coords.longitude
+      : body.currentLocation?.longitude !== undefined
+      ? body.currentLocation.longitude
       : null;
 
   if (rawLat === null || rawLat === undefined || rawLon === null || rawLon === undefined) {
