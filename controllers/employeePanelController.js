@@ -59,6 +59,14 @@ exports.getEmployeeDashboard = async (req, res) => {
 
     // 2. Today's Attendance State
     let attendance = await Attendance.findOne({ userId, date: today });
+    if (!attendance) {
+      attendance = await Attendance.findOne({
+        userId,
+        checkInTime: { $ne: null },
+        checkOutTime: null,
+      }).sort({ createdAt: -1 });
+    }
+
     let currentSession = await Session.findOne({
       userId,
       status: { $in: ["active", "break"] },
@@ -229,10 +237,14 @@ exports.getEmployeeDashboard = async (req, res) => {
         todayAttendance: {
           status: attendanceStatus,
           checkInTime,
+          checkOutTime: attendance?.checkOutTime || null,
           currentWorkingHours,
           breakDuration,
           expectedCheckOutTime,
           actionsAvailable,
+          autoCheckedOut: !!attendance?.autoCheckedOut,
+          autoLogout: !!(attendance?.checkOutTime || attendanceStatus === "checked_out"),
+          shouldLogout: !!(attendance?.checkOutTime || attendanceStatus === "checked_out"),
           sessionId: currentSession?.sessionId || attendance?.sessionId || null,
         },
         statistics: {
