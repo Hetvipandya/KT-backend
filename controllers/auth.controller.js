@@ -7,7 +7,7 @@ const {
   revokeSession,
   revokeAllSessions,
 } = require("../services/token.service");
-const {
+const { 
   sendEmail,
   sendVerificationEmail,
 } = require("../services/email.service");

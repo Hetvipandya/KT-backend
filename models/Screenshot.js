@@ -12,13 +12,13 @@ const screenshotSchema = new mongoose.Schema(
       ref: "User",
       required: true,
     },
-
+ 
     employeeName: {
       type: String,
       required: true,
     },
 
-    employeeID: {
+    role: {
       type: String,
       default: "",
     },

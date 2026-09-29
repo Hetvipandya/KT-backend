@@ -686,15 +686,20 @@ exports.uploadScreenshot = async (req, res) => {
         .json({ success: false, message: "imageUrl is required" });
     }
 
-    const user = await User.findById(userId);
+    const user = await User.findById(userId).select("name role");
+    if (!user) {
+      return res.status(404).json({ success: false, message: "User not found" });
+    }
+
     const employee = await Employee.findOne({ userId });
     const attendance = await Attendance.findOne({ userId, date: today });
 
     // Save screenshot
     const screenshot = await Screenshot.create({
       sessionId: sessionId || attendance?.sessionId || "SESS_BG",
-      userId,
+      userId: user._id,
       employeeName: user.name,
+      role: user.role || "",
       employeeID: employee?.employeeID || "",
       date: today,
       captureTime: new Date(),

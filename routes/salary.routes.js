@@ -6,7 +6,7 @@ const {
   createSalaryStructure,
   getAllSalaryStructures,
   getSalaryStructureById,
-  updateSalaryStructure,
+  updateSalaryStructure, 
   patchSalaryStructure,
   deleteSalaryStructure,
 } = require("../controllers/salary.controller");
