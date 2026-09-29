@@ -33,10 +33,6 @@ const screenshotSchema = new mongoose.Schema(
       default: Date.now,
     },
 
-    checkInTime: {
-      type: Date,
-    },
-
     imageUrl: {
       type: String,
       required: true,

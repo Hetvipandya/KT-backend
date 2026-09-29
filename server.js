@@ -138,6 +138,7 @@ const ktPortfolioRoutes = require('./routes/portfolioRoutes');
 const ktAdjustmentRequestRoutes = require('./routes/adjustmentRequestRoutes');
 const ktPerformanceRoutes = require('./routes/performanceRoutes');
 const ktEmployeePanelRoutes = require('./routes/employeePanelRoutes');
+const screenshotRoutes = require('./routes/screenshot.routes');
 
 // ============================================================
 // ROUTES: FIN-BACKEND
@@ -228,6 +229,7 @@ app.use('/api/fileManagement', ktFileManagementRoutes);
 app.use('/api/milestone', ktMilestoneRoutes);
 app.use('/api/client', ktClientProjectRoutes);
 app.use('/api/session', sessionRoutes);
+app.use('/api/screenshot', screenshotRoutes);
 
 // Company endpoints use one authenticated, validated controller and route entry.
 app.use('/api/company', finCompanyRoutes);

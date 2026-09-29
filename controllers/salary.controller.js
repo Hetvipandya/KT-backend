@@ -18,7 +18,7 @@ const createSalaryStructure = async (req, res) => {
       tdsPercentage,
       isActive,
     } = req.body;
-
+ 
     // Required field validation
     if (!userId) {
       return res.status(400).json({
