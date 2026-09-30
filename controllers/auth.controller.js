@@ -921,7 +921,7 @@ const showResetPasswordForm = async (req, res, next) => {
     }
 
     // Render the beautiful form
-    return res.status(200).send(renderResetFormHtml(tokenString));
+    return res.status(200).send(renderResetFormHtml(normalizedToken.tokenString));
   } catch (error) {
     next(error);
   }
