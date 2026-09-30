@@ -32,7 +32,15 @@ const generateRefreshToken = (payload) => {
  * @returns {object} - Decoded payload
  */
 const verifyAccessToken = (token) => {
-  return jwt.verify(token, env.JWT_ACCESS_SECRET);
+  try {
+    return jwt.verify(token, env.JWT_ACCESS_SECRET);
+  } catch (err) {
+    try {
+      return jwt.verify(token, process.env.JWT_SECRET || env.JWT_SECRET || 'kevalonTechnology');
+    } catch (_) {
+      throw err;
+    }
+  }
 };
 
 /**

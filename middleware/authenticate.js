@@ -38,30 +38,66 @@ const authenticate = async (req, res, next) => {
       });
     }
 
-    const userIdStr = decoded.userId;
+    const userIdStr = decoded.userId || decoded.id || decoded._id || decoded.sub;
+
+    if (!userIdStr) {
+      return res.status(401).json({
+        success: false,
+        message: 'Access token is invalid: missing user identifier'
+      });
+    }
+
     const now = Date.now();
     let user;
 
     // Check fast in-memory cache
-    if (userCache.has(userIdStr)) {
-      const cached = userCache.get(userIdStr);
+    if (userCache.has(String(userIdStr))) {
+      const cached = userCache.get(String(userIdStr));
       if (now - cached.timestamp < CACHE_TTL_MS) {
         user = cached.user;
       } else {
-        userCache.delete(userIdStr);
+        userCache.delete(String(userIdStr));
       }
     }
 
     // Cache miss: fetch from MongoDB
     if (!user) {
-      user = await User.findById(userIdStr);
+      const mongoose = require('mongoose');
+      if (mongoose.Types.ObjectId.isValid(userIdStr)) {
+        user = await User.findById(userIdStr);
+      }
+      if (!user) {
+        user = await User.findOne({
+          $or: [
+            { userId: userIdStr },
+            { uniqueID: userIdStr },
+            { email: typeof userIdStr === 'string' ? userIdStr.toLowerCase() : userIdStr }
+          ]
+        });
+      }
+      if (!user) {
+        try {
+          const Employee = require('../models/Employee');
+          const emp = await Employee.findOne({
+            $or: [
+              { _id: mongoose.Types.ObjectId.isValid(userIdStr) ? userIdStr : null },
+              { userID: userIdStr },
+              { userId: userIdStr }
+            ]
+          });
+          if (emp && (emp.userID || emp.userId)) {
+            user = await User.findById(emp.userID || emp.userId);
+          }
+        } catch (_) {}
+      }
+
       if (!user) {
         return res.status(401).json({
           success: false,
           message: 'Authentication failed: User no longer exists'
         });
       }
-      userCache.set(userIdStr, { user, timestamp: now });
+      userCache.set(String(userIdStr), { user, timestamp: now });
     }
 
     const financeUser = await FinanceUser.findOne({ userId: user._id }).lean();
