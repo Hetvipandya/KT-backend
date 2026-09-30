@@ -133,6 +133,28 @@ describe("Forgot & Reset Password Full Flow", () => {
     expect(await updatedUser.comparePassword("FinanceNewPassword123")).toBe(true);
   });
 
+  it("should render the finance reset form from a token link", async () => {
+    const plainToken = "finance-reset-token-1234567890";
+    const tokenHash = crypto.createHash("sha256").update(plainToken).digest("hex");
+    const testUser = new User({
+      name: "Finance Reset User",
+      email: "finance-reset@example.com",
+      password: "FinanceOld123",
+      role: "admin",
+      isApproved: true,
+      passwordResetTokenHash: tokenHash,
+      passwordResetExpires: new Date(Date.now() + 30 * 60 * 1000),
+    });
+    await testUser.save();
+
+    const resetPage = await request(app)
+      .get(`/api/auth/reset-password?token=${encodeURIComponent(plainToken)}&email=finance-reset%40example.com`);
+
+    expect(resetPage.status).toBe(200);
+    expect(resetPage.headers["content-type"]).toContain("text/html");
+    expect(resetPage.text).toContain(`name="token" value="${plainToken}"`);
+  });
+
   it("should handle web form submission via /api/auth/reset-password-web", async () => {
     const testUser = new User({
       name: "Web User",

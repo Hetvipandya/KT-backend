@@ -11,4 +11,4 @@ router.get("/", screenshotController.listScreenshots);
 router.get("/:id", screenshotController.getScreenshotById);
 router.delete("/:id", screenshotController.deleteScreenshot);
 
-module.exports = router;
+module.exports = router; 

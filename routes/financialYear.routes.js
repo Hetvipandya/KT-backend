@@ -7,7 +7,7 @@ const { createFYSchema } = require('../validators/company.validators');
 
 const router = express.Router();
 
-// Apply authentication to all routes
+// Apply authentication to all routes 
 router.use(authenticate);
  
 /**
@@ -83,7 +83,7 @@ router.post('/', validateRequest(createFYSchema), checkCompanyAccess, createFina
  *       403:
  *         description: Access denied (Data isolation violation)
  */
-router.get('/', checkCompanyAccess, listFinancialYears);
+router.get('/', checkCompanyAccess, listFinancialYears); 
 
 /**
  * @openapi
