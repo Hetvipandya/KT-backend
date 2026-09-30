@@ -29,7 +29,7 @@ beforeEach(async () => {
 
 describe("task management milestone handling", () => {
   it("allows creating a project-scoped task without a milestone", async () => {
-    const task = new TaskManagement({
+    const task = await TaskManagement.create({
       projectId: new mongoose.Types.ObjectId(),
       taskTitle: "Landing page review",
       assignedEmployee: new mongoose.Types.ObjectId(),
@@ -37,8 +37,9 @@ describe("task management milestone handling", () => {
       dueDate: new Date(Date.now() + 24 * 60 * 60 * 1000),
     });
 
-    await expect(task.validate()).resolves.toBeUndefined();
+    const populatedTask = await TaskManagement.findById(task._id).populate("milestoneId", "title");
     expect(task.milestoneId).toBeUndefined();
+    expect(populatedTask.milestoneId).toBeUndefined();
   });
 
   it("does not auto-create tasks when a project is created with assigned employees", async () => {

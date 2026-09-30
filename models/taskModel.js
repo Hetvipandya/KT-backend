@@ -8,6 +8,11 @@ const taskSchema = new mongoose.Schema(
       required: true,
     }, 
 
+    milestoneId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Milestone",
+    },
+
     taskTitle: {
       type: String,
       required: true,
