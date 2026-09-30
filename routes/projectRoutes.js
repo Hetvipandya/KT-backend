@@ -5,10 +5,10 @@ const upload = require("../middleware/uploadMiddleware"); // <-- Cloudinary Mult
 
 const {
   // Project
-  createProject, 
+  createProject,  
   getAllProjects,
   getSingleProject, 
-  getProjectMembers, 
+  getProjectMembers,  
   assignTeamLead, 
   assignEmployees, 
   assignInterns, 

@@ -11,7 +11,7 @@ const { sanitizeTaskWithAttachments } = require("./taskManagementController");
 // HELPER FUNCTIONS FOR TEAM & PROGRESS MANAGEMENT
 // ======================================================
 
-/**
+/** 
  * Get team lead from project with clear priority order & full resolution
  */
 const getProjectTeamLead = async (projectId) => {
@@ -42,7 +42,7 @@ const getAllProjectTeamMembers = async (projectId) => {
   const project = await Project.findById(projectId)
     .populate('teamLeadUser', 'name email')
     .populate('teamLeadEmployee', 'firstName lastName email')
-    .populate('employees', 'firstName lastName email')
+    .populate('employees', 'name firstName middleName lastName email employeeID userID')
     .populate('interns', 'name email');
   
   if (!project) return { teamLead: null, employees: [], interns: [] };
@@ -531,7 +531,7 @@ exports.createProject = async (req, res) => {
     const populatedProject = await Project.findById(project._id)
       .populate("teamLeadUser", "name email")
       .populate("teamLeadEmployee", "firstName lastName email")
-      .populate("employees", "firstName lastName email")
+      .populate("employees", "name firstName middleName lastName email employeeID userID")
       .populate("interns", "name email");
 
     res.status(201).json({
@@ -554,18 +554,29 @@ exports.getAllProjects = async (req, res) => {
     const projects = await Project.find()
       .populate("teamLeadUser", "name email employeeID")
       .populate("teamLeadEmployee", "name email employeeID")
-      .populate("employees", "name email employeeID")
+      .populate("employees", "name firstName middleName lastName email employeeID userID")
       .populate("interns", "name email");
 
     // Process each project to resolve team lead name if not directly populated
     const processedProjects = await Promise.all(projects.map(async (project) => {
+      const employeeIds = project.populated("employees") || [];
+      const employeeRecords = project.employees || [];
+      const legacyEmployeeIds = employeeIds.filter((id, index) => !employeeRecords[index]);
+      const legacyUsers = legacyEmployeeIds.length > 0
+        ? await User.find({ _id: { $in: legacyEmployeeIds } }).select("name email")
+        : [];
+      const legacyUsersById = new Map(legacyUsers.map((user) => [String(user._id), user]));
       const projectObj = project.toObject();
+      projectObj.employees = employeeIds.map((id, index) =>
+        employeeRecords[index] || legacyUsersById.get(String(id)) || null
+      );
       
       // If teamLeadUser is null but we have employees or interns, try to find team lead
       if (!projectObj.teamLeadUser && !projectObj.teamLeadEmployee) {
         // Try to find team lead from employees with isTeamLead flag
         if (projectObj.employees && projectObj.employees.length > 0) {
           for (const emp of projectObj.employees) {
+            if (!emp) continue;
             const employee = await Employee.findById(emp._id || emp);
             if (employee && employee.isTeamLead) {
               projectObj.teamLeadEmployee = employee;
@@ -632,7 +643,7 @@ exports.getSingleProject = async (req, res) => {
     const project = await Project.findById(req.params.id)
       .populate("teamLeadUser", "name email")
       .populate("teamLeadEmployee", "firstName lastName email")
-      .populate("employees", "firstName lastName email")
+      .populate("employees", "name firstName middleName lastName email employeeID userID")
       .populate("interns", "name email");
 
     if (!project) {
@@ -661,7 +672,7 @@ exports.getProjectMembers = async (req, res) => {
     const project = await Project.findById(projectId)
       .populate("teamLeadUser", "name email role")
       .populate("teamLeadEmployee", "firstName lastName email employeeID")
-      .populate("employees", "firstName lastName email employeeID userID")
+      .populate("employees", "name firstName middleName lastName email employeeID userID")
       .populate("interns", "name email role");
 
     if (!project) {
@@ -780,7 +791,7 @@ exports.assignTeamLead = async (req, res) => {
     )
       .populate("teamLeadUser", "name email role")
       .populate("teamLeadEmployee", "firstName lastName email employeeID")
-      .populate("employees", "name email")
+      .populate("employees", "name firstName middleName lastName email employeeID userID")
       .populate("interns", "name email");
 
     res.status(200).json({
@@ -819,7 +830,7 @@ exports.assignEmployees = async (req, res) => {
         runValidators: true,
       }
     )
-      .populate("employees", "firstName lastName name email")
+      .populate("employees", "name firstName middleName lastName email employeeID userID")
       .populate("interns", "name email")
       .populate("teamLeadUser", "name email")
       .populate("teamLeadEmployee", "firstName lastName name email");
@@ -870,7 +881,7 @@ exports.assignInterns = async (req, res) => {
         runValidators: true,
       }
     )
-      .populate("employees", "firstName lastName name email")
+      .populate("employees", "name firstName middleName lastName email employeeID userID")
       .populate("interns", "name email")
       .populate("teamLeadUser", "name email")
       .populate("teamLeadEmployee", "firstName lastName name email");
@@ -958,7 +969,7 @@ exports.updateProject = async (req, res) => {
     )
       .populate("teamLeadUser", "name email")
       .populate("teamLeadEmployee", "name email")
-      .populate("employees", "name email")
+      .populate("employees", "name firstName middleName lastName email employeeID userID")
       .populate("interns", "name email");
 
     if (!project) {

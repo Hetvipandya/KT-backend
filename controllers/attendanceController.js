@@ -2594,7 +2594,7 @@ exports.rejectAttendance =
     try {
       const {
         attendanceId,
-        reason,
+        reason, 
       } = req.body;
 
       if (!attendanceId) {
@@ -4405,4 +4405,4 @@ exports.checkLocationGeofence = async (req, res) => {
   }
 };
 
-exports.isBreakStartActive = isBreakStartActive;
+exports.isBreakStartActive = isBreakStartActive;

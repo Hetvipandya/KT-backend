@@ -8,7 +8,7 @@ const {
   createProject,
   getProjects,
   getProjectDetails,
-  updateProject,
+  updateProject, 
   deleteProject, 
   updateProjectStatus,
 

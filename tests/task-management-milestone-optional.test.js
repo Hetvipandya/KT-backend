@@ -122,6 +122,55 @@ describe("task management milestone handling", () => {
     expect(await TaskManagement.countDocuments()).toBe(0);
   });
 
+  it("returns assigned employees in the project listing", async () => {
+    const employee = await Employee.create({
+      name: "Hetvi Pandya",
+      email: "hetvi@example.com",
+    });
+    await (require("../models/projectModel")).create({
+      projectName: "Figmin",
+      clientName: "Kunal",
+      employees: [employee._id],
+      interns: [],
+    });
+    const legacyUser = await User.create({
+      name: "Legacy Employee",
+      email: "legacy@example.com",
+      password: "StrongPass123",
+      role: "employee",
+      isApproved: true,
+    });
+    await (require("../models/projectModel")).create({
+      projectName: "Legacy Project",
+      clientName: "Kunal",
+      employees: [legacyUser._id],
+      interns: [],
+    });
+
+    const res = {
+      statusCode: null,
+      body: null,
+      status(code) {
+        this.statusCode = code;
+        return this;
+      },
+      json(payload) {
+        this.body = payload;
+        return this;
+      },
+    };
+
+    await projectController.getAllProjects({}, res);
+
+    expect(res.statusCode).toBe(200);
+    const listedProject = res.body.data.find((project) => project.projectName === "Figmin");
+    expect(listedProject.employees).toHaveLength(1);
+    expect(listedProject.employees[0].name).toBe("Hetvi Pandya");
+    const legacyProject = res.body.data.find((project) => project.projectName === "Legacy Project");
+    expect(legacyProject.employees).toHaveLength(1);
+    expect(legacyProject.employees[0].name).toBe("Legacy Employee");
+  });
+
   it("returns tasks when employee lookup resolves to the linked user id", async () => {
     const user = await User.create({
       name: "Rahul Shah",
