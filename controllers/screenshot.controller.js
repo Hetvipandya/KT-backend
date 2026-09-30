@@ -1,8 +1,9 @@
 const mongoose = require("mongoose");
 const Screenshot = require("../models/Screenshot");
+const { uploadScreenshot } = require("../services/cloudinary.service");
 
 const getAuthenticatedUserId = (req) => req.user?._id || req.user?.id;
-
+ 
 exports.createScreenshot = async (req, res) => {
   try {
     const userId = getAuthenticatedUserId(req);
@@ -37,6 +38,7 @@ exports.createScreenshot = async (req, res) => {
       return res.status(400).json({ success: false, message: "captureTime must be a valid date" });
     }
 
+    const cloudinaryResult = await uploadScreenshot(imageUrl, userId);
     const screenshot = await Screenshot.create({
       sessionId: sessionId.trim(),
       userId,
@@ -44,7 +46,7 @@ exports.createScreenshot = async (req, res) => {
       role: req.user.role || "",
       date,
       ...(parsedCaptureTime ? { captureTime: parsedCaptureTime } : {}),
-      imageUrl,
+      imageUrl: cloudinaryResult.secure_url,
     });
 
     return res.status(201).json({

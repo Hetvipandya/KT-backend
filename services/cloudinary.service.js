@@ -209,10 +209,40 @@ const uploadCompanyLogo = async (companyId, logoBuffer) => {
   });
 };
 
+/**
+ * Uploads a screenshot image (data URI or remote image URL) to Cloudinary.
+ * @param {string} imageSource - The screenshot data URI or image URL
+ * @param {string} userId - The ID of the user who captured the screenshot
+ * @returns {Promise<{ secure_url: string, public_id: string }>}
+ */
+const uploadScreenshot = async (imageSource, userId) => {
+  if (process.env.NODE_ENV === 'test') {
+    return {
+      secure_url: `https://res.cloudinary.com/mock-cloud/image/upload/v123456789/mock-screenshots/${userId}.png`,
+      public_id: `mock-screenshots/${userId}`
+    };
+  }
+
+  if (!cloudName || !apiKey || !apiSecret) {
+    throw new Error('Cloudinary is not configured');
+  }
+
+  const result = await cloudinary.uploader.upload(imageSource, {
+    folder: 'kt-crm/screenshots',
+    resource_type: 'image'
+  });
+
+  return {
+    secure_url: result.secure_url,
+    public_id: result.public_id
+  };
+};
+
 module.exports = {
   uploadInvoicePdf,
   deleteInvoicePdf,
   uploadLedgerPdf,
   uploadReportPdf,
-  uploadCompanyLogo
+  uploadCompanyLogo,
+  uploadScreenshot
 };
