@@ -29,7 +29,7 @@ router.get("/employee/:employeeId", getTasksByEmployeeId);
 router.post("/create", upload.array("attachments"), createTask);
 
 // Get All Tasks
-router.get("/all", getAllTasks);
+router.get("/all", getAllTasks); 
 
 // Update Task
 router.put("/update/:id", upload.array("attachments"), updateTask);

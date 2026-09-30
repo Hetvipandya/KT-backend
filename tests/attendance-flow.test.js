@@ -3,7 +3,9 @@ const { MongoMemoryServer } = require("mongodb-memory-server");
 const Attendance = require("../models/Attendance");
 const User = require("../models/User");
 const Session = require("../models/Session");
+const AdjustmentRequest = require("../models/AdjustmentRequest");
 const attendanceController = require("../controllers/attendanceController");
+const adjustmentRequestController = require("../controllers/adjustmentRequestController");
 const { OFFICE_LOCATION } = require("../utils/geofence");
 
 let mongoServer;
@@ -49,6 +51,82 @@ beforeEach(async () => {
   await Attendance.deleteMany({});
   await User.deleteMany({});
   await Session.deleteMany({});
+  await AdjustmentRequest.deleteMany({});
+});
+
+describe("Attendance break-time adjustments", () => {
+  test("stores the full adjusted break duration and subtracts it from work time", async () => {
+    const user = await User.create({
+      name: "Adjustment Test",
+      email: "adjustment-test@example.com",
+      password: "Password123",
+      role: "employee",
+      isApproved: true,
+    });
+    const res = createMockRes();
+
+    await adjustmentRequestController.putAttendanceAdjustment(
+      {
+        body: {
+          employeeId: user._id.toString(),
+          date: "2026-09-30",
+          reason: "Corrected break duration",
+          sessions: [
+            {
+              checkin: "09:00",
+              breakStart: "12:00",
+              breakEnd: "14:30",
+              checkout: "19:00",
+            },
+          ],
+        },
+      },
+      res
+    );
+
+    expect(res.statusCode).toBe(200);
+    const attendance = await Attendance.findOne({ userId: user._id, date: "2026-09-30" });
+    expect(attendance.totalBreakTime).toBe(150);
+    expect(attendance.breaks[0].duration).toBe(150);
+    expect(attendance.totalWorkTime).toBe(7.5);
+
+    const history = await AdjustmentRequest.findOne({ userId: user._id });
+    expect(history.totalBreakTime).toBe(150);
+    expect(history.totalWorkTime).toBe(7.5);
+  });
+
+  test("rejects a break adjustment with only one endpoint", async () => {
+    const user = await User.create({
+      name: "Invalid Adjustment Test",
+      email: "invalid-adjustment-test@example.com",
+      password: "Password123",
+      role: "employee",
+      isApproved: true,
+    });
+    const res = createMockRes();
+
+    await adjustmentRequestController.putAttendanceAdjustment(
+      {
+        body: {
+          employeeId: user._id.toString(),
+          date: "2026-09-30",
+          reason: "Invalid break",
+          sessions: [
+            {
+              checkin: "09:00",
+              breakStart: "12:00",
+              breakEnd: "",
+              checkout: "18:00",
+            },
+          ],
+        },
+      },
+      res
+    );
+
+    expect(res.statusCode).toBe(400);
+    expect(res.body.message).toBe("Both break start and break end are required.");
+  });
 });
 
 describe("Complete Attendance Flow (Check-In, Break-In, Break-Out, Check-Out, 1h Overdue)", () => {

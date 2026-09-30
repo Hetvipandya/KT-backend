@@ -7,6 +7,10 @@ const AdjustmentRequest = require("../models/AdjustmentRequest");
 // Helper function to parse time
 const parseTimeToDate = (dateStr, timeStr) => {
   if (!timeStr) return null;
+  if (typeof timeStr !== "string" || !/^([01]\d|2[0-3]):[0-5]\d$/.test(timeStr)) {
+    return null;
+  }
+
   const [year, month, day] = dateStr.split("-").map(Number);
   const [hour, minute] = timeStr.split(":").map(Number);
   return new Date(Date.UTC(year, month - 1, day, hour - 5, minute - 30, 0));
@@ -14,7 +18,7 @@ const parseTimeToDate = (dateStr, timeStr) => {
 
 const applyCheckInStatus = (attendance) => {
   if (!attendance.checkInTime) {
-    attendance.isLate = false;
+    attendance.isLate = false; 
     return;
   }
 
@@ -456,6 +460,13 @@ exports.putAttendanceAdjustment = async (req, res) => {
       });
     }
 
+    if (sessions.some((session) => !session || typeof session !== "object" || Array.isArray(session))) {
+      return res.status(400).json({
+        success: false,
+        message: "Each session must be an object.",
+      });
+    }
+
     const attendanceDate = normalizeAttendanceDate(date);
 
     if (!attendanceDate) {
@@ -553,7 +564,17 @@ exports.putAttendanceAdjustment = async (req, res) => {
     let totalBreakMinutes = 0;
 
     for (const session of sessions) {
-      if (session.breakStart && session.breakEnd) {
+      const hasBreakStart = Boolean(session.breakStart);
+      const hasBreakEnd = Boolean(session.breakEnd);
+
+      if (hasBreakStart !== hasBreakEnd) {
+        return res.status(400).json({
+          success: false,
+          message: "Both break start and break end are required.",
+        });
+      }
+
+      if (hasBreakStart) {
         const breakStart = parseTimeToDate(
           attendanceDate,
           session.breakStart
@@ -576,7 +597,10 @@ exports.putAttendanceAdjustment = async (req, res) => {
           60000;
 
         if (duration < 0) {
-          duration = 0;
+          return res.status(400).json({
+            success: false,
+            message: "Break end must be after break start.",
+          });
         }
 
         duration = Number(duration.toFixed(2));
@@ -591,10 +615,7 @@ exports.putAttendanceAdjustment = async (req, res) => {
       }
     }
 
-    attendance.totalBreakTime = Math.min(
-      totalBreakMinutes,
-      120
-    );
+    attendance.totalBreakTime = Number(totalBreakMinutes.toFixed(2));
 
     // ==========================================
     // Calculate Work Time

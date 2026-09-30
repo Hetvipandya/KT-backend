@@ -407,7 +407,7 @@ const updateProfile = async (req, res) => {
       name,
       email,
       phoneNumber,
-      phone,
+      phone, 
       dob,
       address,
       department,

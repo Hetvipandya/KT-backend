@@ -29,7 +29,7 @@ const { protect } = require("../middleware/authMiddleware");
 router.put(
   "/profile/update",
   protect,
-  updateProfile
+  updateProfile 
 );
 
 router.get(
