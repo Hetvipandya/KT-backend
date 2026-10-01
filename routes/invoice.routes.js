@@ -10,7 +10,7 @@ router.get('/download/:id', controller.downloadPrintableInvoice);
 router.get('/html/:id', controller.downloadPrintableInvoice);
 router.get('/:id/print', controller.downloadPrintableInvoice);
 router.get('/:id/html', controller.downloadPrintableInvoice);
-
+ 
 router.post('/', authenticate, validateRequest(createInvoiceSchema), checkCompanyAccess, controller.create);
 router.get('/', authenticate, validateQuery(invoiceQuerySchema), checkCompanyAccess, controller.list);
 router.get('/:id/pdf', authenticate, checkCompanyAccess, controller.pdf);
@@ -26,4 +26,3 @@ router.put('/:id', authenticate, (req, res, next) => {
 }, checkCompanyAccess, controller.update);
 router.delete('/:id', authenticate, checkCompanyAccess, controller.cancel);
 module.exports = router;
-
