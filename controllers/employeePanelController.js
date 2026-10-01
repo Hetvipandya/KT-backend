@@ -43,7 +43,9 @@ exports.getEmployeeDashboard = async (req, res) => {
 
     // 1. Employee Info
     const user = await User.findById(userId).select("-password -plainPassword");
-    const employee = await Employee.findOne({ userId });
+    const employee = await Employee.findOne({
+      $or: [{ userID: userId }, { userId }],
+    });
 
     const employeeInfo = {
       userId: user._id,
@@ -55,7 +57,13 @@ exports.getEmployeeDashboard = async (req, res) => {
       gender: user.gender || employee?.gender || "",
       department: user.department || employee?.department || "",
       joiningDate: employee?.joiningDate || user.createdAt,
-      profilePhoto: employee?.profileImage || "",
+      profilePhoto:
+        employee?.profileImage ||
+        user?.profileImage ||
+        user?.photo ||
+        user?.imageUrl ||
+        user?.avatar ||
+        "",
     };
 
     // 2. Today's Attendance State

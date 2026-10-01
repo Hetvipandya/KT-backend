@@ -10,7 +10,7 @@ const {
   sessionHeartbeat,
   endAttendanceSession,
   uploadScreenshot,
-  getScreenshotSettings,
+  getScreenshotSettings, 
   updateScreenshotSettings,
   getScreenshotsForAdmin,
   logInactivityAlert,

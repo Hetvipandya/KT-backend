@@ -240,6 +240,7 @@ const buildUserResponse = (user) => {
     phoneNumber: user.phoneNumber ?? user.phone ?? null,
     dob: user.dob,
     address: user.address,
+    profileImage: resolveProfileImage(user) || null,
     department: user.department,
     designation: user.designation,
     gender: user.gender,
@@ -356,7 +357,7 @@ const syncUserToEmployee = async (user) => {
   }
 
   const employee = await Employee.findOne({
-    userID: user._id,
+    $or: [{ userID: user._id }, { userId: user._id }],
   });
 
   if (!employee) {
@@ -402,6 +403,18 @@ const syncUserToEmployee = async (user) => {
 const updateProfile = async (req, res) => {
   try {
     const payload = sanitizeUserUpdatePayload(req.body?.user || req.body);
+
+    if (req.file?.path) {
+      payload.profileImage = req.file.path;
+    }
+
+    const profileImageField = [
+      "profileImage",
+      "profilePhoto",
+      "photo",
+      "imageUrl",
+      "avatar",
+    ].find((field) => Object.prototype.hasOwnProperty.call(payload, field));
 
     const {
       name,
@@ -511,6 +524,11 @@ const updateProfile = async (req, res) => {
       user.bloodGroup = bloodGroup;
     }
 
+    if (profileImageField) {
+      const profileImage = payload[profileImageField];
+      user.profileImage = profileImage == null ? "" : String(profileImage).trim();
+    }
+
     // --------------------------------------------------------
     // BANK DETAILS
     // --------------------------------------------------------
@@ -567,8 +585,12 @@ const getMyProfile = async (req, res) => {
     }
 
     const employee = await Employee.findOne({
-      userID: user._id,
+      $or: [{ userID: user._id }, { userId: user._id }],
     }).lean();
+
+    if (employee) {
+      employee.profileImage = employee.profileImage || resolveProfileImage(user) || "";
+    }
 
     return res.status(200).json({
       success: true,

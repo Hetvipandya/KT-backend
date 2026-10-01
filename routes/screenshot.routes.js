@@ -5,7 +5,7 @@ const screenshotController = require("../controllers/screenshot.controller");
 const router = express.Router();
  
 router.use(authenticate);
-
+ 
 router.post("/", screenshotController.createScreenshot);
 router.get("/", screenshotController.listScreenshots);
 router.get("/:id", screenshotController.getScreenshotById);

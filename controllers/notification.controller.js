@@ -11,7 +11,7 @@ const listNotifications = async (req, res, next) => {
     return res.status(200).json({
       success: true,
       data: {
-        userId,
+        userId, 
         unreadCount: result.unreadCount,
         total: result.total,
         items: result.items

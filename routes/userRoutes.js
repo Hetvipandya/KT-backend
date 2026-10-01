@@ -25,10 +25,12 @@ const {
 );
 
 const { protect } = require("../middleware/authMiddleware");
+const upload = require("../middleware/uploadMiddleware");
 
 router.put(
   "/profile/update",
   protect,
+  upload.single("profileImage"),
   updateProfile 
 );
 
