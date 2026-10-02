@@ -2494,11 +2494,11 @@ exports.endBreak =
         );
       } catch (_) {}
 
-      // If user performed Break Out while outside 75m office radius:
-      // Status becomes CHECKED_IN, and since distance > 75m, trigger AUTO CHECK OUT immediately!
+      // If user performed Break Out while outside 70m office radius:
+      // Status becomes CHECKED_IN, and since distance > 70m, trigger AUTO CHECK OUT immediately!
       if (!geofenceResult.isInside && geofenceResult.distance !== null && geofenceResult.distance > OFFICE_LOCATION.radiusMeters) {
         console.log(
-          `[Geofence Debug] User ${userId} performed Break Out while outside 75m (${geofenceResult.distance}m). Triggering AUTO CHECKOUT.`
+          `[Geofence Debug] User ${userId} performed Break Out while outside 70m (${geofenceResult.distance}m). Triggering AUTO CHECKOUT.`
         );
 
         const updatedAtt = await executeAutoCheckout({
@@ -2512,7 +2512,7 @@ exports.endBreak =
         const timerState = calculateBreakTimerState(updatedAtt || attendance);
         return res.status(200).json({
           success: true,
-          message: `Break ended. Device is outside 75m office radius (${geofenceResult.distance}m away), so auto-checkout was performed.`,
+          message: `Break ended. Device is outside 70m office radius (${geofenceResult.distance}m away), so auto-checkout was performed.`,
           breakDuration: activeBreak.duration,
           totalBreakTime: attendance.totalBreakTime,
           autoCheckedOut: true,
@@ -4423,8 +4423,8 @@ exports.checkLocationGeofence = async (req, res) => {
         autoLogout: false,
         shouldLogout: false,
         message: geofenceResult.isInside
-          ? "Device is inside office radius (<= 75m). User is not checked in."
-          : `Device is outside office radius (${geofenceResult.distance}m > 75m). User is not checked in.`,
+          ? "Device is inside office radius (<= 70m). User is not checked in."
+          : `Device is outside office radius (${geofenceResult.distance}m > 70m). User is not checked in.`,
       });
     }
 
@@ -4471,7 +4471,7 @@ exports.checkLocationGeofence = async (req, res) => {
     );
 
     // ========================================================
-    // IF INSIDE GEOFENCE (<= 75 meters):
+    // IF INSIDE GEOFENCE (<= 70 meters):
     // ========================================================
     if (geofenceResult.isInside) {
       let wasPendingCancelled = false;
@@ -4504,14 +4504,14 @@ exports.checkLocationGeofence = async (req, res) => {
         shouldLogout: false,
         deviceType,
         message: wasPendingCancelled
-          ? "Device returned inside office radius (within 75m). Pending auto-checkout cancelled."
-          : "Device is inside office radius (within 75m).",
+          ? "Device returned inside office radius (within 70m). Pending auto-checkout cancelled."
+          : "Device is inside office radius (within 70m).",
         data: formatAttendanceDocument(attendance),
       });
     }
 
     // ========================================================
-    // IF OUTSIDE GEOFENCE (> 75 meters) & ON BREAK (BREAK_IN):
+    // IF OUTSIDE GEOFENCE (> 70 meters) & ON BREAK (BREAK_IN):
     // ========================================================
     if (isOnBreak) {
       clearPendingGeofenceTimer(userId);
@@ -4522,7 +4522,7 @@ exports.checkLocationGeofence = async (req, res) => {
       }
 
       console.log(
-        `[Geofence Debug] User ${userId} is outside 75m (${geofenceResult.distance}m) but status is BREAK_IN. Auto-checkout SKIPPED.`
+        `[Geofence Debug] User ${userId} is outside 70m (${geofenceResult.distance}m) but status is BREAK_IN. Auto-checkout SKIPPED.`
       );
 
       return res.status(200).json({
@@ -4538,13 +4538,13 @@ exports.checkLocationGeofence = async (req, res) => {
         autoLogout: false,
         shouldLogout: false,
         deviceType,
-        message: `Device is outside 75m office radius (${geofenceResult.distance}m away), but status is break-start (BREAK_IN). Auto-checkout skipped.`,
+        message: `Device is outside 70m office radius (${geofenceResult.distance}m away), but status is break-start (BREAK_IN). Auto-checkout skipped.`,
         data: formatAttendanceDocument(attendance),
       });
     }
 
     // ========================================================
-    // IF OUTSIDE GEOFENCE (> 75 meters) & NOT ON BREAK & CHECKED IN:
+    // IF OUTSIDE GEOFENCE (> 70 meters) & NOT ON BREAK & CHECKED IN:
     // Apply 10-Second Auto-Checkout Timer Rule
     // ========================================================
     const delaySeconds =
@@ -4579,7 +4579,7 @@ exports.checkLocationGeofence = async (req, res) => {
       clearPendingGeofenceTimer(userId);
 
       console.log(
-        `[Geofence Debug] Triggering AUTO CHECKOUT for User ${userId} | Distance: ${geofenceResult.distance}m > 75m | Reason: OUTSIDE_GEOFENCE`
+        `[Geofence Debug] Triggering AUTO CHECKOUT for User ${userId} | Distance: ${geofenceResult.distance}m > 70m | Reason: OUTSIDE_GEOFENCE`
       );
 
       const updatedAtt = await executeAutoCheckout({
@@ -4604,7 +4604,7 @@ exports.checkLocationGeofence = async (req, res) => {
         shouldLogout: true,
         elapsedSeconds: Math.max(elapsedSeconds, delaySeconds),
         triggeredByDevice: deviceType,
-        message: `Auto-checkout triggered: Device is outside 75m office radius (${geofenceResult.distance}m away) for ${delaySeconds} seconds while checked-in and not on break.`,
+        message: `Auto-checkout triggered: Device is outside 70m office radius (${geofenceResult.distance}m away) for ${delaySeconds} seconds while checked-in and not on break.`,
         data: formatAttendanceDocument(updatedAtt || attendance),
       });
     }
@@ -4663,7 +4663,7 @@ exports.checkLocationGeofence = async (req, res) => {
       remainingSeconds,
       outsideGeofenceAt: breachTime,
       triggeredByDevice: deviceType,
-      message: `Device is outside 75m office radius (${geofenceResult.distance}m away). Automatic check-out will occur in ${remainingSeconds} second(s) if device does not return inside 75m radius.`,
+      message: `Device is outside 70m office radius (${geofenceResult.distance}m away). Automatic check-out will occur in ${remainingSeconds} second(s) if device does not return inside 70m radius.`,
       data: formatAttendanceDocument(attendance),
     });
   } catch (err) {
