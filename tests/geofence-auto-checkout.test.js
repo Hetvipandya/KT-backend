@@ -567,7 +567,7 @@ describe("Geofence 70m Auto Check-Out & Break-Start Skip", () => {
     expect(unchangedSession.status).toBe("break");
   });
 
-  test("10. BREAK_IN -> BREAK_OUT while outside 70m ends break and triggers auto-checkout", async () => {
+  test("10. BREAK_OUT while outside 70m is REJECTED and break remains ACTIVE; inside 70m ALLOWED", async () => {
     const user = await User.create({
       name: "Trupti Mehta",
       email: "trupti@example.com",
@@ -591,8 +591,9 @@ describe("Geofence 70m Auto Check-Out & Break-Start Skip", () => {
       approvalStatus: "approved",
     });
 
-    const res = createMockRes();
-    const req = {
+    // 1. Attempt Break-out outside 70m (distance = 125m) -> REJECTED
+    const resOutside = createMockRes();
+    const reqOutside = {
       user: { _id: user._id },
       body: {
         userId: user._id.toString(),
@@ -600,17 +601,34 @@ describe("Geofence 70m Auto Check-Out & Break-Start Skip", () => {
       },
     };
 
-    await attendanceController.endBreak(req, res);
+    await attendanceController.endBreak(reqOutside, resOutside);
 
-    expect(res.statusCode).toBe(200);
-    expect(res.body.success).toBe(true);
-    expect(res.body.autoCheckedOut).toBe(true);
-    expect(res.body.isInside).toBe(false);
+    expect(resOutside.statusCode).toBe(400);
+    expect(resOutside.body.success).toBe(false);
+    expect(resOutside.body.isOnBreak).toBe(true);
 
-    const updatedAtt = await Attendance.findById(attendance._id);
-    expect(updatedAtt.breaks[0].endTime).not.toBeNull();
-    expect(updatedAtt.checkOutTime).not.toBeNull();
-    expect(updatedAtt.autoCheckedOut).toBe(true);
+    const attStillOnBreak = await Attendance.findById(attendance._id);
+    expect(attStillOnBreak.breaks[0].endTime).toBeNull();
+    expect(attStillOnBreak.checkOutTime).toBeFalsy();
+
+    // 2. Return inside 70m (distance = 45m) -> Break-out ALLOWED
+    const resInside = createMockRes();
+    const reqInside = {
+      user: { _id: user._id },
+      body: {
+        userId: user._id.toString(),
+        distance: 45, // Inside 70m
+      },
+    };
+
+    await attendanceController.endBreak(reqInside, resInside);
+
+    expect(resInside.statusCode).toBe(200);
+    expect(resInside.body.success).toBe(true);
+
+    const attResumed = await Attendance.findById(attendance._id);
+    expect(attResumed.breaks[0].endTime).not.toBeNull();
+    expect(attResumed.checkOutTime).toBeFalsy();
   });
 });
 
