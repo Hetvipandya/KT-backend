@@ -2361,20 +2361,8 @@ exports.endBreak =
         });
       }
 
-      // ======================================================
-      // GPS GEOFENCING VALIDATION
-      // ======================================================
+      // Evaluate location for break end
       const geofenceResult = validateAttendanceGeofence(req.body);
-      if (!geofenceResult.isInside && !req.body?.skipGeofence) {
-        return res.status(400).json({
-          success: false,
-          message:
-            geofenceResult.error ||
-            "You are outside the office location. Please reach the office to continue.",
-          distance: geofenceResult.distance,
-          allowedRadius: OFFICE_LOCATION.radiusMeters,
-        });
-      }
 
       const today = getToday();
       let attendance =
@@ -2505,6 +2493,33 @@ exports.endBreak =
           { $set: { status: "active", lastActiveTime: new Date() } }
         );
       } catch (_) {}
+
+      // If user performed Break Out while outside 70m office radius:
+      // Status becomes CHECKED_IN, and since distance > 70m, trigger AUTO CHECK OUT immediately!
+      if (!geofenceResult.isInside && geofenceResult.distance !== null && geofenceResult.distance > OFFICE_LOCATION.radiusMeters) {
+        const updatedAtt = await executeAutoCheckout({
+          attendanceId: attendance._id,
+          userId,
+          location: geofenceResult,
+          deviceType: req.body?.deviceType || "mobile",
+          reason: "OUTSIDE_GEOFENCE",
+        });
+
+        const timerState = calculateBreakTimerState(updatedAtt || attendance);
+        return res.status(200).json({
+          success: true,
+          message: `Break ended. Device is outside 70m office radius (${geofenceResult.distance}m away), so auto-checkout was performed.`,
+          breakDuration: activeBreak.duration,
+          totalBreakTime: attendance.totalBreakTime,
+          autoCheckedOut: true,
+          isInside: false,
+          distance: geofenceResult.distance,
+          allowedRadius: OFFICE_LOCATION.radiusMeters,
+          timerState,
+          breakTimer: timerState,
+          data: formatAttendanceDocument(updatedAtt || attendance),
+        });
+      }
 
       const timerState = calculateBreakTimerState(attendance);
       let message = "Break ended successfully";

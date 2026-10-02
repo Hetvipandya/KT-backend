@@ -566,4 +566,51 @@ describe("Geofence 70m Auto Check-Out & Break-Start Skip", () => {
     const unchangedSession = await Session.findById(session._id);
     expect(unchangedSession.status).toBe("break");
   });
+
+  test("10. BREAK_IN -> BREAK_OUT while outside 70m ends break and triggers auto-checkout", async () => {
+    const user = await User.create({
+      name: "Trupti Mehta",
+      email: "trupti@example.com",
+      password: "Password123",
+      role: "employee",
+    });
+
+    const today = getToday();
+    const attendance = await Attendance.create({
+      userId: user._id,
+      userType: "employee",
+      date: today,
+      checkInTime: new Date(Date.now() - 3 * 60 * 60 * 1000),
+      breaks: [
+        {
+          startTime: new Date(Date.now() - 30 * 60 * 1000),
+          endTime: null, // Active break currently running
+        },
+      ],
+      status: "present",
+      approvalStatus: "approved",
+    });
+
+    const res = createMockRes();
+    const req = {
+      user: { _id: user._id },
+      body: {
+        userId: user._id.toString(),
+        distance: 125, // Outside 70m
+      },
+    };
+
+    await attendanceController.endBreak(req, res);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.autoCheckedOut).toBe(true);
+    expect(res.body.isInside).toBe(false);
+
+    const updatedAtt = await Attendance.findById(attendance._id);
+    expect(updatedAtt.breaks[0].endTime).not.toBeNull();
+    expect(updatedAtt.checkOutTime).not.toBeNull();
+    expect(updatedAtt.autoCheckedOut).toBe(true);
+  });
 });
+
