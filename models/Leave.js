@@ -16,7 +16,7 @@ const leaveSchema = new mongoose.Schema(
 
     leaveType: {
       type: String,
-      enum: ["full_day", "half_day", "casual", "sick", "paid", "unpaid"],
+      enum: ["full_day", "half_day_1", "half_day_2", "sick", "paid", "unpaid"],
       required: true,
     },
 

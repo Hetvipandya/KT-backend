@@ -2,7 +2,7 @@ const Leave = require("../models/Leave");
 const LeaveBalance = require("../models/LeaveBalance");
 const Holiday = require("../models/Holiday");
 const User = require("../models/User");
-const { calculateWorkingLeaveDays } = require("../utils/leaveUtils");
+const { calculateWorkingLeaveDays, toDateString } = require("../utils/leaveUtils");
 
 // ================= APPLY LEAVE =================
 exports.applyLeave = async (req, res) => {
@@ -73,6 +73,16 @@ exports.applyLeave = async (req, res) => {
     const actualStartDate =
       startDate || req.body.startDate || req.body.leaveDate || req.body.date || req.body.fromDate;
     const actualEndDate = endDate || req.body.endDate || req.body.toDate || actualStartDate;
+
+    const todayStr = toDateString(new Date());
+    const startStr = toDateString(actualStartDate);
+
+    if (startStr && startStr < todayStr) {
+      return res.status(400).json({
+        success: false,
+        message: "Cannot apply for leave on past dates. Leave start date must be today or a future date.",
+      });
+    }
 
     const isHalfDayBool =
       isHalfDay === true ||
@@ -145,10 +155,12 @@ exports.applyLeave = async (req, res) => {
       });
     }
 
+    const applierRole = (req.user && req.user.role) ? req.user.role : user.role;
+
     const leaveStatus =
-      user.role === "team lead"
+      user.role === "team lead" || applierRole === "team lead"
         ? "pending_hr"
-        : user.role === "hr"
+        : user.role === "hr" || applierRole === "hr"
           ? "pending_admin"
           : "pending";
 
@@ -165,7 +177,7 @@ exports.applyLeave = async (req, res) => {
       // Team Lead leave goes directly to HR and HR leave goes directly to Admin
       status: leaveStatus,
       teamLeadStatus:
-        user.role === "team lead" || user.role === "hr" ? "skipped" : "pending",
+        user.role === "team lead" || applierRole === "team lead" || user.role === "hr" ? "skipped" : "pending",
       hrStatus: "pending",
     });
 

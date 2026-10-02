@@ -20,7 +20,7 @@ const {
   GEOFENCE_AUTO_CHECKOUT_DELAY_SECONDS,
   isBreakStartActive,
 } = require("../utils/geofence");
-const { calculateWorkingLeaveDays } = require("../utils/leaveUtils");
+const { calculateWorkingLeaveDays, toDateString } = require("../utils/leaveUtils");
 const { calculateBreakTimerState } = require("./attendanceController");
 
 // Helper for IST Today Date String (YYYY-MM-DD)
@@ -1323,6 +1323,16 @@ exports.applyEmployeeLeaveRequest = async (req, res) => {
     const actualStartDate =
       startDate || req.body.leaveDate || req.body.date || req.body.fromDate;
     const actualEndDate = endDate || req.body.toDate || actualStartDate;
+
+    const todayStr = toDateString(new Date());
+    const startStr = toDateString(actualStartDate);
+
+    if (startStr && startStr < todayStr) {
+      return res.status(400).json({
+        success: false,
+        message: "Cannot apply for leave on past dates. Leave start date must be today or a future date.",
+      });
+    }
 
     const isHalfDayBool =
       isHalfDay === true ||

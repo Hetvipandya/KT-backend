@@ -879,15 +879,17 @@ const registerUser = async (req, res) => {
       );
     }
 
-    registrationEmailTasks.push(
-      sendTemporaryPasswordEmail(
-        user.email,
-        generatedPassword,
-        "Kevalon Technology",
-      ).catch((emailError) => {
-        console.error("User password email error:", emailError.message);
-      }),
-    );
+    if (user.isApproved) {
+      registrationEmailTasks.push(
+        sendTemporaryPasswordEmail(
+          user.email,
+          generatedPassword,
+          "Kevalon Technology",
+        ).catch((emailError) => {
+          console.error("User password email error:", emailError.message);
+        }),
+      );
+    }
 
     void Promise.allSettled(registrationEmailTasks);
 
@@ -895,11 +897,14 @@ const registerUser = async (req, res) => {
     // RESPONSE
     // --------------------------------------------------------
 
+    const responseMessage = user.isApproved
+      ? "Registration successful. Login credentials have been sent to your email."
+      : "Registration successful. Waiting for admin approval. Credentials will be sent once approved.";
+
     return res.status(201).json({
       success: true,
 
-      message:
-        "Registration successful. Login credentials have been sent to your email.",
+      message: responseMessage,
 
       user: {
         _id: user._id,
@@ -1027,17 +1032,28 @@ const approveEmployee = async (req, res) => {
     }
 
     // --------------------------------------------------------
-    // APPROVE
+    // APPROVE & SEND CREDENTIALS
     // --------------------------------------------------------
 
     user.isApproved = true;
+
+    const pwdToSend = user.plainPassword || user.password;
+    if (pwdToSend && user.email) {
+      sendTemporaryPasswordEmail(
+        user.email,
+        pwdToSend,
+        "Kevalon Technology",
+      ).catch((emailError) => {
+        console.error("Approved user password email error:", emailError.message);
+      });
+    }
 
     await user.save();
 
     return res.status(200).json({
       success: true,
 
-      message: "Employee approved successfully.",
+      message: "Employee approved successfully and login credentials sent via email.",
 
       data: {
         userId: user._id,
