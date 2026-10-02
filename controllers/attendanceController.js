@@ -2372,20 +2372,8 @@ exports.endBreak =
         });
       }
 
-      // Enforce geofence: break-out is ONLY allowed inside 70m radius
+      // Validate location geofence for endBreak
       const geofenceResult = validateAttendanceGeofence(req.body);
-      if (!geofenceResult.isInside) {
-        return res.status(400).json({
-          success: false,
-          message:
-            geofenceResult.error ||
-            `You are outside the office location (${geofenceResult.distance}m away). Break-out is only allowed within ${OFFICE_LOCATION.radiusMeters} meters of the office. Please return inside the 70-meter radius to end your break.`,
-          distance: geofenceResult.distance,
-          allowedRadius: OFFICE_LOCATION.radiusMeters,
-          isOnBreak: true,
-          breakActive: true,
-        });
-      }
 
       const today = getToday();
       let attendance =
@@ -2516,8 +2504,33 @@ exports.endBreak =
           { $set: { status: "active", lastActiveTime: new Date() } }
         );
       } catch (_) {}
+      // Status becomes CHECKED_IN, and since distance > 70m, trigger AUTO CHECK OUT immediately!
+      if (!geofenceResult.isInside && geofenceResult.distance !== null && geofenceResult.distance > OFFICE_LOCATION.radiusMeters) {
+        console.log(
+          `[Geofence Debug] User ${userId} performed Break Out while outside 70m (${geofenceResult.distance}m). Triggering AUTO CHECKOUT.`
+        );
 
+        const updatedAtt = await executeAutoCheckout({
+          attendanceId: attendance._id,
+          userId,
+          location: geofenceResult,
+          deviceType: req.body?.deviceType || "mobile",
+          reason: "OUTSIDE_GEOFENCE",
+        });
 
+        const timerState = calculateBreakTimerState(updatedAtt || attendance);
+        return res.status(200).json({
+          success: true,
+          message: `Break ended. Device is outside 70m office radius (${geofenceResult.distance}m away), so auto-checkout was performed.`,
+          breakDuration: activeBreak.duration,
+          totalBreakTime: attendance.totalBreakTime,
+          autoCheckedOut: true,
+          isInside: false,
+          distance: geofenceResult.distance,
+          data: formatAttendanceDocument(updatedAtt || attendance),
+          timerState,
+        });
+      }
 
       const timerState = calculateBreakTimerState(attendance);
       let message = "Break ended successfully";

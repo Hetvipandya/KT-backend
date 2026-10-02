@@ -567,68 +567,81 @@ describe("Geofence 70m Auto Check-Out & Break-Start Skip", () => {
     expect(unchangedSession.status).toBe("break");
   });
 
-  test("10. BREAK_OUT while outside 70m is REJECTED and break remains ACTIVE; inside 70m ALLOWED", async () => {
-    const user = await User.create({
-      name: "Trupti Mehta",
-      email: "trupti@example.com",
+  test("10. BREAK_IN -> BREAK_OUT: outside 70m triggers auto checkout (Test 7); inside 70m remains CHECKED_IN (Test 8)", async () => {
+    const user1 = await User.create({
+      name: "Trupti Outside",
+      email: "trupti.outside@example.com",
+      phoneNumber: "9876543210",
       password: "Password123",
       role: "employee",
     });
 
     const today = getToday();
-    const attendance = await Attendance.create({
-      userId: user._id,
+    const attOutside = await Attendance.create({
+      userId: user1._id,
       userType: "employee",
       date: today,
       checkInTime: new Date(Date.now() - 3 * 60 * 60 * 1000),
-      breaks: [
-        {
-          startTime: new Date(Date.now() - 30 * 60 * 1000),
-          endTime: null, // Active break currently running
-        },
-      ],
+      breaks: [{ startTime: new Date(Date.now() - 30 * 60 * 1000), endTime: null }],
       status: "present",
       approvalStatus: "approved",
     });
 
-    // 1. Attempt Break-out outside 70m (distance = 125m) -> REJECTED
+    // Test 7: BREAK_OUT while outside 70m (100m away) -> ends break, status becomes CHECKED_IN, triggers AUTO CHECKOUT
     const resOutside = createMockRes();
     const reqOutside = {
-      user: { _id: user._id },
+      user: { _id: user1._id },
       body: {
-        userId: user._id.toString(),
-        distance: 125, // Outside 70m
+        userId: user1._id.toString(),
+        distance: 100, // Outside 70m
       },
     };
-
     await attendanceController.endBreak(reqOutside, resOutside);
 
-    expect(resOutside.statusCode).toBe(400);
-    expect(resOutside.body.success).toBe(false);
-    expect(resOutside.body.isOnBreak).toBe(true);
+    expect(resOutside.statusCode).toBe(200);
+    expect(resOutside.body.success).toBe(true);
+    expect(resOutside.body.autoCheckedOut).toBe(true);
 
-    const attStillOnBreak = await Attendance.findById(attendance._id);
-    expect(attStillOnBreak.breaks[0].endTime).toBeNull();
-    expect(attStillOnBreak.checkOutTime).toBeFalsy();
+    const attOutsideUpdated = await Attendance.findById(attOutside._id);
+    expect(attOutsideUpdated.breaks[0].endTime).not.toBeNull();
+    expect(attOutsideUpdated.checkOutTime).not.toBeNull();
+    expect(attOutsideUpdated.autoCheckedOut).toBe(true);
 
-    // 2. Return inside 70m (distance = 45m) -> Break-out ALLOWED
+    // Test 8: BREAK_OUT while inside 70m (50m away) -> ends break, remains CHECKED_IN
+    const user2 = await User.create({
+      name: "Trupti Inside",
+      email: "trupti.inside@example.com",
+      phoneNumber: "9876543211",
+      password: "Password123",
+      role: "employee",
+    });
+
+    const attInside = await Attendance.create({
+      userId: user2._id,
+      userType: "employee",
+      date: today,
+      checkInTime: new Date(Date.now() - 3 * 60 * 60 * 1000),
+      breaks: [{ startTime: new Date(Date.now() - 30 * 60 * 1000), endTime: null }],
+      status: "present",
+      approvalStatus: "approved",
+    });
+
     const resInside = createMockRes();
     const reqInside = {
-      user: { _id: user._id },
+      user: { _id: user2._id },
       body: {
-        userId: user._id.toString(),
-        distance: 45, // Inside 70m
+        userId: user2._id.toString(),
+        distance: 50, // Inside 70m
       },
     };
-
     await attendanceController.endBreak(reqInside, resInside);
 
     expect(resInside.statusCode).toBe(200);
     expect(resInside.body.success).toBe(true);
 
-    const attResumed = await Attendance.findById(attendance._id);
-    expect(attResumed.breaks[0].endTime).not.toBeNull();
-    expect(attResumed.checkOutTime).toBeFalsy();
+    const attInsideUpdated = await Attendance.findById(attInside._id);
+    expect(attInsideUpdated.breaks[0].endTime).not.toBeNull();
+    expect(attInsideUpdated.checkOutTime).toBeFalsy();
   });
 });
 
