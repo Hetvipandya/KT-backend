@@ -6,6 +6,7 @@ const User = require("../models/User");
 const {
   OFFICE_LOCATION,
   GEOFENCE_AUTO_CHECKOUT_DELAY_SECONDS,
+  LOCATION_FETCH_INTERVAL_SECONDS,
   validateAttendanceGeofence,
   isBreakStartActive,
 } = require("../utils/geofence");

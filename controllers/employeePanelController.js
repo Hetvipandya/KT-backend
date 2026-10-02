@@ -18,6 +18,7 @@ const {
   validateAttendanceGeofence,
   OFFICE_LOCATION,
   GEOFENCE_AUTO_CHECKOUT_DELAY_SECONDS,
+  LOCATION_FETCH_INTERVAL_SECONDS,
   isBreakStartActive,
 } = require("../utils/geofence");
 const { calculateWorkingLeaveDays, toDateString } = require("../utils/leaveUtils");
@@ -735,6 +736,8 @@ exports.sessionHeartbeat = async (req, res) => {
       success: true,
       message: "Heartbeat updated",
       lastActiveTime: session.lastActiveTime,
+      locationFetchIntervalSeconds: LOCATION_FETCH_INTERVAL_SECONDS,
+      locationFetchIntervalMs: LOCATION_FETCH_INTERVAL_SECONDS * 1000,
       breakTimer,
     });
   } catch (error) {

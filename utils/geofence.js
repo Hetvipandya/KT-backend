@@ -15,6 +15,8 @@ const OFFICE_LOCATION = {
 const GEOFENCE_AUTO_CHECKOUT_DELAY_SECONDS =
   parseInt(process.env.GEOFENCE_AUTO_CHECKOUT_DELAY_SECONDS, 10) || 10;
 
+const LOCATION_FETCH_INTERVAL_SECONDS = 20; // Automatically fetch GPS location every 20 seconds
+
 /**
  * Calculates real-world distance in meters between two points using the Haversine formula.
  * @param {number} lat1 
@@ -265,6 +267,7 @@ function isBreakStartActive(attendance, session = null, body = {}) {
 module.exports = {
   OFFICE_LOCATION,
   GEOFENCE_AUTO_CHECKOUT_DELAY_SECONDS,
+  LOCATION_FETCH_INTERVAL_SECONDS,
   calculateDistanceMeters,
   validateAttendanceGeofence,
   isBreakStartActive,
