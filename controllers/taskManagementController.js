@@ -1,5 +1,7 @@
-const TaskManagement =
-  require("../models/taskModel");
+const TaskManagement = require("../models/taskModel");
+const Employee = require("../models/Employee");
+const User = require("../models/User");
+const Project = require("../models/projectModel");
 
 const getBaseUrl = (req) => {
   if (process.env.BASE_URL) return process.env.BASE_URL.replace(/\/$/, "");
@@ -60,8 +62,219 @@ const sanitizeTaskWithAttachments = (taskDoc, req) => {
   return task;
 };
 
+const formatEmployeeData = (emp) => {
+  if (!emp) return null;
+  const raw = typeof emp.toObject === "function" ? emp.toObject() : { ...emp };
+  const firstName = raw.firstName || "";
+  const middleName = raw.middleName || "";
+  const lastName = raw.lastName || "";
+  const fullName = [firstName, middleName, lastName].filter(Boolean).join(" ").trim();
+  const simpleName = [firstName, lastName].filter(Boolean).join(" ").trim();
+  const name = (raw.name || fullName || simpleName || raw.fullName || "").trim();
+
+  return {
+    _id: raw._id,
+    name: name || "Unknown",
+    email: raw.email || "",
+    ...(firstName ? { firstName } : {}),
+    ...(lastName ? { lastName } : {}),
+    ...(raw.employeeID ? { employeeID: raw.employeeID } : {}),
+    ...(raw.employeeCode ? { employeeCode: raw.employeeCode } : {}),
+    ...(raw.userID ? { userID: raw.userID } : {}),
+    ...(raw.userId ? { userId: raw.userId } : {}),
+  };
+};
+
+const resolveTasksWithEmployees = async (tasks, req) => {
+  if (!tasks || !Array.isArray(tasks) || tasks.length === 0) {
+    return [];
+  }
+
+  const employeeIdsByTask = new Map();
+  const teamLeadEmployeeIdsByTask = new Map();
+  const teamLeadUserIdsByTask = new Map();
+
+  tasks.forEach((task) => {
+    const taskId = String(task._id);
+    employeeIdsByTask.set(
+      taskId,
+      task.assignedEmployee ? String(task.assignedEmployee._id || task.assignedEmployee) : null
+    );
+    teamLeadEmployeeIdsByTask.set(
+      taskId,
+      task.assignedTeamLeadEmployee ? String(task.assignedTeamLeadEmployee._id || task.assignedTeamLeadEmployee) : null
+    );
+    teamLeadUserIdsByTask.set(
+      taskId,
+      task.assignedTeamLeadUser ? String(task.assignedTeamLeadUser._id || task.assignedTeamLeadUser) : null
+    );
+  });
+
+  await TaskManagement.populate(tasks, [
+    {
+      path: "projectId",
+      select: "projectName clientName employees teamLeadUser teamLeadEmployee",
+      populate: [
+        { path: "teamLeadUser", select: "name email" },
+        { path: "teamLeadEmployee", select: "name firstName middleName lastName email employeeID employeeCode" },
+        { path: "employees", select: "name firstName middleName lastName email employeeID employeeCode" },
+      ],
+    },
+    { path: "milestoneId", select: "milestoneName title" },
+    { path: "assignedEmployee", select: "name firstName middleName lastName email employeeID employeeCode" },
+    { path: "assignedIntern", select: "name firstName middleName lastName email" },
+    { path: "assignedTeamLeadUser", select: "name email" },
+    { path: "assignedTeamLeadEmployee", select: "name firstName middleName lastName email employeeID employeeCode" },
+    { path: "assignedBy", select: "name email" },
+    { path: "comments.commentedBy", select: "name email" },
+  ]);
+
+  const unresolvedEmployeeIds = new Set();
+  tasks.forEach((task) => {
+    const taskId = String(task._id);
+    const empId = employeeIdsByTask.get(taskId);
+    if (empId && (!task.assignedEmployee || !task.assignedEmployee.name)) {
+      unresolvedEmployeeIds.add(empId);
+    }
+    const tlEmpId = teamLeadEmployeeIdsByTask.get(taskId);
+    if (tlEmpId && (!task.assignedTeamLeadEmployee || !task.assignedTeamLeadEmployee.name)) {
+      unresolvedEmployeeIds.add(tlEmpId);
+    }
+    const tlUserId = teamLeadUserIdsByTask.get(taskId);
+    if (tlUserId && (!task.assignedTeamLeadUser || !task.assignedTeamLeadUser.name)) {
+      unresolvedEmployeeIds.add(tlUserId);
+    }
+  });
+
+  const employeeCache = new Map();
+  if (unresolvedEmployeeIds.size > 0) {
+    const idList = Array.from(unresolvedEmployeeIds);
+    const [fallbackEmployees, fallbackUsers] = await Promise.all([
+      Employee.find({
+        $or: [
+          { _id: { $in: idList } },
+          { userID: { $in: idList } },
+          { userId: { $in: idList } },
+          { employeeID: { $in: idList } },
+        ],
+      }).select("name firstName middleName lastName email employeeID employeeCode userID userId"),
+      User.find({
+        _id: { $in: idList },
+      }).select("name email"),
+    ]);
+
+    fallbackEmployees.forEach((emp) => {
+      const formatted = formatEmployeeData(emp);
+      employeeCache.set(String(emp._id), formatted);
+      if (emp.userID) employeeCache.set(String(emp.userID), formatted);
+      if (emp.userId) employeeCache.set(String(emp.userId), formatted);
+      if (emp.employeeID) employeeCache.set(String(emp.employeeID), formatted);
+    });
+
+    fallbackUsers.forEach((usr) => {
+      const usrId = String(usr._id);
+      if (!employeeCache.has(usrId)) {
+        employeeCache.set(usrId, {
+          _id: usr._id,
+          name: usr.name || "",
+          email: usr.email || "",
+        });
+      }
+    });
+  }
+
+  return tasks.map((task) => {
+    const taskData = typeof task.toObject === "function" ? task.toObject() : { ...task };
+    const taskId = String(taskData._id);
+    const rawEmpId = employeeIdsByTask.get(taskId);
+    const rawTlEmpId = teamLeadEmployeeIdsByTask.get(taskId);
+    const rawTlUserId = teamLeadUserIdsByTask.get(taskId);
+
+    // Format or resolve assignedTeamLeadEmployee
+    if (!taskData.assignedTeamLeadEmployee && rawTlEmpId && employeeCache.has(rawTlEmpId)) {
+      taskData.assignedTeamLeadEmployee = employeeCache.get(rawTlEmpId);
+    } else if (taskData.assignedTeamLeadEmployee) {
+      taskData.assignedTeamLeadEmployee = formatEmployeeData(taskData.assignedTeamLeadEmployee);
+    }
+
+    // Format or resolve assignedTeamLeadUser
+    if (!taskData.assignedTeamLeadUser && rawTlUserId && employeeCache.has(rawTlUserId)) {
+      taskData.assignedTeamLeadUser = employeeCache.get(rawTlUserId);
+    } else if (taskData.assignedTeamLeadUser && typeof taskData.assignedTeamLeadUser === "object") {
+      taskData.assignedTeamLeadUser = {
+        _id: taskData.assignedTeamLeadUser._id,
+        name: taskData.assignedTeamLeadUser.name || "",
+        email: taskData.assignedTeamLeadUser.email || "",
+      };
+    }
+
+    // Format or resolve assignedEmployee
+    if (!taskData.assignedEmployee && rawEmpId && employeeCache.has(rawEmpId)) {
+      taskData.assignedEmployee = employeeCache.get(rawEmpId);
+    } else if (taskData.assignedEmployee) {
+      taskData.assignedEmployee = formatEmployeeData(taskData.assignedEmployee);
+    }
+
+    // Fallback 1: If assignedEmployee is still missing, fallback to assignedTeamLeadEmployee or assignedTeamLeadUser
+    if (!taskData.assignedEmployee) {
+      if (taskData.assignedTeamLeadEmployee) {
+        taskData.assignedEmployee = taskData.assignedTeamLeadEmployee;
+      } else if (taskData.assignedTeamLeadUser) {
+        taskData.assignedEmployee = taskData.assignedTeamLeadUser;
+      }
+    }
+
+    // Fallback 2: If assignedEmployee is still missing, fallback to project's employees or team lead
+    if (!taskData.assignedEmployee && taskData.projectId && typeof taskData.projectId === "object") {
+      const proj = taskData.projectId;
+      if (Array.isArray(proj.employees) && proj.employees.length > 0) {
+        taskData.assignedEmployee = formatEmployeeData(proj.employees[0]);
+      } else if (proj.teamLeadEmployee) {
+        taskData.assignedEmployee = formatEmployeeData(proj.teamLeadEmployee);
+      } else if (proj.teamLeadUser) {
+        taskData.assignedEmployee = formatEmployeeData(proj.teamLeadUser);
+      }
+    }
+
+    // Format assignedIntern
+    if (taskData.assignedIntern && typeof taskData.assignedIntern === "object") {
+      taskData.assignedIntern = {
+        _id: taskData.assignedIntern._id,
+        name: taskData.assignedIntern.name || "",
+        email: taskData.assignedIntern.email || "",
+      };
+    }
+
+    // Format projectId cleanly
+    if (taskData.projectId && typeof taskData.projectId === "object") {
+      const proj = taskData.projectId;
+      taskData.projectId = {
+        _id: proj._id,
+        projectName: proj.projectName || "",
+        ...(proj.clientName ? { clientName: proj.clientName } : {}),
+      };
+    }
+
+    // Compute employeeName
+    const resolvedEmployeeName =
+      taskData.assignedEmployee?.name ||
+      taskData.assignedTeamLeadEmployee?.name ||
+      taskData.assignedTeamLeadUser?.name ||
+      taskData.assignedIntern?.name ||
+      "";
+
+    if (resolvedEmployeeName) {
+      taskData.employeeName = resolvedEmployeeName;
+    }
+
+    return sanitizeTaskWithAttachments(taskData, req);
+  });
+};
+
 exports.formatFileUrl = formatFileUrl;
 exports.sanitizeTaskWithAttachments = sanitizeTaskWithAttachments;
+exports.formatEmployeeData = formatEmployeeData;
+exports.resolveTasksWithEmployees = resolveTasksWithEmployees;
 
 const normalizeTaskStatus = (status) => {
   if (!status || typeof status !== "string") return "pending";
@@ -188,8 +401,11 @@ exports.createTask = async (req, res) => {
       projectId,
       taskTitle,
       taskDescription,
-      assignedEmployee,
+      assignedEmployee: inputEmployee,
+      assignedTo,
       assignedIntern,
+      assignedTeamLeadUser,
+      assignedTeamLeadEmployee,
       assignedBy, 
       dueDate,
       estimatedHours,
@@ -197,6 +413,16 @@ exports.createTask = async (req, res) => {
       status,
       progress,
     } = req.body;
+
+    let assignedEmployee = inputEmployee || assignedTo || null;
+    if (assignedEmployee) {
+      try {
+        const emp = await Employee.findById(assignedEmployee).select("userID userId");
+        if (emp?.userID || emp?.userId) {
+          assignedEmployee = emp.userID || emp.userId;
+        }
+      } catch (e) {}
+    }
 
     // Required field validation
     if (!projectId) {
@@ -213,7 +439,7 @@ exports.createTask = async (req, res) => {
       });
     }
 
-    if (!assignedEmployee) {
+    if (!assignedEmployee && !assignedTeamLeadUser && !assignedTeamLeadEmployee) {
       return res.status(400).json({
         success: false,
         message: "Assigned Employee is required",
@@ -312,6 +538,8 @@ const taskPayload = applyDelayedStatus(
     taskDescription,
     assignedEmployee,
     assignedIntern: assignedIntern || null,
+    assignedTeamLeadUser: assignedTeamLeadUser || null,
+    assignedTeamLeadEmployee: assignedTeamLeadEmployee || null,
     assignedBy,
     dueDate,
     estimatedHours,
@@ -327,17 +555,12 @@ const taskPayload = applyDelayedStatus(
 );
 
 const createdTask = await TaskManagement.create(taskPayload);
-
-const task = await TaskManagement.findById(createdTask._id)
-  .populate("projectId", "projectName")
-  .populate("assignedEmployee", "name")
-  .populate("assignedIntern", "name")
-  .populate("assignedBy", "name");
+const [resolvedTask] = await resolveTasksWithEmployees([createdTask], req);
 
     return res.status(201).json({
       success: true,
       message: "Task created successfully",
-      data: sanitizeTaskWithAttachments(task, req),
+      data: resolvedTask,
     });
   } catch (error) {
     console.error("Create Task Error:", error);
@@ -366,40 +589,18 @@ exports.getAllTasks =
       await TaskManagement.updateMany(
         {
           dueDate: { $lt: new Date() },
-          status: { $nin: ["Completed", "Delayed"] },
+          status: { $nin: ["Completed", "Delayed", "completed", "delayed"] },
         },
         { status: "Delayed" }
       );
 
-      const tasks =
-        await TaskManagement
-          .find()
-          .populate(
-            "projectId",
-            "projectName"
-          )
-          .populate(
-            "assignedEmployee",
-            "name email"
-          )
-          .populate(
-            "assignedIntern",
-            "name email"
-          )
-          .populate(
-            "assignedBy",
-            "name email"
-          )
-          .populate(
-            "comments.commentedBy",
-            "name email"
-          );
+      const tasks = await TaskManagement.find();
+      const resolvedTasks = await resolveTasksWithEmployees(tasks, req);
 
       res.status(200).json({
         success: true,
-        count:
-          tasks.length,
-        data: tasks.map((t) => sanitizeTaskWithAttachments(t, req)),
+        count: resolvedTasks.length,
+        data: resolvedTasks,
       });
     } catch (error) {
       res.status(500).json({
@@ -419,15 +620,6 @@ exports.getTaskById =
         await TaskManagement
           .findById(
             req.params.id
-          )
-          .populate(
-            "projectId"
-          )
-          .populate(
-            "assignedEmployee"
-          )
-          .populate(
-            "assignedIntern"
           );
 
       if (!task) {
@@ -441,10 +633,11 @@ exports.getTaskById =
       }
 
       task = await ensureDelayedStatusForDocument(task);
+      const [resolvedTask] = await resolveTasksWithEmployees([task], req);
 
       res.status(200).json({
         success: true,
-        data: sanitizeTaskWithAttachments(task, req),
+        data: resolvedTask,
       });
     } catch (error) {
       res.status(500).json({
@@ -518,12 +711,13 @@ exports.updateTask =
       }
 
       const ensuredTask = await ensureDelayedStatusForDocument(task);
+      const [resolvedTask] = await resolveTasksWithEmployees([ensuredTask], req);
 
       res.status(200).json({
         success: true,
         message:
           "Task updated successfully",
-        data: sanitizeTaskWithAttachments(ensuredTask, req),
+        data: resolvedTask,
       });
     } catch (error) {
       res.status(500).json({
@@ -772,6 +966,8 @@ exports.getTasksByEmployeeId = async (req, res) => {
         { assignedEmployee: employeeId },
         { assignedEmployee: { $in: uniqueUserIds } },
         { assignedIntern: { $in: uniqueUserIds } },
+        { assignedTeamLeadEmployee: employeeId },
+        { assignedTeamLeadUser: { $in: uniqueUserIds } },
       ],
     };
 
@@ -779,18 +975,12 @@ exports.getTasksByEmployeeId = async (req, res) => {
       {
         ...taskQuery,
         dueDate: { $lt: new Date() },
-        status: { $nin: ["Completed", "Delayed"] },
+        status: { $nin: ["Completed", "Delayed", "completed", "delayed"] },
       },
       { status: "Delayed" }
     );
 
-    const tasks = await TaskManagement
-      .find(taskQuery)
-      .populate("projectId", "projectName")
-      .populate("assignedEmployee", "name email")
-      .populate("assignedIntern", "name email")
-      .populate("assignedBy", "name email")
-      .populate("comments.commentedBy", "name email");
+    const tasks = await TaskManagement.find(taskQuery);
 
     if (!tasks || tasks.length === 0) {
       return res.status(404).json({
@@ -799,10 +989,12 @@ exports.getTasksByEmployeeId = async (req, res) => {
       });
     }
 
+    const resolvedTasks = await resolveTasksWithEmployees(tasks, req);
+
     return res.status(200).json({
       success: true,
-      count: tasks.length,
-      data: tasks.map((t) => sanitizeTaskWithAttachments(t, req)),
+      count: resolvedTasks.length,
+      data: resolvedTasks,
     });
 
   } catch (error) {

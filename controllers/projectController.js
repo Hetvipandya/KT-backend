@@ -1066,19 +1066,22 @@ exports.createTask = async (req, res) => {
       const targetId = taskData.assignedTo;
       const emp = await Employee.findById(targetId);
       if (emp) {
-        taskData.assignedEmployee = emp._id;
+        taskData.assignedEmployee = emp.userID || emp.userId || emp._id;
       } else {
         const usr = await User.findById(targetId);
         if (usr) {
-          const linkedEmp = await Employee.findOne({ userID: usr._id });
-          if (linkedEmp) {
-            taskData.assignedEmployee = linkedEmp._id;
-          } else if (String(usr.role || "").toLowerCase().includes("intern")) {
+          if (String(usr.role || "").toLowerCase().includes("intern")) {
             taskData.assignedIntern = usr._id;
           } else {
             taskData.assignedEmployee = usr._id;
           }
         }
+      }
+    }
+    if (taskData.assignedEmployee) {
+      const employee = await Employee.findById(taskData.assignedEmployee).select("userID userId");
+      if (employee?.userID || employee?.userId) {
+        taskData.assignedEmployee = employee.userID || employee.userId;
       }
     }
     if (!taskData.assignedTeamLeadUser && (taskData.teamLeadUser || taskData.teamLeadUserId)) {
@@ -1244,7 +1247,7 @@ exports.createTask = async (req, res) => {
     
     // Populate task references and return
     const populatedTask = await Task.findById(task._id)
-      .populate("assignedEmployee", "firstName lastName email")
+      .populate("assignedEmployee", "name firstName lastName email")
       .populate("assignedIntern", "name email")
       .populate("assignedTeamLeadUser", "name email")
       .populate("assignedTeamLeadEmployee", "firstName lastName email")
@@ -1273,19 +1276,55 @@ exports.createTask = async (req, res) => {
 // Get All Tasks
 exports.getAllTasks = async (req, res) => {
   try {
-    const tasks = await Task.find()
-      .populate("projectId", "projectName clientName")
-      .populate("milestoneId", "milestoneName title")
-      .populate("assignedEmployee", "name firstName lastName email")
-      .populate("assignedIntern", "name email")
-      .populate("assignedTeamLeadUser", "name email")
-      .populate("assignedTeamLeadEmployee", "firstName lastName email")
-      .populate("assignedBy", "name email");
+    const tasks = await Task.find();
+    const employeeIdsByTask = new Map(
+      tasks.map((task) => [
+        String(task._id),
+        task.assignedEmployee ? String(task.assignedEmployee) : null,
+      ])
+    );
+
+    await Task.populate(tasks, [
+      { path: "projectId", select: "projectName clientName" },
+      { path: "milestoneId", select: "milestoneName title" },
+      { path: "assignedEmployee", select: "name firstName lastName email" },
+      { path: "assignedIntern", select: "name email" },
+      { path: "assignedTeamLeadUser", select: "name email" },
+      { path: "assignedTeamLeadEmployee", select: "name firstName lastName email employeeID" },
+      { path: "assignedBy", select: "name email" },
+    ]);
+
+    const unresolvedEmployeeIds = [...new Set(
+      tasks
+        .filter((task) => !task.assignedEmployee)
+        .map((task) => employeeIdsByTask.get(String(task._id)))
+        .filter(Boolean)
+    )];
+    const fallbackEmployees = unresolvedEmployeeIds.length
+      ? await Employee.find({ _id: { $in: unresolvedEmployeeIds } })
+          .select("name firstName middleName lastName email employeeID userID")
+      : [];
+    const employeesById = new Map(
+      fallbackEmployees.map((employee) => [
+        String(employee._id),
+        {
+          ...employee.toObject(),
+          name: employee.name || employee.fullName,
+        },
+      ])
+    );
 
     res.status(200).json({
       success: true,
       count: tasks.length,
-      data: tasks.map((t) => sanitizeTaskWithAttachments(t, req)),
+      data: tasks.map((task) => {
+        const taskData = task.toObject();
+        const employeeId = employeeIdsByTask.get(String(task._id));
+        if (!taskData.assignedEmployee && employeeId) {
+          taskData.assignedEmployee = employeesById.get(employeeId) || null;
+        }
+        return sanitizeTaskWithAttachments(taskData, req);
+      }),
     });
   } catch (error) {
     res.status(500).json({
