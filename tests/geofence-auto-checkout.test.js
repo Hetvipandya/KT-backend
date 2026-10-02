@@ -51,9 +51,14 @@ afterAll(async () => {
 });
 
 beforeEach(async () => {
+  attendanceController.clearAllGeofenceTimers?.();
   await Attendance.deleteMany({});
   await User.deleteMany({});
   await Session.deleteMany({});
+});
+
+afterEach(async () => {
+  attendanceController.clearAllGeofenceTimers?.();
 });
 
 describe("Geofence 70m Auto Check-Out & Break-Start Skip", () => {
@@ -159,7 +164,7 @@ describe("Geofence 70m Auto Check-Out & Break-Start Skip", () => {
     expect(updatedAtt.checkOutTime).toBeFalsy();
   });
 
-  test("5. Outside 70m: auto check-out TRIGGERS when user is checked in and NOT on break", async () => {
+  test("5. Outside 70m: initiates 10-second auto-checkout countdown when user is checked in and NOT on break", async () => {
     const user = await User.create({
       name: "Pooja Shah",
       email: "pooja@example.com",
@@ -198,6 +203,58 @@ describe("Geofence 70m Auto Check-Out & Break-Start Skip", () => {
     expect(res.body.success).toBe(true);
     expect(res.body.isInside).toBe(false);
     expect(res.body.distance).toBe(120);
+    expect(res.body.autoCheckoutPending).toBe(true);
+    expect(res.body.autoCheckoutDelaySeconds).toBe(10);
+    expect(res.body.remainingSeconds).toBe(10);
+    expect(res.body.autoCheckedOut).toBe(false);
+    expect(res.body.isOnBreak).toBe(false);
+
+    // Verify not checked out yet at 0 seconds
+    const unchangedAtt = await Attendance.findById(attendance._id);
+    expect(unchangedAtt.checkOutTime).toBeFalsy();
+    expect(unchangedAtt.outsideGeofenceAt).not.toBeNull();
+  });
+
+  test("5b. Outside 70m: auto check-out TRIGGERS after 10 seconds outside 70m radius", async () => {
+    const user = await User.create({
+      name: "Pooja Shah 2",
+      email: "pooja2@example.com",
+      password: "Password123",
+      role: "employee",
+    });
+
+    const today = getToday();
+    const attendance = await Attendance.create({
+      userId: user._id,
+      userType: "employee",
+      date: today,
+      checkInTime: new Date(Date.now() - 2 * 60 * 60 * 1000),
+      outsideGeofenceAt: new Date(Date.now() - 11 * 1000), // 11 seconds ago
+      status: "present",
+      approvalStatus: "approved",
+    });
+
+    const session = await Session.create({
+      userId: user._id,
+      status: "active",
+      startTime: new Date(),
+    });
+
+    const res = createMockRes();
+    const req = {
+      user: { _id: user._id },
+      body: {
+        userId: user._id.toString(),
+        distance: 120,
+      },
+    };
+
+    await attendanceController.checkLocationGeofence(req, res);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.isInside).toBe(false);
+    expect(res.body.distance).toBe(120);
     expect(res.body.autoCheckedOut).toBe(true);
     expect(res.body.isOnBreak).toBe(false);
 
@@ -205,9 +262,139 @@ describe("Geofence 70m Auto Check-Out & Break-Start Skip", () => {
     const updatedAtt = await Attendance.findById(attendance._id);
     expect(updatedAtt.checkOutTime).not.toBeNull();
     expect(updatedAtt.checkOutLocation.distanceFromOffice).toBe(120);
+    expect(updatedAtt.autoCheckedOut).toBe(true);
 
     const updatedSession = await Session.findById(session._id);
     expect(updatedSession.status).toBe("auto_checkout");
+  });
+
+  test("5c. Outside 70m: auto check-out CANCELS if user returns inside 70m within 10 seconds", async () => {
+    const user = await User.create({
+      name: "Pooja Return",
+      email: "pooja.return@example.com",
+      password: "Password123",
+      role: "employee",
+    });
+
+    const today = getToday();
+    const attendance = await Attendance.create({
+      userId: user._id,
+      userType: "employee",
+      date: today,
+      checkInTime: new Date(Date.now() - 2 * 60 * 60 * 1000),
+      status: "present",
+      approvalStatus: "approved",
+    });
+
+    // 1. Goes outside 70m -> starts 10-second timer
+    const res1 = createMockRes();
+    const req1 = {
+      user: { _id: user._id },
+      body: {
+        userId: user._id.toString(),
+        distance: 120, // > 70m
+      },
+    };
+    await attendanceController.checkLocationGeofence(req1, res1);
+    expect(res1.body.autoCheckoutPending).toBe(true);
+    expect(res1.body.autoCheckedOut).toBe(false);
+
+    // 2. Returns inside 70m within 10 seconds
+    const res2 = createMockRes();
+    const req2 = {
+      user: { _id: user._id },
+      body: {
+        userId: user._id.toString(),
+        distance: 35, // <= 70m (inside)
+      },
+    };
+    await attendanceController.checkLocationGeofence(req2, res2);
+    expect(res2.body.isInside).toBe(true);
+    expect(res2.body.timerCancelled).toBe(true);
+    expect(res2.body.autoCheckedOut).toBe(false);
+
+    // 3. Verify user remains checked-in in DB
+    const updatedAtt = await Attendance.findById(attendance._id);
+    expect(updatedAtt.checkOutTime).toBeFalsy();
+    expect(updatedAtt.autoCheckedOut).toBe(false);
+  });
+
+  test("5d. Outside 70m: background timer automatically checks out user in database after 10 seconds", async () => {
+    const user = await User.create({
+      name: "Pooja Timer",
+      email: "pooja.timer@example.com",
+      password: "Password123",
+      role: "employee",
+    });
+
+    const today = getToday();
+    const attendance = await Attendance.create({
+      userId: user._id,
+      userType: "employee",
+      date: today,
+      checkInTime: new Date(Date.now() - 2 * 60 * 60 * 1000),
+      status: "present",
+      approvalStatus: "approved",
+    });
+
+    const res = createMockRes();
+    const req = {
+      user: { _id: user._id },
+      body: {
+        userId: user._id.toString(),
+        distance: 120,
+        delaySeconds: 0.15, // 150ms for test
+      },
+    };
+
+    await attendanceController.checkLocationGeofence(req, res);
+    expect(res.body.autoCheckoutPending).toBe(true);
+    expect(res.body.autoCheckedOut).toBe(false);
+
+    // Wait for the background timer (250ms)
+    await new Promise((resolve) => setTimeout(resolve, 250));
+
+    const updatedAtt = await Attendance.findById(attendance._id);
+    expect(updatedAtt.checkOutTime).not.toBeNull();
+    expect(updatedAtt.autoCheckedOut).toBe(true);
+  });
+
+  test("5e. Outside 70m: auto check-out triggers immediately when immediate: true is provided", async () => {
+    const user = await User.create({
+      name: "Pooja Immediate",
+      email: "pooja.imm@example.com",
+      password: "Password123",
+      role: "employee",
+    });
+
+    const today = getToday();
+    const attendance = await Attendance.create({
+      userId: user._id,
+      userType: "employee",
+      date: today,
+      checkInTime: new Date(Date.now() - 2 * 60 * 60 * 1000),
+      status: "present",
+      approvalStatus: "approved",
+    });
+
+    const res = createMockRes();
+    const req = {
+      user: { _id: user._id },
+      body: {
+        userId: user._id.toString(),
+        distance: 120,
+        immediate: true,
+      },
+    };
+
+    await attendanceController.checkLocationGeofence(req, res);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.autoCheckedOut).toBe(true);
+    expect(res.body.isInside).toBe(false);
+
+    const updatedAtt = await Attendance.findById(attendance._id);
+    expect(updatedAtt.checkOutTime).not.toBeNull();
   });
 
   test("6. Outside 70m: auto check-out is SKIPPED when user status is break-start", async () => {

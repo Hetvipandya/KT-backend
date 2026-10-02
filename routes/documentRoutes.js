@@ -11,8 +11,8 @@ const {
 const upload = require("../middleware/uploadMiddleware");
 
 // Upload document
-router.post(
-  "/upload",
+router.post( 
+  "/upload", 
   upload.single("file"), 
   uploadDocument 
 );

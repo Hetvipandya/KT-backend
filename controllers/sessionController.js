@@ -5,6 +5,7 @@ const Attendance = require("../models/Attendance");
 const {
   validateAttendanceGeofence,
   OFFICE_LOCATION,
+  GEOFENCE_AUTO_CHECKOUT_DELAY_SECONDS,
   isBreakStartActive,
 } = require("../utils/geofence");
  
@@ -183,44 +184,88 @@ exports.updateSessionStatus = async (req, res) => {
           });
         }
 
-        // Active working session outside 70m -> auto checkout
+        // Active working session outside 70m -> auto checkout after 10s
         if (attendance && attendance.checkInTime && !attendance.checkOutTime) {
-          session.status = "auto_checkout";
-          session.endTime = new Date();
-          await session.save();
+          const delaySeconds =
+            req.body.delaySeconds !== undefined
+              ? Math.max(0, Number(req.body.delaySeconds))
+              : GEOFENCE_AUTO_CHECKOUT_DELAY_SECONDS; // 10 seconds
 
-          attendance.isActiveSession = false;
-          attendance.checkOutTime = new Date();
-          attendance.checkOutLocation = {
-            latitude: geofenceResult.latitude,
-            longitude: geofenceResult.longitude,
-            distanceFromOffice: geofenceResult.distance,
-          };
-          const checkIn = new Date(
-            attendance.approvedCheckInTime || attendance.checkInTime
-          );
-          const checkOut = new Date(attendance.checkOutTime);
-          let totalMin = (checkOut.getTime() - checkIn.getTime()) / (1000 * 60);
-          totalMin -= Math.min(attendance.totalBreakTime || 0, 60);
-          const hours = Math.max(0, totalMin / 60);
-          attendance.totalWorkTime = Number(hours.toFixed(2));
+          const isImmediate =
+            req.body.immediate === true ||
+            req.body.force === true ||
+            delaySeconds === 0;
 
-          if (attendance.totalWorkTime >= 8) attendance.status = "present";
-          else if (attendance.totalWorkTime >= 4) attendance.status = "half-day";
-          else attendance.status = "absent";
+          let breachTime = attendance.outsideGeofenceAt;
+          if (!breachTime) {
+            breachTime = new Date();
+            attendance.outsideGeofenceAt = breachTime;
+            attendance.outsideGeofenceCountdown = delaySeconds;
+            await attendance.save();
+          }
 
-          await attendance.save();
+          const elapsedSeconds =
+            req.body.outsideSeconds !== undefined
+              ? Number(req.body.outsideSeconds)
+              : Math.floor((Date.now() - new Date(breachTime).getTime()) / 1000);
 
-          return res.status(200).json({
-            success: true,
-            isInside: false,
-            autoCheckedOut: true,
-            distance: geofenceResult.distance,
-            allowedRadius: OFFICE_LOCATION.radiusMeters,
-            isOnBreak: false,
-            message: `Auto-checkout triggered: Device is outside 70m office radius (${geofenceResult.distance}m away).`,
-            session,
-          });
+          if (isImmediate || elapsedSeconds >= delaySeconds) {
+            session.status = "auto_checkout";
+            session.endTime = new Date();
+            await session.save();
+
+            attendance.isActiveSession = false;
+            attendance.autoCheckedOut = true;
+            attendance.checkOutTime = new Date();
+            attendance.checkOutLocation = {
+              latitude: geofenceResult.latitude,
+              longitude: geofenceResult.longitude,
+              distanceFromOffice: geofenceResult.distance,
+            };
+            const checkIn = new Date(
+              attendance.approvedCheckInTime || attendance.checkInTime
+            );
+            const checkOut = new Date(attendance.checkOutTime);
+            let totalMin = (checkOut.getTime() - checkIn.getTime()) / (1000 * 60);
+            totalMin -= Math.min(attendance.totalBreakTime || 0, 60);
+            const hours = Math.max(0, totalMin / 60);
+            attendance.totalWorkTime = Number(hours.toFixed(2));
+
+            if (attendance.totalWorkTime >= 8) attendance.status = "present";
+            else if (attendance.totalWorkTime >= 4) attendance.status = "half-day";
+            else attendance.status = "absent";
+
+            await attendance.save();
+
+            return res.status(200).json({
+              success: true,
+              isInside: false,
+              autoCheckedOut: true,
+              autoLogout: true,
+              shouldLogout: true,
+              distance: geofenceResult.distance,
+              allowedRadius: OFFICE_LOCATION.radiusMeters,
+              isOnBreak: false,
+              elapsedSeconds: Math.max(elapsedSeconds, delaySeconds),
+              message: `Auto-checkout triggered: Device is outside 70m office radius (${geofenceResult.distance}m away) for ${delaySeconds} seconds.`,
+              session,
+            });
+          } else {
+            const remainingSeconds = Math.max(1, Math.ceil(delaySeconds - elapsedSeconds));
+            return res.status(200).json({
+              success: true,
+              isInside: false,
+              autoCheckedOut: false,
+              autoCheckoutPending: true,
+              autoCheckoutDelaySeconds: delaySeconds,
+              remainingSeconds,
+              distance: geofenceResult.distance,
+              allowedRadius: OFFICE_LOCATION.radiusMeters,
+              isOnBreak: false,
+              message: `Device is outside 70m office radius (${geofenceResult.distance}m away). Automatic check-out will occur in ${remainingSeconds} second(s).`,
+              session,
+            });
+          }
         }
       }
     }

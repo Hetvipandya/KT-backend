@@ -5,6 +5,7 @@ const Attendance = require("../models/Attendance");
 const User = require("../models/User");
 const {
   OFFICE_LOCATION,
+  GEOFENCE_AUTO_CHECKOUT_DELAY_SECONDS,
   validateAttendanceGeofence,
   isBreakStartActive,
 } = require("../utils/geofence");
@@ -2016,6 +2017,8 @@ exports.checkOut = async (req, res) => {
       });
     }
 
+    clearPendingGeofenceTimer(userId);
+
     const today = getToday();
     let attendance = await Attendance.findOne({
       userId,
@@ -2199,6 +2202,8 @@ exports.startBreak =
             "userId is required",
         });
       }
+
+      clearPendingGeofenceTimer(userId);
 
       // ======================================================
       // GPS GEOFENCING VALIDATION
@@ -4171,13 +4176,165 @@ exports.recalculateAllAttendance = async (req, res) => {
 };
 
 // ============================================================
-// CHECK LOCATION GEOFENCE & AUTO CHECKOUT
+// PENDING GEOFENCE TIMERS & AUTO CHECKOUT HELPERS
+// ============================================================
+
+const pendingGeofenceCheckouts = new Map();
+
+const clearPendingGeofenceTimer = (userId) => {
+  if (!userId) return;
+  const key = userId.toString();
+  const existing = pendingGeofenceCheckouts.get(key);
+  if (existing?.timer) {
+    clearTimeout(existing.timer);
+  }
+  pendingGeofenceCheckouts.delete(key);
+};
+
+const clearAllGeofenceTimers = () => {
+  for (const [key, value] of pendingGeofenceCheckouts.entries()) {
+    if (value?.timer) {
+      clearTimeout(value.timer);
+    }
+  }
+  pendingGeofenceCheckouts.clear();
+};
+
+const executeAutoCheckout = async ({
+  attendanceId,
+  userId,
+  location,
+  deviceType = "device",
+  breachTime = new Date(),
+  reason = "geofence_exit",
+}) => {
+  try {
+    let attendance = null;
+    if (attendanceId) {
+      attendance = await Attendance.findById(attendanceId);
+    }
+    if (!attendance && userId) {
+      const today = getToday();
+      attendance = await Attendance.findOne({ userId, date: today });
+      if (!attendance) {
+        attendance = await Attendance.findOne({
+          userId,
+          checkInTime: { $ne: null },
+          checkOutTime: null,
+        }).sort({ createdAt: -1 });
+      }
+    }
+
+    if (!attendance || !attendance.checkInTime || attendance.checkOutTime) {
+      clearPendingGeofenceTimer(userId || attendance?.userId);
+      return attendance;
+    }
+
+    // Check if on break - if on break, cancel auto checkout
+    let currentSession = null;
+    try {
+      const Session = require("../models/Session");
+      currentSession = await Session.findOne({
+        userId: attendance.userId,
+        status: { $in: ["active", "break", "break-start", "break_start", "on_break"] },
+      }).sort({ createdAt: -1 });
+    } catch (_) {}
+
+    const activeBreak = Array.isArray(attendance.breaks)
+      ? attendance.breaks.find((b) => !b.endTime)
+      : null;
+    const isOnBreak =
+      !!activeBreak ||
+      attendance.isOnBreak === true ||
+      attendance.status === "break" ||
+      isBreakStartActive(attendance, currentSession);
+
+    if (isOnBreak) {
+      clearPendingGeofenceTimer(userId || attendance?.userId);
+      return attendance;
+    }
+
+    const checkoutTime = getISTNow();
+    attendance.checkOutTime = checkoutTime;
+    attendance.checkOutLocation = {
+      latitude: location?.latitude || null,
+      longitude: location?.longitude || null,
+      distanceFromOffice:
+        location?.distance !== undefined
+          ? location.distance
+          : (location?.distanceFromOffice || null),
+      device: deviceType,
+    };
+    attendance.isActiveSession = false;
+    attendance.autoCheckedOut = true;
+    attendance.autoCheckedOutBy = deviceType;
+    attendance.outsideGeofenceAt = breachTime || attendance.outsideGeofenceAt || new Date();
+    attendance.outsideGeofenceCountdown = 0;
+
+    const checkInTime = attendance.approvedCheckInTime || attendance.checkInTime;
+    const totalHours = getWorkingHours(
+      checkInTime,
+      checkoutTime,
+      attendance.totalBreakTime
+    );
+    attendance.totalWorkTime = Number(totalHours.toFixed(2));
+
+    const settings = getAttendanceSettings({
+      officeStartTime: attendance.officeStartTime,
+      lateCutoffTime: attendance.lateCutoffTime,
+      absentCutoffTime: attendance.absentCutoffTime,
+      officeEndTime: attendance.officeEndTime,
+      presentHours: attendance.presentHours,
+      halfDayHours: attendance.halfDayHours,
+      breakLimit: attendance.breakLimit,
+    });
+
+    const attendanceStatus = calculateAttendanceStatus(
+      checkInTime,
+      settings
+    );
+    attendance.isLate = attendanceStatus.isLate;
+
+    if (attendanceStatus.isAbsentDueToLate) {
+      attendance.status = "absent";
+    } else if (
+      attendanceStatus.status === "half-day" ||
+      attendance.totalWorkTime < (settings.presentHours || 8)
+    ) {
+      attendance.status = "half-day";
+    } else {
+      attendance.status = "present";
+    }
+
+    await attendance.save();
+
+    // Close session for web/laptop
+    try {
+      const Session = require("../models/Session");
+      await Session.updateMany(
+        { userId: attendance.userId, status: { $in: ["active", "break", "break-start", "break_start", "on_break"] } },
+        { $set: { status: "auto_checkout", endTime: new Date() } }
+      );
+    } catch (_) {}
+
+    clearPendingGeofenceTimer(userId || attendance?.userId);
+    return attendance;
+  } catch (error) {
+    console.error("Execute Auto-Checkout Error:", error);
+    throw error;
+  }
+};
+
+// ============================================================
+// CHECK LOCATION GEOFENCE & 10-SECOND AUTO CHECKOUT
 //
 // Rules:
-// 1. Auto checkout when device location is outside office radius.
-// 2. If active break is running (break start = true), skip auto checkout.
-// 3. If working time is active (checked in, not checked out, NOT on break), execute auto checkout.
-// 4. Works for both Laptop & Phone - whichever device triggers first outside radius.
+// 1. Device within 70m office radius -> checked-in safe, cancels any pending timer.
+// 2. Active break (break-start) -> skip auto-checkout even if > 70m outside.
+// 3. Status is checked-in & device goes outside 70m:
+//    - Initiates a 10-second timer countdown.
+//    - If device returns inside 70m within 10 seconds -> auto-checkout cancelled.
+//    - If device remains outside 70m for 10 seconds -> automatic check-out executes!
 // ============================================================
 
 exports.checkLocationGeofence = async (req, res) => {
@@ -4230,6 +4387,7 @@ exports.checkLocationGeofence = async (req, res) => {
 
     // Check if not checked in or already checked out
     if (!attendance || !attendance.checkInTime) {
+      clearPendingGeofenceTimer(userId);
       return res.status(200).json({
         success: true,
         isInside: geofenceResult.isInside,
@@ -4248,6 +4406,7 @@ exports.checkLocationGeofence = async (req, res) => {
     }
 
     if (attendance.checkOutTime) {
+      clearPendingGeofenceTimer(userId);
       return res.status(200).json({
         success: true,
         isInside: geofenceResult.isInside,
@@ -4278,10 +4437,30 @@ exports.checkLocationGeofence = async (req, res) => {
     const activeBreak = Array.isArray(attendance.breaks)
       ? attendance.breaks.find((b) => !b.endTime)
       : null;
-    const isOnBreak = !!activeBreak || attendance.isOnBreak === true || attendance.status === "break" || isBreakStartActive(attendance, currentSession, payload);
+    const isOnBreak =
+      !!activeBreak ||
+      attendance.isOnBreak === true ||
+      attendance.status === "break" ||
+      isBreakStartActive(attendance, currentSession, payload);
 
+    // ========================================================
     // IF INSIDE GEOFENCE (<= 70 meters):
+    // ========================================================
     if (geofenceResult.isInside) {
+      let wasPendingCancelled = false;
+      const existing = pendingGeofenceCheckouts.get(userId.toString());
+      if (existing?.timer) {
+        clearTimeout(existing.timer);
+        pendingGeofenceCheckouts.delete(userId.toString());
+        wasPendingCancelled = true;
+      }
+      if (attendance.outsideGeofenceAt) {
+        attendance.outsideGeofenceAt = null;
+        attendance.outsideGeofenceCountdown = 0;
+        await attendance.save();
+        wasPendingCancelled = true;
+      }
+
       return res.status(200).json({
         success: true,
         isInside: true,
@@ -4292,17 +4471,29 @@ exports.checkLocationGeofence = async (req, res) => {
         isOnBreak,
         status: isOnBreak ? "break-start" : "checked-in",
         autoCheckedOut: false,
+        autoCheckoutPending: false,
+        timerCancelled: wasPendingCancelled,
         autoLogout: false,
         shouldLogout: false,
         deviceType,
-        message: "Device is inside office radius (within 70m).",
+        message: wasPendingCancelled
+          ? "Device returned inside office radius (within 70m). Pending auto-checkout cancelled."
+          : "Device is inside office radius (within 70m).",
         data: formatAttendanceDocument(attendance),
       });
     }
 
-    // IF OUTSIDE GEOFENCE (> 70 meters):
-    // RULE: If status is break-start (active break running), DO NOT auto checkout!
+    // ========================================================
+    // IF OUTSIDE GEOFENCE (> 70 meters) & ON BREAK:
+    // ========================================================
     if (isOnBreak) {
+      clearPendingGeofenceTimer(userId);
+      if (attendance.outsideGeofenceAt) {
+        attendance.outsideGeofenceAt = null;
+        attendance.outsideGeofenceCountdown = 0;
+        await attendance.save();
+      }
+
       return res.status(200).json({
         success: true,
         isInside: false,
@@ -4321,65 +4512,106 @@ exports.checkLocationGeofence = async (req, res) => {
       });
     }
 
-    // Working time is active (checked in, not on break, not checked out) AND outside 70m radius
-    // -> EXECUTE AUTO CHECKOUT!
-    const checkoutTime = getISTNow();
-    attendance.checkOutTime = checkoutTime;
-    attendance.checkOutLocation = {
-      latitude: geofenceResult.latitude,
-      longitude: geofenceResult.longitude,
-      distanceFromOffice: geofenceResult.distance,
-      device: deviceType,
-    };
-    attendance.isActiveSession = false;
-    attendance.autoCheckedOut = true;
-    attendance.autoCheckedOutBy = deviceType;
+    // ========================================================
+    // IF OUTSIDE GEOFENCE (> 70 meters) & NOT ON BREAK & CHECKED IN:
+    // Apply 10-Second Auto-Checkout Timer Rule
+    // ========================================================
+    const delaySeconds =
+      payload.delaySeconds !== undefined
+        ? Math.max(0, Number(payload.delaySeconds))
+        : GEOFENCE_AUTO_CHECKOUT_DELAY_SECONDS; // 10 seconds
 
-    const checkInTime = attendance.approvedCheckInTime || attendance.checkInTime;
-    const totalHours = getWorkingHours(
-      checkInTime,
-      checkoutTime,
-      attendance.totalBreakTime
-    );
-    attendance.totalWorkTime = Number(totalHours.toFixed(2));
+    const isImmediate =
+      payload.immediate === true ||
+      payload.force === true ||
+      payload.immediateCheckout === true ||
+      delaySeconds === 0;
 
-    const settings = getAttendanceSettings({
-      officeStartTime: attendance.officeStartTime,
-      lateCutoffTime: attendance.lateCutoffTime,
-      absentCutoffTime: attendance.absentCutoffTime,
-      officeEndTime: attendance.officeEndTime,
-      presentHours: attendance.presentHours,
-      halfDayHours: attendance.halfDayHours,
-      breakLimit: attendance.breakLimit,
-    });
+    const existingPending = pendingGeofenceCheckouts.get(userId.toString());
+    const now = Date.now();
 
-    const attendanceStatus = calculateAttendanceStatus(
-      checkInTime,
-      settings
-    );
-    attendance.isLate = attendanceStatus.isLate;
-
-    if (attendanceStatus.isAbsentDueToLate) {
-      attendance.status = "absent";
-    } else if (
-      attendanceStatus.status === "half-day" ||
-      attendance.totalWorkTime < (settings.presentHours || 8)
-    ) {
-      attendance.status = "half-day";
-    } else {
-      attendance.status = "present";
+    let breachTime = existingPending?.breachTime || attendance.outsideGeofenceAt;
+    if (!breachTime) {
+      breachTime = new Date();
+      attendance.outsideGeofenceAt = breachTime;
+      attendance.outsideGeofenceCountdown = delaySeconds;
+      await attendance.save();
     }
 
-    await attendance.save();
+    const elapsedSeconds =
+      payload.outsideSeconds !== undefined
+        ? Number(payload.outsideSeconds)
+        : Math.floor((now - new Date(breachTime).getTime()) / 1000);
 
-    // Close session for web/laptop
-    try {
-      const Session = require("../models/Session");
-      await Session.updateMany(
-        { userId, status: { $in: ["active", "break", "break-start", "break_start", "on_break"] } },
-        { $set: { status: "auto_checkout", endTime: new Date() } }
-      );
-    } catch (_) {}
+    // If 10 seconds have elapsed OR immediate checkout requested:
+    if (isImmediate || elapsedSeconds >= delaySeconds) {
+      clearPendingGeofenceTimer(userId);
+
+      const updatedAtt = await executeAutoCheckout({
+        attendanceId: attendance._id,
+        userId,
+        location: geofenceResult,
+        deviceType,
+        breachTime,
+        reason: isImmediate ? "immediate_outside_geofence" : "10_second_geofence_breach",
+      });
+
+      return res.status(200).json({
+        success: true,
+        isInside: false,
+        distance: geofenceResult.distance,
+        allowedRadius: OFFICE_LOCATION.radiusMeters,
+        isCheckedIn: true,
+        isCheckedOut: true,
+        isOnBreak: false,
+        autoCheckedOut: true,
+        autoLogout: true,
+        shouldLogout: true,
+        elapsedSeconds: Math.max(elapsedSeconds, delaySeconds),
+        triggeredByDevice: deviceType,
+        message: `Auto-checkout triggered: Device is outside 70m office radius (${geofenceResult.distance}m away) for ${delaySeconds} seconds while checked-in and not on break.`,
+        data: formatAttendanceDocument(updatedAtt || attendance),
+      });
+    }
+
+    // Otherwise, 10 seconds haven't elapsed yet (< 10 seconds)
+    const remainingMs = Math.max(10, Math.round((delaySeconds - elapsedSeconds) * 1000));
+    const remainingSeconds = Math.max(1, Math.ceil(remainingMs / 1000));
+
+    // Start background timer if not already running
+    if (!existingPending) {
+      const timer = setTimeout(async () => {
+        try {
+          await executeAutoCheckout({
+            attendanceId: attendance._id,
+            userId,
+            location: {
+              latitude: geofenceResult.latitude,
+              longitude: geofenceResult.longitude,
+              distanceFromOffice: geofenceResult.distance,
+            },
+            deviceType,
+            breachTime,
+            reason: "10_second_geofence_timeout",
+          });
+        } catch (timerErr) {
+          console.error("10s Auto-checkout background execution error:", timerErr);
+        }
+      }, remainingMs);
+
+      if (typeof timer.unref === "function") {
+        timer.unref();
+      }
+
+      pendingGeofenceCheckouts.set(userId.toString(), {
+        timer,
+        breachTime,
+        attendanceId: attendance._id,
+        userId,
+        deviceType,
+        location: geofenceResult,
+      });
+    }
 
     return res.status(200).json({
       success: true,
@@ -4387,13 +4619,16 @@ exports.checkLocationGeofence = async (req, res) => {
       distance: geofenceResult.distance,
       allowedRadius: OFFICE_LOCATION.radiusMeters,
       isCheckedIn: true,
-      isCheckedOut: true,
+      isCheckedOut: false,
       isOnBreak: false,
-      autoCheckedOut: true,
-      autoLogout: true,
-      shouldLogout: true,
+      autoCheckedOut: false,
+      autoCheckoutPending: true,
+      autoCheckoutDelaySeconds: delaySeconds,
+      elapsedSeconds,
+      remainingSeconds,
+      outsideGeofenceAt: breachTime,
       triggeredByDevice: deviceType,
-      message: `Auto-checkout triggered: Device is outside 70m office radius (${geofenceResult.distance}m away) while checked-in and not on break.`,
+      message: `Device is outside 70m office radius (${geofenceResult.distance}m away). Automatic check-out will occur in ${remainingSeconds} second(s) if device does not return inside 70m radius.`,
       data: formatAttendanceDocument(attendance),
     });
   } catch (err) {
@@ -4405,4 +4640,9 @@ exports.checkLocationGeofence = async (req, res) => {
   }
 };
 
+exports.executeAutoCheckout = executeAutoCheckout;
+exports.clearPendingGeofenceTimer = clearPendingGeofenceTimer;
+exports.clearAllGeofenceTimers = clearAllGeofenceTimers;
+exports.pendingGeofenceCheckouts = pendingGeofenceCheckouts;
 exports.isBreakStartActive = isBreakStartActive;
+

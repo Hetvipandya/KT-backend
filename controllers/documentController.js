@@ -3,7 +3,7 @@ const Document = require("../models/Document");
 // Upload Document
 exports.uploadDocument = async (req, res) => {
   try {
-    const {
+    const { 
       title,
       description,
       documentType,
