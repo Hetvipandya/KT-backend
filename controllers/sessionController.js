@@ -94,8 +94,8 @@ exports.getSession = async (req, res) => {
       success: true,
       active: false,
       autoCheckedOut: isAutoCheckedOut,
-      autoLogout: isAutoCheckedOut || lastSession?.status === "terminated",
-      shouldLogout: true,
+      autoLogout: false,
+      shouldLogout: lastSession?.status === "terminated",
       session: lastSession || {
         deviceId: user?.deviceId || null,
         lastLogin: user?.lastLogin || null,
@@ -216,6 +216,7 @@ exports.updateSessionStatus = async (req, res) => {
 
             attendance.isActiveSession = false;
             attendance.autoCheckedOut = true;
+            attendance.autoCheckedOutBy = "AUTO_GEOFENCE_CHECKOUT";
             attendance.checkOutTime = new Date();
             attendance.checkOutLocation = {
               latitude: geofenceResult.latitude,
@@ -241,8 +242,8 @@ exports.updateSessionStatus = async (req, res) => {
               success: true,
               isInside: false,
               autoCheckedOut: true,
-              autoLogout: true,
-              shouldLogout: true,
+              autoLogout: false,
+              shouldLogout: false,
               distance: geofenceResult.distance,
               allowedRadius: OFFICE_LOCATION.radiusMeters,
               isOnBreak: false,

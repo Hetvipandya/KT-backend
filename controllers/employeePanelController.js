@@ -257,8 +257,8 @@ exports.getEmployeeDashboard = async (req, res) => {
           expectedCheckOutTime,
           actionsAvailable,
           autoCheckedOut: !!attendance?.autoCheckedOut,
-          autoLogout: !!(attendance?.checkOutTime || attendanceStatus === "checked_out"),
-          shouldLogout: !!(attendance?.checkOutTime || attendanceStatus === "checked_out"),
+          autoLogout: false,
+          shouldLogout: false,
           sessionId: currentSession?.sessionId || attendance?.sessionId || null,
           breakTimer,
         },
@@ -656,7 +656,7 @@ exports.sessionHeartbeat = async (req, res) => {
             const checkoutTime = new Date();
             attendance.isActiveSession = false;
             attendance.autoCheckedOut = true;
-            attendance.autoCheckedOutBy = deviceType || "laptop";
+            attendance.autoCheckedOutBy = "AUTO_GEOFENCE_CHECKOUT";
             attendance.checkOutTime = checkoutTime;
             attendance.checkOutLocation = {
               latitude: geofenceResult.latitude,
@@ -691,8 +691,8 @@ exports.sessionHeartbeat = async (req, res) => {
               success: true,
               isInside: false,
               autoCheckedOut: true,
-              autoLogout: true,
-              shouldLogout: true,
+              autoLogout: false,
+              shouldLogout: false,
               isOnBreak: false,
               elapsedSeconds: Math.max(elapsedSeconds, delaySeconds),
               distance: geofenceResult.distance,

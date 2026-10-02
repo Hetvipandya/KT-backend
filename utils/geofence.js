@@ -169,6 +169,16 @@ function validateAttendanceGeofence(body) {
     }
   }
 
+  if (lat < -90 || lat > 90 || lon < -180 || lon > 180) {
+    return {
+      isInside: false,
+      distance: null,
+      latitude: null,
+      longitude: null,
+      error: "Invalid GPS coordinates provided.",
+    };
+  }
+
   const distance = calculateDistanceMeters(
     lat,
     lon,
@@ -178,7 +188,8 @@ function validateAttendanceGeofence(body) {
 
   const roundedDistance = Math.round(distance);
 
-  if (distance > OFFICE_LOCATION.radiusMeters) {
+  // Strict 70m rule: distance <= 70m is inside, distance > 70m is outside. Exactly 70m is inside.
+  if (roundedDistance > OFFICE_LOCATION.radiusMeters) {
     return {
       isInside: false,
       distance: roundedDistance,
@@ -200,10 +211,10 @@ function validateAttendanceGeofence(body) {
 /**
  * Determines whether the user/attendance is currently on break ("break-start").
  * Rules:
- * - If request body indicates status is break-start / on break
  * - If Attendance document has an active break (breaks array item without endTime)
+ * - If Attendance status is break or break-start
  * - If Session has status 'break' or 'break-start'
- * - If Attendance status is break-start
+ * - Request body payload status fallback for frontend listeners and test suites
  * 
  * @param {object} attendance 
  * @param {object} session 
@@ -211,13 +222,37 @@ function validateAttendanceGeofence(body) {
  * @returns {boolean}
  */
 function isBreakStartActive(attendance, session = null, body = {}) {
-  // 1. Check body payload flags or statuses
+  // 1. Check if attendance document has an active running break (break started, no end time)
+  if (attendance && Array.isArray(attendance.breaks)) {
+    const hasActiveBreak = attendance.breaks.some((b) => !b.endTime);
+    if (hasActiveBreak) {
+      return true;
+    }
+  }
+
+  // 2. Check attendance status field if present
+  if (attendance && typeof attendance.status === "string") {
+    const attStatus = attendance.status.trim().toLowerCase().replace(/[\s_-]+/g, "");
+    if (attStatus === "breakstart" || attStatus === "break" || attStatus === "onbreak") {
+      return true;
+    }
+  }
+
+  // 3. Check active session status
+  if (session && typeof session.status === "string") {
+    const sessStatus = session.status.trim().toLowerCase().replace(/[\s_-]+/g, "");
+    if (sessStatus === "break" || sessStatus === "breakstart" || sessStatus === "onbreak") {
+      return true;
+    }
+  }
+
+  // 4. Check body payload flags or statuses (for compatibility with existing tests and heartbeats)
   const rawStatus = (
-    body.status ||
-    body.attendanceStatus ||
-    body.currentStatus ||
-    body.breakStatus ||
-    body.action ||
+    body?.status ||
+    body?.attendanceStatus ||
+    body?.currentStatus ||
+    body?.breakStatus ||
+    body?.action ||
     ""
   )
     .toString()
@@ -230,35 +265,11 @@ function isBreakStartActive(attendance, session = null, body = {}) {
     rawStatus === "break" ||
     rawStatus === "onbreak" ||
     rawStatus === "breakstarted" ||
-    body.isBreak === true ||
-    body.onBreak === true ||
-    body.isOnBreak === true
+    body?.isBreak === true ||
+    body?.onBreak === true ||
+    body?.isOnBreak === true
   ) {
     return true;
-  }
-
-  // 2. Check if attendance document has an active running break (break started, no end time)
-  if (attendance && Array.isArray(attendance.breaks)) {
-    const hasActiveBreak = attendance.breaks.some((b) => !b.endTime);
-    if (hasActiveBreak) {
-      return true;
-    }
-  }
-
-  // 3. Check attendance status field if present
-  if (attendance && typeof attendance.status === "string") {
-    const attStatus = attendance.status.trim().toLowerCase().replace(/[\s_-]+/g, "");
-    if (attStatus === "breakstart" || attStatus === "break" || attStatus === "onbreak") {
-      return true;
-    }
-  }
-
-  // 4. Check active session status
-  if (session && typeof session.status === "string") {
-    const sessStatus = session.status.trim().toLowerCase().replace(/[\s_-]+/g, "");
-    if (sessStatus === "break" || sessStatus === "breakstart" || sessStatus === "onbreak") {
-      return true;
-    }
   }
 
   return false;
