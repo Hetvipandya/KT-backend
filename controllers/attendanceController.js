@@ -4348,12 +4348,12 @@ const executeAutoCheckout = async ({
 // CHECK LOCATION GEOFENCE & 10-SECOND AUTO CHECKOUT
 //
 // Rules:
-// 1. Device within 75m office radius -> checked-in safe, cancels any pending timer.
-// 2. Active break (break-start / BREAK_IN) -> skip auto-checkout even if > 75m outside.
-// 3. Status is checked-in & device goes outside 75m:
+// 1. Device within 70m office radius -> checked-in safe, cancels any pending timer.
+// 2. Active break (break-start / BREAK_IN) -> skip auto-checkout even if > 70m outside.
+// 3. Status is checked-in & device goes outside 70m:
 //    - Initiates a 10-second timer countdown.
-//    - If device returns inside 75m within 10 seconds -> auto-checkout cancelled.
-//    - If device remains outside 75m for 10 seconds -> automatic check-out executes!
+//    - If device returns inside 70m within 10 seconds -> auto-checkout cancelled.
+//    - If device remains outside 70m for 10 seconds -> automatic check-out executes!
 // ============================================================
 
 exports.checkLocationGeofence = async (req, res) => {
