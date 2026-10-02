@@ -1,7 +1,7 @@
 const gstService = require('../services/gst.service');
 const { validateGstinSchema } = require('../validators/gst.validators');
 
-/**
+/** 
  * POST /api/gst/validate-gstin
  * Stateless utility to validate format and checksum of an Indian GSTIN
  */
@@ -10,7 +10,7 @@ const validateGstin = async (req, res, next) => {
     const parsed = validateGstinSchema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({
-        success: false,
+        success: false, 
         message: 'Validation failed',
         details: parsed.error.errors
       });

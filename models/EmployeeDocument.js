@@ -10,7 +10,7 @@ const employeeDocumentSchema =
         ref: "Employee",
         required: true,
       },
-
+ 
       aadharCard: {
         type: String,
         default: "", 

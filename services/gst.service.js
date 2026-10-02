@@ -1,7 +1,7 @@
 const Tax = require('../models/Tax');
 const Invoice = require('../models/Invoice');
 const Purchase = require('../models/Purchase');
-
+  
 const DEFAULT_TAX_TEMPLATES = [
   { name: 'GST 0%', ratePercent: 0, taxCategory: 'Taxable' },
   { name: 'GST 0.25%', ratePercent: 0.25, taxCategory: 'Taxable' },

@@ -12,6 +12,9 @@ const OFFICE_LOCATION = {
   radiusMeters: parseFloat(process.env.OFFICE_RADIUS_METERS) || 70,
 };
 
+const GEOFENCE_AUTO_CHECKOUT_DELAY_SECONDS =
+  parseInt(process.env.GEOFENCE_AUTO_CHECKOUT_DELAY_SECONDS, 10) || 10;
+
 /**
  * Calculates real-world distance in meters between two points using the Haversine formula.
  * @param {number} lat1 
@@ -261,6 +264,7 @@ function isBreakStartActive(attendance, session = null, body = {}) {
 
 module.exports = {
   OFFICE_LOCATION,
+  GEOFENCE_AUTO_CHECKOUT_DELAY_SECONDS,
   calculateDistanceMeters,
   validateAttendanceGeofence,
   isBreakStartActive,

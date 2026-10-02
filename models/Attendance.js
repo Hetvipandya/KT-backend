@@ -173,6 +173,26 @@ const attendanceSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+
+    autoCheckedOut: {
+      type: Boolean,
+      default: false,
+    },
+
+    autoCheckedOutBy: {
+      type: String,
+      default: null,
+    },
+
+    outsideGeofenceAt: {
+      type: Date,
+      default: null,
+    },
+
+    outsideGeofenceCountdown: {
+      type: Number,
+      default: 0,
+    },
   },
   {
     timestamps: true,
