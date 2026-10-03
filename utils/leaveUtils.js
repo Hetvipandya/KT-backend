@@ -110,6 +110,7 @@ const calculateWorkingLeaveDays = async (startDate, endDate, isHalfDay = false) 
   const workingDates = [];
   const excludedDates = [];
   let excludedSundays = 0;
+  let excludedSaturdays = 0;
   let excludedHolidays = 0;
   let totalCalendarDays = 0;
   const holidayDetails = [];
@@ -119,6 +120,11 @@ const calculateWorkingLeaveDays = async (startDate, endDate, isHalfDay = false) 
     totalCalendarDays++;
     const currentStr = toDateString(current);
     const dayOfWeek = current.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+    const dayOfMonth = current.getDate();
+
+    const isSecondOrFourthSaturday =
+      dayOfWeek === 6 &&
+      ((dayOfMonth >= 8 && dayOfMonth <= 14) || (dayOfMonth >= 22 && dayOfMonth <= 28));
 
     if (dayOfWeek === 0) {
       // 1. Sunday Exclusion
@@ -127,8 +133,16 @@ const calculateWorkingLeaveDays = async (startDate, endDate, isHalfDay = false) 
         date: currentStr,
         reason: "Sunday",
       });
+    } else if (isSecondOrFourthSaturday) {
+      // 2. 2nd & 4th Saturday Exclusion
+      excludedSaturdays++;
+      const satReason = dayOfMonth <= 14 ? "2nd Saturday" : "4th Saturday";
+      excludedDates.push({
+        date: currentStr,
+        reason: satReason,
+      });
     } else if (holidayMap.has(currentStr)) {
-      // 2. Company Holiday Exclusion
+      // 3. Company Holiday Exclusion
       excludedHolidays++;
       const hol = holidayMap.get(currentStr);
       excludedDates.push({
@@ -138,7 +152,7 @@ const calculateWorkingLeaveDays = async (startDate, endDate, isHalfDay = false) 
       });
       holidayDetails.push(hol);
     } else {
-      // 3. Valid Working Day
+      // 4. Valid Working Day
       workingDates.push(currentStr);
     }
 
@@ -156,6 +170,7 @@ const calculateWorkingLeaveDays = async (startDate, endDate, isHalfDay = false) 
     totalDays: workingDays,
     totalCalendarDays,
     excludedSundays,
+    excludedSaturdays,
     excludedHolidays,
     workingDates,
     excludedDates,
