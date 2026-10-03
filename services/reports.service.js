@@ -18,15 +18,35 @@ const mongoose      = require('mongoose');
 
 // ─── Shared helpers ───────────────────────────────────────────────────────────
 
+const formatDateStr = (val) => {
+  if (!val) return null;
+  if (typeof val === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(val)) return val;
+  const d = new Date(val);
+  return isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10);
+};
+
 /**
- * Build a normalised period object from optional `from` / `to` strings.
+ * Build a normalised period object from optional `from` / `to` strings or financialYear.
  * @param {{ from?: string, to?: string }} filters
+ * @param {object|null} financialYear
  * @returns {{ from: string|null, to: string|null }}
  */
-const buildPeriod = ({ from, to } = {}) => ({
-  from: from || null,
-  to:   to   || null
-});
+const buildPeriod = ({ from, to } = {}, financialYear = null) => {
+  let periodFrom = from || null;
+  let periodTo = to || null;
+
+  if (!periodFrom && financialYear && financialYear.startDate) {
+    periodFrom = formatDateStr(financialYear.startDate);
+  }
+  if (!periodTo && financialYear && financialYear.endDate) {
+    periodTo = formatDateStr(financialYear.endDate);
+  }
+
+  return {
+    from: formatDateStr(periodFrom),
+    to:   formatDateStr(periodTo)
+  };
+};
 
 /**
  * Resolve and validate optional branchId.
@@ -57,35 +77,139 @@ const resolveBranch = async (companyId, branchId) => {
 };
 
 /**
+ * Automatically resolve active or latest financial year for a company and branch.
+ * @param {string} companyId
+ * @param {string|undefined} branchId
+ * @returns {Promise<object|null>}
+ */
+const findActiveFinancialYear = async (companyId, branchId) => {
+  if (!companyId || !mongoose.isValidObjectId(companyId)) return null;
+
+  const now = new Date();
+  let fy = null;
+
+  // 1. Check branch-specific active FY covering today
+  if (branchId && mongoose.isValidObjectId(branchId)) {
+    fy = await FinancialYear.findOne({
+      companyId,
+      branchId,
+      status: 'active',
+      startDate: { $lte: now },
+      endDate: { $gte: now }
+    });
+
+    // 2. Check branch-specific active FY
+    if (!fy) {
+      fy = await FinancialYear.findOne({
+        companyId,
+        branchId,
+        status: 'active'
+      }).sort({ startDate: -1 });
+    }
+
+    // 3. Check any branch-specific FY
+    if (!fy) {
+      fy = await FinancialYear.findOne({
+        companyId,
+        branchId
+      }).sort({ startDate: -1 });
+    }
+  }
+
+  // 4. Check company-level active FY covering today
+  if (!fy) {
+    fy = await FinancialYear.findOne({
+      companyId,
+      status: 'active',
+      startDate: { $lte: now },
+      endDate: { $gte: now }
+    });
+  }
+
+  // 5. Check company-level active FY
+  if (!fy) {
+    fy = await FinancialYear.findOne({
+      companyId,
+      status: 'active'
+    }).sort({ startDate: -1 });
+  }
+
+  // 6. Check any company-level FY
+  if (!fy) {
+    fy = await FinancialYear.findOne({
+      companyId
+    }).sort({ startDate: -1 });
+  }
+
+  // 7. Fallback: Check if any journal entry exists with financialYearId for this company/branch
+  if (!fy) {
+    try {
+      const journalFilter = { companyId };
+      if (branchId && mongoose.isValidObjectId(branchId)) {
+        journalFilter.branchId = branchId;
+      }
+      const latestJournal = await mongoose.model('JournalEntry').findOne(journalFilter).sort({ entryDate: -1, createdAt: -1 });
+      if (latestJournal && latestJournal.financialYearId) {
+        fy = await FinancialYear.findOne({ _id: latestJournal.financialYearId, companyId });
+      }
+    } catch (ignore) {
+      // Model might not be loaded yet
+    }
+  }
+
+  return fy;
+};
+
+/**
  * Resolve and validate optional financialYearId.
- * Returns { id, label } or null.
+ * Returns { id, label, startDate, endDate } or null.
  *
  * @param {string} companyId
  * @param {string|undefined} financialYearId
- * @returns {Promise<{ id: string, label: string }|null>}
+ * @param {string|undefined} [branchId]
+ * @returns {Promise<{ id: string, label: string, startDate?: Date, endDate?: Date }|null>}
  */
-const resolveFinancialYear = async (companyId, financialYearId) => {
-  if (!financialYearId) return null;
-  if (!mongoose.isValidObjectId(financialYearId)) {
-    const err = new Error('Financial year not found');
-    err.statusCode = 404;
-    err.errorCode  = 'FINANCIAL_YEAR_NOT_FOUND';
-    throw err;
+const resolveFinancialYear = async (companyId, financialYearId, branchId) => {
+  if (financialYearId) {
+    if (!mongoose.isValidObjectId(financialYearId)) {
+      const err = new Error('Financial year not found');
+      err.statusCode = 404;
+      err.errorCode  = 'FINANCIAL_YEAR_NOT_FOUND';
+      throw err;
+    }
+    const fy = await FinancialYear.findById(financialYearId);
+    if (!fy) {
+      const err = new Error('Financial year not found');
+      err.statusCode = 404;
+      err.errorCode  = 'FINANCIAL_YEAR_NOT_FOUND';
+      throw err;
+    }
+    if (fy.companyId.toString() !== companyId.toString()) {
+      const err = new Error('Financial year does not belong to the specified company');
+      err.statusCode = 400;
+      err.errorCode  = 'INVALID_FINANCIAL_YEAR_COMPANY';
+      throw err;
+    }
+    return {
+      id: fy._id.toString(),
+      label: fy.yearLabel,
+      startDate: fy.startDate,
+      endDate: fy.endDate
+    };
   }
-  const fy = await FinancialYear.findById(financialYearId);
-  if (!fy) {
-    const err = new Error('Financial year not found');
-    err.statusCode = 404;
-    err.errorCode  = 'FINANCIAL_YEAR_NOT_FOUND';
-    throw err;
+
+  // Auto-resolve when financialYearId is not explicitly provided
+  const fy = await findActiveFinancialYear(companyId, branchId);
+  if (fy) {
+    return {
+      id: fy._id.toString(),
+      label: fy.yearLabel,
+      startDate: fy.startDate,
+      endDate: fy.endDate
+    };
   }
-  if (fy.companyId.toString() !== companyId.toString()) {
-    const err = new Error('Financial year does not belong to the specified company');
-    err.statusCode = 400;
-    err.errorCode  = 'INVALID_FINANCIAL_YEAR_COMPANY';
-    throw err;
-  }
-  return { id: fy._id.toString(), label: fy.yearLabel };
+
+  return null;
 };
 
 // ─── Trial Balance ────────────────────────────────────────────────────────────
@@ -116,7 +240,9 @@ const resolveFinancialYear = async (companyId, financialYearId) => {
  */
 const getTrialBalance = async (companyId, branchId, filters = {}) => {
   const [financialYear, branch] = await Promise.all([
-    resolveFinancialYear(companyId, filters.financialYearId),
+    filters.financialYear && filters.financialYear.id
+      ? filters.financialYear
+      : resolveFinancialYear(companyId, filters.financialYearId, branchId),
     resolveBranch(companyId, branchId)
   ]);
 
@@ -188,7 +314,7 @@ const getTrialBalance = async (companyId, branchId, filters = {}) => {
     financialYear: financialYear
       ? { id: financialYear.id, label: financialYear.label }
       : { id: null, label: null },
-    period: buildPeriod(filters),
+    period: buildPeriod(filters, financialYear),
     totals: { debit: totalDebit, credit: totalCredit },
     accounts
   };
@@ -218,7 +344,9 @@ const getTrialBalance = async (companyId, branchId, filters = {}) => {
  */
 const getProfitLoss = async (companyId, branchId, filters = {}) => {
   const [financialYear, branch] = await Promise.all([
-    resolveFinancialYear(companyId, filters.financialYearId),
+    filters.financialYear && filters.financialYear.id
+      ? filters.financialYear
+      : resolveFinancialYear(companyId, filters.financialYearId, branchId),
     resolveBranch(companyId, branchId)
   ]);
 
@@ -306,7 +434,7 @@ const getProfitLoss = async (companyId, branchId, filters = {}) => {
     financialYear: financialYear
       ? { id: financialYear.id, label: financialYear.label }
       : { id: null, label: null },
-    period:        buildPeriod(filters),
+    period:        buildPeriod(filters, financialYear),
     totalIncome,
     totalExpenses,
     netProfit,
@@ -331,11 +459,18 @@ const getProfitLoss = async (companyId, branchId, filters = {}) => {
  */
 const getBalanceSheet = async (companyId, branchId, filters = {}) => {
   const [financialYear, branch] = await Promise.all([
-    resolveFinancialYear(companyId, filters.financialYearId),
+    filters.financialYear && filters.financialYear.id
+      ? filters.financialYear
+      : resolveFinancialYear(companyId, filters.financialYearId, branchId),
     resolveBranch(companyId, branchId)
   ]);
 
-  const asOfDate = filters.to || null;
+  let asOfDate = filters.to || null;
+  if (!asOfDate && financialYear && financialYear.endDate) {
+    asOfDate = formatDateStr(financialYear.endDate);
+  } else if (asOfDate) {
+    asOfDate = formatDateStr(asOfDate);
+  }
 
   const coas = await mongoose.model('ChartOfAccount').find({
     companyId,

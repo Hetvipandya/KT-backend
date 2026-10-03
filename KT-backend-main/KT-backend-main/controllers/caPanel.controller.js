@@ -1,7 +1,15 @@
+const mongoose = require('mongoose');
 const Company = require('../models/Company');
 const FinancialYear = require('../models/FinancialYear');
 const caPanelService = require('../services/caPanel.service');
 const gstService = require('../services/gst.service');
+
+const formatDate = (val) => {
+  if (!val) return null;
+  if (typeof val === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(val)) return val;
+  const d = new Date(val);
+  return isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10);
+};
 
 /**
  * Common security check helper.
@@ -34,11 +42,20 @@ const getDashboard = async (req, res, next) => {
   try {
     if (!verifyAccess(req)) return;
 
-    const companyId = req.query.companyId;
-    const { financialYearId, branchId } = req.query;
+    const companyId = req.query.companyId || req.company?._id?.toString();
+    const branchId = req.query.branchId || req.branchId || null;
+    const { financialYearId, from, to } = req.query;
 
-    let fyInfo = null;
+    let targetFy = null;
+
     if (financialYearId) {
+      if (!mongoose.Types.ObjectId.isValid(financialYearId)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid financial year ID format',
+          errorCode: 'INVALID_FINANCIAL_YEAR_ID'
+        });
+      }
       const fy = await FinancialYear.findById(financialYearId);
       if (!fy) {
         return res.status(404).json({
@@ -54,20 +71,127 @@ const getDashboard = async (req, res, next) => {
           errorCode: 'INVALID_FINANCIAL_YEAR_COMPANY'
         });
       }
+      targetFy = fy;
+    } else {
+      // 1. Try header 'x-financial-year-id'
+      const headerFyId = req.headers && req.headers['x-financial-year-id'];
+      if (headerFyId && mongoose.Types.ObjectId.isValid(headerFyId)) {
+        targetFy = await FinancialYear.findOne({ _id: headerFyId, companyId });
+      }
+
+      // 2. Try user's assigned financialYearId
+      if (!targetFy && req.user && req.user.financialYearId && mongoose.Types.ObjectId.isValid(req.user.financialYearId)) {
+        targetFy = await FinancialYear.findOne({ _id: req.user.financialYearId, companyId });
+      }
+
+      // 3. Auto-resolve active FY for branch / company
+      if (!targetFy) {
+        const now = new Date();
+        if (branchId && mongoose.Types.ObjectId.isValid(branchId)) {
+          targetFy = await FinancialYear.findOne({
+            companyId,
+            branchId,
+            status: 'active',
+            startDate: { $lte: now },
+            endDate: { $gte: now }
+          });
+          if (!targetFy) {
+            targetFy = await FinancialYear.findOne({
+              companyId,
+              branchId,
+              status: 'active'
+            }).sort({ startDate: -1 });
+          }
+          if (!targetFy) {
+            targetFy = await FinancialYear.findOne({
+              companyId,
+              branchId
+            }).sort({ startDate: -1 });
+          }
+        }
+
+        if (!targetFy) {
+          targetFy = await FinancialYear.findOne({
+            companyId,
+            status: 'active',
+            startDate: { $lte: now },
+            endDate: { $gte: now }
+          });
+        }
+
+        if (!targetFy) {
+          targetFy = await FinancialYear.findOne({
+            companyId,
+            status: 'active'
+          }).sort({ startDate: -1 });
+        }
+
+        if (!targetFy) {
+          targetFy = await FinancialYear.findOne({
+            companyId
+          }).sort({ startDate: -1 });
+        }
+
+        // 4. Try from recent JournalEntry
+        if (!targetFy) {
+          try {
+            const journalFilter = { companyId };
+            if (branchId && mongoose.Types.ObjectId.isValid(branchId)) {
+              journalFilter.branchId = branchId;
+            }
+            const latestJournal = await mongoose.model('JournalEntry').findOne(journalFilter).sort({ entryDate: -1, createdAt: -1 });
+            if (latestJournal && latestJournal.financialYearId) {
+              targetFy = await FinancialYear.findOne({ _id: latestJournal.financialYearId, companyId });
+            }
+          } catch (ignore) {
+            // Model might not be loaded yet
+          }
+        }
+      }
+    }
+
+    let fyInfo = null;
+    if (targetFy) {
       fyInfo = {
-        id: fy._id,
-        label: fy.yearLabel,
-        startDate: fy.startDate,
-        endDate: fy.endDate
+        id: targetFy._id.toString(),
+        label: targetFy.yearLabel,
+        startDate: targetFy.startDate,
+        endDate: targetFy.endDate,
+        period: {
+          from: formatDate(from) || formatDate(targetFy.startDate),
+          to: formatDate(to) || formatDate(targetFy.endDate)
+        }
       };
     }
 
-    const financialSnapshot = await caPanelService.getFinancialSnapshot(companyId, financialYearId, branchId);
+    const effectiveFrom = formatDate(from) || (targetFy ? formatDate(targetFy.startDate) : null);
+    const effectiveTo = formatDate(to) || (targetFy ? formatDate(targetFy.endDate) : null);
+
+    const snapshotOptions = {
+      from: effectiveFrom,
+      to: effectiveTo,
+      financialYear: targetFy ? {
+        id: targetFy._id.toString(),
+        label: targetFy.yearLabel,
+        startDate: targetFy.startDate,
+        endDate: targetFy.endDate
+      } : null
+    };
+
+    const financialSnapshot = await caPanelService.getFinancialSnapshot(
+      companyId,
+      financialYearId,
+      branchId,
+      snapshotOptions
+    );
     
     // Call gst returns summary if service exists
     let gstSummary = { period: null, netPayable: 0 };
     if (gstService && typeof gstService.getGstReturnsSummary === 'function') {
-      const summary = await gstService.getGstReturnsSummary(companyId, {});
+      const summary = await gstService.getGstReturnsSummary(companyId, {
+        from: effectiveFrom,
+        to: effectiveTo
+      });
       gstSummary = {
         period: summary.period || null,
         netPayable: summary.netPayable || 0
