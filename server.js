@@ -256,6 +256,7 @@ app.use('/api/product', finProductRoutes);
 app.use('/api/audit-log', finAuditLogRoutes);
 app.use('/api/tax', finTaxRoutes);
 app.use('/api/gst', finGstRoutes);
+app.get('/api/returns-summary', authenticate, checkCompanyAccess, require('./controllers/gst.controller').getGstReturnsSummary);
 app.use('/api/ca-panel', finCaPanelRoutes);
 app.use('/api/reports', finReportsRoutes);
 app.use('/api/journal-entry', finJournalEntryRoutes);
