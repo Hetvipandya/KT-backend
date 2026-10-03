@@ -158,6 +158,8 @@ exports.syncEmployeeToUser = async ({ employee, role, userData = {} }) => {
         });
       }
     }
+  }
+
   if (finalRole === "team lead" || employee?.isTeamLead) {
     const { ensureTeamLeadUniqueID } = require("./teamLeadId");
     await ensureTeamLeadUniqueID({ user, employee });
@@ -165,4 +167,5 @@ exports.syncEmployeeToUser = async ({ employee, role, userData = {} }) => {
 
   return user;
 };
+
 
