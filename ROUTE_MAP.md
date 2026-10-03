@@ -91,7 +91,7 @@
 | `POST/GET/PUT` | `/api/credit-note/*` | FIN | Sales credit note issuance |
 | `POST/GET/PUT` | `/api/debit-note/*` | FIN | Purchase debit note issuance |
 | `POST/GET/PUT` | `/api/tax/*` | FIN | GST rate master configurations |
-| `POST/GET/PUT` | `/api/gst/*` | FIN | GSTR-1, GSTR-3B tax computation |
+| `POST/GET/PUT` | `/api/gst/*` | FIN | GSTR-1, GSTR-3B tax computation (`/api/gst/returns-summary`, alias: `/api/returns-summary`) |
 | `POST/GET/PUT` | `/api/gst/return/*` | FIN | GST filing logs |
 | `POST/GET/PUT` | `/api/asset/*` | FIN | Fixed assets register & depreciation |
 | `POST/GET/PUT` | `/api/salary/*` | FIN | Accounting salary expense bookings |

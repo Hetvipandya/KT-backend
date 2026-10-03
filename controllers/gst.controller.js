@@ -9,7 +9,7 @@ const validateGstin = async (req, res, next) => {
   try {
     const parsed = validateGstinSchema.safeParse(req.body);
     if (!parsed.success) {
-      return res.status(400).json({
+      return res.status(400).json({ 
         success: false, 
         message: 'Validation failed',
         details: parsed.error.errors
