@@ -11,6 +11,7 @@ const {
   getAllHolidays,  
   getAllLeaves,
   adminApproval,
+  calculateLeaveDays,
 } = require("../controllers/leaveController");
 
 const { protect } = require("../middleware/authMiddleware");
@@ -18,6 +19,21 @@ const { protect } = require("../middleware/authMiddleware");
 const {
   authorizeRoles,
 } = require("../middleware/roleMiddleware");
+
+// ================= CALCULATE LEAVE DAYS PREVIEW =================
+router.post(
+  "/calculate-days",
+  protect,
+  authorizeRoles("intern", "employee", "hr", "admin", "team lead"),
+  calculateLeaveDays
+);
+
+router.post(
+  "/calculate",
+  protect,
+  authorizeRoles("intern", "employee", "hr", "admin", "team lead"),
+  calculateLeaveDays
+);
 
 // ================= APPLY LEAVE =================
 router.post(

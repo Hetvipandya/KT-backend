@@ -749,10 +749,33 @@ exports.createHoliday = async (req, res) => {
   try {
     const { holidayName, holidayDate, isPublicHoliday } = req.body;
 
+    if (!holidayName || !holidayDate) {
+      return res.status(400).json({
+        success: false,
+        message: "holidayName and holidayDate are required",
+      });
+    }
+
+    const dateStr = toDateString(holidayDate);
+    const existing = await Holiday.findOne({
+      holidayDate: {
+        $gte: new Date(`${dateStr}T00:00:00.000Z`),
+        $lte: new Date(`${dateStr}T23:59:59.999Z`),
+      },
+    });
+
+    if (existing) {
+      return res.status(400).json({
+        success: false,
+        message: `Holiday on date ${dateStr} already exists (${existing.holidayName})`,
+        data: existing,
+      });
+    }
+
     const holiday = await Holiday.create({
       holidayName,
       holidayDate,
-      isPublicHoliday,
+      isPublicHoliday: isPublicHoliday !== undefined ? isPublicHoliday : true,
     });
 
     res.status(201).json({
@@ -780,6 +803,38 @@ exports.getAllHolidays = async (req, res) => {
     });
   } catch (error) {
     res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+// ================= CALCULATE LEAVE DAYS PREVIEW =================
+exports.calculateLeaveDays = async (req, res) => {
+  try {
+    const { startDate, endDate, isHalfDay, leaveType } = req.body;
+    const actualStartDate = startDate || req.body.leaveDate || req.body.date || req.body.fromDate;
+    const actualEndDate = endDate || req.body.toDate || actualStartDate;
+
+    const isHalfDayBool =
+      isHalfDay === true ||
+      isHalfDay === "true" ||
+      leaveType === "half_day" ||
+      Number(req.body.totalDays) === 0.5;
+
+    const calculation = await calculateWorkingLeaveDays(
+      actualStartDate,
+      actualEndDate,
+      isHalfDayBool,
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: "Leave days calculated successfully",
+      data: calculation,
+    });
+  } catch (error) {
+    return res.status(500).json({
       success: false,
       message: error.message,
     });
