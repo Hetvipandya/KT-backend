@@ -178,6 +178,7 @@ const finCreditNoteRoutes = require('./routes/creditNote.routes');
 const finDebitNoteRoutes = require('./routes/debitNote.routes');
 const finApprovalRoutes = require('./routes/approval.routes');
 const authenticate = require('./middleware/authenticate');
+const checkCompanyAccess = require('./middleware/companyAccess');
 
 // ============================================================
 // MOUNT ROUTES (PRESERVING 100% OF KT AND FIN ENDPOINTS)
