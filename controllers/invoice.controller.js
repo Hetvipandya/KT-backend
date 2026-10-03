@@ -8,7 +8,7 @@ exports.list = send(async (req, res) => {
   const result = await service.listInvoices(companyId, query);
   res.json({ success: true, data: { companyId, ...result } });
 });
-exports.get = send(async (req, res) => {
+exports.get = send(async (req, res) => { 
   const invoice = await service.getInvoice(req.params.id);
   res.json({ success: true, data: service.shape(invoice, true) });
 });

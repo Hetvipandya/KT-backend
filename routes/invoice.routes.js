@@ -5,7 +5,7 @@ const validateRequest = require('../middleware/validateRequest');
 const { createInvoiceSchema, invoiceQuerySchema, validateQuery, updateInvoiceSchema } = require('../validators/invoice.validators');
 const controller = require('../controllers/invoice.controller');
 const router = express.Router();
-router.get('/print/:id', controller.downloadPrintableInvoice);
+router.get('/print/:id', controller.downloadPrintableInvoice); 
 router.get('/download/:id', controller.downloadPrintableInvoice);
 router.get('/html/:id', controller.downloadPrintableInvoice);
 router.get('/:id/print', controller.downloadPrintableInvoice);

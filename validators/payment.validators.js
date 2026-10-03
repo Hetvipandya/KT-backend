@@ -10,6 +10,7 @@ const allocationSchema = z.object({ invoiceId: objectId, allocatedAmount: amount
 
 const receivePaymentSchema = z.object({
   companyId: objectId,
+  branchId: objectId.nullable().optional(),
   financialYearId: objectId,
   customerId: objectId,
   paymentDate: date,
@@ -34,6 +35,7 @@ const receivePaymentSchema = z.object({
 
 const paymentQuerySchema = z.object({
   companyId: objectId,
+  branchId: objectId.optional(),
   customerId: objectId.optional(),
   financialYearId: objectId.optional(),
   mode: z.enum(modes).optional(),

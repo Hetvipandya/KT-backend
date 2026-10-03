@@ -69,7 +69,7 @@ const getAdminDashboard = async (req, res, next) => {
       recentAuditLogs
     ] = await Promise.all([
       // Sales (Invoices) aggregation
-      Invoice.aggregate([
+      Invoice.aggregate([ 
         { $match: invoiceMatch },
         {
           $group: {

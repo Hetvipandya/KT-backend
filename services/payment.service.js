@@ -8,23 +8,45 @@ const journalService = require('./journalEntry.service');
 const { createNotification } = require('./notification.service');
 
 const EPSILON = 0.01;
-const id = (value) => value?.toString();
+const id = (value) => {
+  if (!value) return null;
+  if (typeof value === 'object') {
+    if (value._id) return value._id.toString();
+    if (typeof value.toString === 'function') {
+      const str = value.toString();
+      if (str !== '[object Object]') return str;
+    }
+    return null;
+  }
+  return String(value);
+};
 const fail = (message, statusCode = 400, errorCode) => Object.assign(new Error(message), { statusCode, errorCode });
 
 const shape = (payment, detail = false) => {
-  const cName = payment.customerId && typeof payment.customerId === 'object' ? payment.customerId.name : (payment.customerName || null);
-  const bAccountName = payment.bankAccountId && typeof payment.bankAccountId === 'object' ? (payment.bankAccountId.accountName || payment.bankAccountId.bankName) : null;
-  const bName = payment.branchId && typeof payment.branchId === 'object' ? payment.branchId.branchName : null;
+  const cust = payment.customerId && typeof payment.customerId === 'object' ? payment.customerId : null;
+  const cName = cust?.name || cust?.customerName || payment.customerName || null;
+  const cId = cust ? id(cust._id) : id(payment.customerId);
+
+  const bankAcc = payment.bankAccountId && typeof payment.bankAccountId === 'object' ? payment.bankAccountId : null;
+  const bAccountName = bankAcc ? (bankAcc.accountName || bankAcc.bankName) : null;
+  const bAccountId = bankAcc ? id(bankAcc._id) : id(payment.bankAccountId);
+
+  const br = (payment.branchId && typeof payment.branchId === 'object')
+    ? payment.branchId
+    : (cust?.branchId && typeof cust.branchId === 'object' ? cust.branchId : null);
+  const bName = br?.branchName || null;
+  const bId = br ? id(br._id) : id(payment.branchId || cust?.branchId);
 
   return {
     id: id(payment._id),
     companyId: id(payment.companyId),
-    branchId: payment.branchId ? id(payment.branchId) : null,
+    branchId: bId,
     branchName: bName,
+    branch: bName ? { id: bId, branchName: bName, code: br?.branchCode || br?.code } : null,
     financialYearId: id(payment.financialYearId),
-    customerId: id(payment.customerId),
+    customerId: cId,
     customerName: cName,
-    bankAccountId: payment.bankAccountId ? id(payment.bankAccountId) : null,
+    bankAccountId: bAccountId,
     bankAccountName: bAccountName,
     paymentNumber: payment.paymentNumber,
     paymentDate: payment.paymentDate,
@@ -35,8 +57,8 @@ const shape = (payment, detail = false) => {
     ...(detail ? {
       reference: payment.reference,
       allocations: (payment.allocations || []).map((allocation) => ({ invoiceId: id(allocation.invoiceId), allocatedAmount: allocation.allocatedAmount })),
-      journalEntryId: payment.journalEntryId ? id(payment.journalEntryId) : null,
-      reversalJournalEntryId: payment.reversalJournalEntryId ? id(payment.reversalJournalEntryId) : null,
+      journalEntryId: id(payment.journalEntryId),
+      reversalJournalEntryId: id(payment.reversalJournalEntryId),
       notes: payment.notes,
       updatedAt: payment.updatedAt
     } : {})
@@ -122,10 +144,20 @@ const applyAllocations = async (payment, allocations, invoices) => {
 const createPayment = async (data, userId) => {
   const { financialYear, customer, bankAccount } = await validateReferences(data);
   const invoices = await validateInvoices(data);
+  const firstInvoice = invoices.values().next().value;
+  const resolvedBranchId = data.branchId || customer?.branchId || firstInvoice?.branchId || null;
   for (let attempt = 0; attempt < 3; attempt += 1) {
     const numbering = await nextNumber(data.companyId, data.financialYearId);
     try {
-      const payment = await Payment.create({ ...data, ...numbering, paymentDate: new Date(data.paymentDate), bankAccountId: data.bankAccountId || null, createdBy: userId, updatedBy: userId });
+      const payment = await Payment.create({
+        ...data,
+        branchId: resolvedBranchId,
+        ...numbering,
+        paymentDate: new Date(data.paymentDate),
+        bankAccountId: data.bankAccountId || null,
+        createdBy: userId,
+        updatedBy: userId
+      });
       const journalEntry = await postPaymentJournalEntry(payment, customer, bankAccount, userId);
       if (journalEntry) { payment.journalEntryId = journalEntry._id; await payment.save(); }
       await applyAllocations(payment, data.allocations, invoices);
@@ -138,7 +170,11 @@ const createPayment = async (data, userId) => {
         channel: 'PUSH',
         meta: { paymentId: id(payment._id), paymentNumber: payment.paymentNumber }
       }).catch(() => {});
-      const populated = await Payment.findById(payment._id).populate('customerId', 'name').populate('bankAccountId', 'accountName bankName').populate('branchId', 'branchName').lean();
+      const populated = await Payment.findById(payment._id)
+        .populate({ path: 'customerId', select: 'name customerName branchId', populate: { path: 'branchId', select: 'branchName branchCode' } })
+        .populate('bankAccountId', 'accountName bankName')
+        .populate('branchId', 'branchName branchCode')
+        .lean();
       return shape(populated, true);
     } catch (error) { if (error?.code !== 11000 || attempt === 2) throw error; }
   }
@@ -150,7 +186,14 @@ const listPayments = async (companyId, query) => {
   for (const key of ['customerId', 'financialYearId', 'mode', 'status']) if (query[key]) filter[key] = query[key];
   if (query.from || query.to) { filter.paymentDate = {}; if (query.from) filter.paymentDate.$gte = new Date(query.from); if (query.to) filter.paymentDate.$lte = new Date(query.to); }
   const [items, total] = await Promise.all([
-    Payment.find(filter).populate('customerId', 'name').populate('bankAccountId', 'accountName bankName').populate('branchId', 'branchName').sort({ paymentDate: -1, createdAt: -1 }).skip((query.page - 1) * query.limit).limit(query.limit).lean(),
+    Payment.find(filter)
+      .populate({ path: 'customerId', select: 'name customerName branchId', populate: { path: 'branchId', select: 'branchName branchCode' } })
+      .populate('bankAccountId', 'accountName bankName')
+      .populate('branchId', 'branchName branchCode')
+      .sort({ paymentDate: -1, createdAt: -1 })
+      .skip((query.page - 1) * query.limit)
+      .limit(query.limit)
+      .lean(),
     Payment.countDocuments(filter)
   ]);
   return { items: items.map((payment) => shape(payment)), pagination: { page: query.page, limit: query.limit, total } };
@@ -158,7 +201,11 @@ const listPayments = async (companyId, query) => {
 
 const getPayment = async (paymentId) => {
   if (!mongoose.isValidObjectId(paymentId)) throw fail('Payment not found', 404, 'PAYMENT_NOT_FOUND');
-  const payment = await Payment.findById(paymentId).populate('customerId', 'name').populate('bankAccountId', 'accountName bankName').populate('branchId', 'branchName').lean();
+  const payment = await Payment.findById(paymentId)
+    .populate({ path: 'customerId', select: 'name customerName branchId', populate: { path: 'branchId', select: 'branchName branchCode' } })
+    .populate('bankAccountId', 'accountName bankName')
+    .populate('branchId', 'branchName branchCode')
+    .lean();
   if (!payment) throw fail('Payment not found', 404, 'PAYMENT_NOT_FOUND');
   return shape(payment, true);
 };

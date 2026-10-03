@@ -198,7 +198,7 @@ const getTrialBalance = async (companyId, branchId, filters = {}) => {
 
 /**
  * Generate a Profit & Loss statement.
- *
+ * 
  * TODO [Module 8 — Sales Invoice]:
  *   - Cross-reference invoice grandTotal amounts with journal postings to verify completeness.
  *

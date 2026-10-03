@@ -34,12 +34,17 @@ paymentSchema.index({ companyId: 1, branchId: 1, createdAt: -1 });
 paymentSchema.index({ companyId: 1, customerId: 1, createdAt: -1 });
 
 paymentSchema.pre('validate', async function (next) {
-  if (this.isModified('customerId') || !this.customerName) {
+  if (this.isModified('customerId') || !this.customerName || !this.branchId) {
     try {
       const Customer = mongoose.model('Customer');
       const customer = await Customer.findOne({ _id: this.customerId, companyId: this.companyId });
       if (customer) {
-        this.customerName = customer.name;
+        if (!this.customerName) {
+          this.customerName = customer.name || customer.customerName;
+        }
+        if (!this.branchId && customer.branchId) {
+          this.branchId = customer.branchId;
+        }
       }
     } catch (err) {
       return next(err);
