@@ -9,6 +9,12 @@ const teamSchema = new mongoose.Schema(
     },
 
     // Team Lead
+    teamLeadId: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+
     teamLeadUser: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",

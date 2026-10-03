@@ -13,10 +13,12 @@ const Task =
 const User =
   require("../models/User");
 
-  const Employee = require("../models/Employee");
+const Employee = require("../models/Employee");
 
 const Team =
   require("../models/Team");
+
+const { ensureTeamLeadUniqueID } = require("../utils/teamLeadId");
 
 /*
 =========================
@@ -571,7 +573,16 @@ exports.createOrUpdateTeam = async (req, res) => {
       }
     }
 
-    console.log(`📊 Team Members: ${employeeIds.length} employees, ${internIds.length} interns`);
+    // Ensure Team Lead unique ID is generated and stored
+    const leadUserObj = teamLeadUser ? await User.findById(teamLeadUser) : null;
+    const leadEmpObj = teamLeadEmployee ? await Employee.findById(teamLeadEmployee) : null;
+    const teamLeadUniqueId = await ensureTeamLeadUniqueID({
+      user: leadUserObj,
+      employee: leadEmpObj,
+      team,
+    });
+
+    console.log(`📊 Team Members: ${employeeIds.length} employees, ${internIds.length} interns, TL ID=${teamLeadUniqueId}`);
 
     // ===========================
     // STEP 4: Create or Update Team
@@ -580,6 +591,7 @@ exports.createOrUpdateTeam = async (req, res) => {
     if (team) {
       // Update existing team
       team.name = name || team.name || "";
+      team.teamLeadId = teamLeadUniqueId || team.teamLeadId || "";
       team.teamLeadUser = teamLeadUser || team.teamLeadUser;
       team.teamLeadEmployee = teamLeadEmployee || team.teamLeadEmployee;
       team.employees = employeeIds;
@@ -594,8 +606,8 @@ exports.createOrUpdateTeam = async (req, res) => {
 
       // Populate for response
       const populatedTeam = await Team.findById(team._id)
-        .populate('teamLeadUser', 'name email role')
-        .populate('teamLeadEmployee', 'firstName lastName email employeeID')
+        .populate('teamLeadUser', 'name email role uniqueID')
+        .populate('teamLeadEmployee', 'firstName lastName email employeeID employeeCode')
         .populate('employees', 'firstName lastName email employeeID designation')
         .populate('interns', 'name email role uniqueID');
 
@@ -609,6 +621,7 @@ exports.createOrUpdateTeam = async (req, res) => {
     // Create new team
     const newTeam = await Team.create({
       name: name || "",
+      teamLeadId: teamLeadUniqueId || "",
       teamLeadUser,
       teamLeadEmployee,
       employees: employeeIds,
@@ -621,8 +634,8 @@ exports.createOrUpdateTeam = async (req, res) => {
 
     // Populate for response
     const populatedTeam = await Team.findById(newTeam._id)
-      .populate('teamLeadUser', 'name email role')
-      .populate('teamLeadEmployee', 'firstName lastName email employeeID')
+      .populate('teamLeadUser', 'name email role uniqueID')
+      .populate('teamLeadEmployee', 'firstName lastName email employeeID employeeCode')
       .populate('employees', 'firstName lastName email employeeID designation')
       .populate('interns', 'name email role uniqueID');
 
@@ -664,8 +677,10 @@ exports.getMyTeam = async (req, res) => {
       });
       if (!existingTeam) {
         const leadName = `${emp.firstName || ""} ${emp.lastName || ""}`.trim();
+        const tlId = await ensureTeamLeadUniqueID({ employee: emp });
         await Team.create({
           name: leadName ? `${leadName} Team` : "New Team",
+          teamLeadId: tlId,
           teamLeadEmployee: emp._id,
           teamLeadUser: emp.userID || null,
           employees: [],
@@ -686,8 +701,10 @@ exports.getMyTeam = async (req, res) => {
       
       if (!existingTeam) {
         const linkedEmp = await Employee.findOne({ userID: usr._id });
+        const tlId = await ensureTeamLeadUniqueID({ user: usr, employee: linkedEmp });
         await Team.create({
           name: `${usr.name || "Team Lead"} Team`,
+          teamLeadId: tlId,
           teamLeadUser: usr._id,
           teamLeadEmployee: linkedEmp ? linkedEmp._id : null,
           employees: [],
@@ -704,7 +721,7 @@ exports.getMyTeam = async (req, res) => {
       })
       .populate({
         path: "teamLeadEmployee",
-        select: "firstName lastName email mobile employeeID designation department isTeamLead",
+        select: "firstName lastName email mobile employeeID employeeCode designation department isTeamLead",
         populate: {
           path: "department",
           select: "name departmentName",
@@ -730,55 +747,64 @@ exports.getMyTeam = async (req, res) => {
     }
 
     // Process and format the data
-    const data = teams.map((team) => {
-      const leadUser = team.teamLeadUser;
-      const leadEmployee = team.teamLeadEmployee;
+    const data = await Promise.all(
+      teams.map(async (team) => {
+        const leadUser = team.teamLeadUser;
+        const leadEmployee = team.teamLeadEmployee;
 
-      // Determine the correct role
-      let role = "team lead";
-      if (leadUser) {
-        role = leadUser.role || "team lead";
-      } else if (leadEmployee?.isTeamLead) {
-        role = "team lead";
-      }
+        const tlUniqueId = await ensureTeamLeadUniqueID({
+          user: leadUser,
+          employee: leadEmployee,
+          team,
+        });
 
-      return {
-        _id: team._id,
-        name: team.name || "",
-        teamLead: {
-          userId: leadUser?._id || null,
-          employeeId: leadEmployee?._id || null,
-          name: leadUser?.name || 
-                `${leadEmployee?.firstName || ""} ${leadEmployee?.lastName || ""}`.trim() ||
-                "Unnamed",
-          email: leadUser?.email || leadEmployee?.email || "",
-          role: role,
-          uniqueID: leadUser?.uniqueID || "",
-          employeeID: leadEmployee?.employeeID || "",
-          designation: leadEmployee?.designation || "",
-          department: leadEmployee?.department || null,
-        },
-        interns: team.interns?.map((intern) => ({
-          _id: intern._id,
-          name: intern.name || "",
-          email: intern.email || "",
-          role: intern.role,
-          uniqueID: intern.uniqueID,
-          employeeID: intern.employeeID || "",
-        })) || [],
-        employees: team.employees?.map((emp) => ({
-          _id: emp._id,
-          name: `${emp.firstName || ""} ${emp.lastName || ""}`.trim() || "Unnamed",
-          email: emp.email || "",
-          designation: emp.designation || "",
-          employeeID: emp.employeeID || "",
-        })) || [],
-        totalInterns: team.interns?.length || 0,
-        totalEmployees: team.employees?.length || 0,
-        createdAt: team.createdAt,
-        updatedAt: team.updatedAt,
-      };
-    });
+        // Determine the correct role
+        let role = "team lead";
+        if (leadUser) {
+          role = leadUser.role || "team lead";
+        } else if (leadEmployee?.isTeamLead) {
+          role = "team lead";
+        }
+
+        return {
+          _id: team._id,
+          name: team.name || "",
+          teamLeadId: tlUniqueId || team.teamLeadId || "",
+          teamLead: {
+            userId: leadUser?._id || null,
+            employeeId: leadEmployee?._id || null,
+            name: leadUser?.name || 
+                  `${leadEmployee?.firstName || ""} ${leadEmployee?.lastName || ""}`.trim() ||
+                  "Unnamed",
+            email: leadUser?.email || leadEmployee?.email || "",
+            role: role,
+            uniqueID: leadUser?.uniqueID || tlUniqueId || "",
+            teamLeadId: tlUniqueId || team.teamLeadId || "",
+            employeeID: leadEmployee?.employeeID || leadEmployee?.employeeCode || tlUniqueId || "",
+            designation: leadEmployee?.designation || "",
+            department: leadEmployee?.department || null,
+          },
+          interns: team.interns?.map((intern) => ({
+            _id: intern._id,
+            name: intern.name || "",
+            email: intern.email || "",
+            role: intern.role,
+            uniqueID: intern.uniqueID,
+            employeeID: intern.employeeID || "",
+          })) || [],
+          employees: team.employees?.map((emp) => ({
+            _id: emp._id,
+            name: `${emp.firstName || ""} ${emp.lastName || ""}`.trim() || "Unnamed",
+            email: emp.email || "",
+            designation: emp.designation || "",
+            employeeID: emp.employeeID || "",
+          })) || [],
+          totalInterns: team.interns?.length || 0,
+          totalEmployees: team.employees?.length || 0,
+          createdAt: team.createdAt,
+        };
+      })
+    );
 
     // Filter out admin users
     const filteredData = data.filter((item) => {

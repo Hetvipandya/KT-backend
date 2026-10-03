@@ -124,6 +124,13 @@ const userSchema =
         default: null,
       },
 
+      uniqueID: {
+        type: String,
+        default: null,
+        trim: true,
+        sparse: true,
+      },
+
       // ================= ROLE =================
       role: {
         type: String,
