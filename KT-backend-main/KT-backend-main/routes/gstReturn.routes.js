@@ -1,0 +1,1 @@
+const r=require('express').Router(),a=require('../middleware/authenticate'),c=require('../middleware/companyAccess'),x=require('../controllers/gstReturn.controller');r.post('/',a,c,x.create);r.get('/',a,c,x.list);r.put('/:id/pay',a,c,x.pay);r.put('/:id/file',a,c,x.file);module.exports=r;

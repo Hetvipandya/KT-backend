@@ -53,6 +53,7 @@ const sendWithEmailJs = async ({ to, subject, text, html, templateParams = {} })
   const response = await fetch('https://api.emailjs.com/api/v1.0/email/send', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
+    signal: AbortSignal.timeout ? AbortSignal.timeout(4000) : undefined,
     body: JSON.stringify({
       service_id: process.env.EMAILJS_SERVICE_ID,
       template_id: process.env.EMAILJS_TEMPLATE_ID,

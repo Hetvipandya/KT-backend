@@ -1,0 +1,162 @@
+### Kevalon ERP Module 4: Bank & Cash Accounts Endpoints HTTP Requests Collection
+# This file is compatible with the VS Code REST Client extension.
+
+@baseUrl = http://localhost:3000/api/bank-account
+@accessToken = YOUR_ACCESS_TOKEN
+@companyId = YOUR_COMPANY_ID
+@bankAccountId = YOUR_BANK_ACCOUNT_ID
+@fromAccountId = YOUR_FROM_ACCOUNT_ID
+@toAccountId = YOUR_TO_ACCOUNT_ID
+@contraAccountId = YOUR_CONTRA_COA_ACCOUNT_ID
+@transferId = YOUR_TRANSFER_ID
+
+### 1. Create a New Bank Account (Savings/Current)
+# Creates a Savings account. Enforces validation of bankName, accountNumber, and ifscCode.
+# Automatically creates a linked COA account under "Bank Accounts" (code 1220).
+POST {{baseUrl}}
+Content-Type: application/json
+Authorization: Bearer {{accessToken}}
+
+{
+  "companyId": "{{companyId}}",
+  "accountType": "Savings",
+  "accountName": "HDFC Savings Account",
+  "bankName": "HDFC Bank",
+  "accountNumber": "501002938192",
+  "ifscCode": "HDFC0000123",
+  "branchName": "Kothrud Branch",
+  "openingBalance": 10000.00,
+  "openingBalanceDate": "2026-08-05T00:00:00.000Z"
+}
+
+
+### 2. Create a New Cash Account (Cash/Wallet)
+# Creates a Cash account. Does NOT require bankName, accountNumber, or ifscCode.
+# Automatically creates a linked COA account under "Current Assets" (code 1200).
+POST {{baseUrl}}
+Content-Type: application/json
+Authorization: Bearer {{accessToken}}
+
+{
+  "companyId": "{{companyId}}",
+  "accountType": "Cash",
+  "accountName": "Office Cash Drawer Box",
+  "openingBalance": 5000.00
+}
+
+
+### 3. List All Bank & Cash Accounts
+# Returns active accounts for the company.
+# accountNumber is returned in masked format (e.g., "••••8192").
+GET {{baseUrl}}?companyId={{companyId}}
+Authorization: Bearer {{accessToken}}
+
+
+### 4. Inter-Account Transfer (Bank-to-Bank, Bank-to-Cash, Cash-to-Bank, Cash-to-Cash)
+# Executes an inter-account transfer and generates a balanced JournalEntry + Audit Log.
+POST {{baseUrl}}/transfer
+Content-Type: application/json
+Authorization: Bearer {{accessToken}}
+
+{
+  "companyId": "{{companyId}}",
+  "fromAccountId": "{{fromAccountId}}",
+  "toAccountId": "{{toAccountId}}",
+  "amount": 2500.00,
+  "transferDate": "2026-08-31T00:00:00.000Z",
+  "paymentMode": "IMPS",
+  "referenceNo": "TXN99887766",
+  "narration": "Internal transfer from HDFC Bank to Cash Box"
+}
+
+
+### 5. Fund Plus (Direct Deposit / Money In)
+# Adds funds directly into a Bank/Cash account from a COA ledger (e.g. Capital/Income/Suspense).
+POST {{baseUrl}}/fund-plus
+Content-Type: application/json
+Authorization: Bearer {{accessToken}}
+
+{
+  "companyId": "{{companyId}}",
+  "toAccountId": "{{toAccountId}}",
+  "contraAccountId": "{{contraAccountId}}",
+  "amount": 10000.00,
+  "transferDate": "2026-08-31T00:00:00.000Z",
+  "paymentMode": "NEFT",
+  "referenceNo": "DEP123456",
+  "narration": "Capital injection by Owner"
+}
+
+
+### 6. Fund Minus (Direct Withdrawal / Money Out)
+# Deducts funds directly from a Bank/Cash account to a COA ledger (e.g. Expense/Bank Charges/Owner Drawing).
+POST {{baseUrl}}/fund-minus
+Content-Type: application/json
+Authorization: Bearer {{accessToken}}
+
+{
+  "companyId": "{{companyId}}",
+  "fromAccountId": "{{fromAccountId}}",
+  "contraAccountId": "{{contraAccountId}}",
+  "amount": 150.00,
+  "transferDate": "2026-08-31T00:00:00.000Z",
+  "paymentMode": "Other",
+  "referenceNo": "CHG887766",
+  "narration": "Monthly bank account service charges"
+}
+
+
+### 7. List All Transfers & Fund Movements
+# Returns transaction history of transfers and fund adjustments.
+GET {{baseUrl}}/transfers?companyId={{companyId}}
+Authorization: Bearer {{accessToken}}
+
+
+### 8. Get Single Transfer Detail
+# Returns details of a specific transfer or fund movement.
+GET {{baseUrl}}/transfers/{{transferId}}?companyId={{companyId}}
+Authorization: Bearer {{accessToken}}
+
+
+### 9. Cancel / Reverse Transfer Transaction
+# Reverses the linked Journal Entry and updates status to Cancelled.
+POST {{baseUrl}}/transfers/{{transferId}}/cancel
+Content-Type: application/json
+Authorization: Bearer {{accessToken}}
+
+{
+  "companyId": "{{companyId}}"
+}
+
+
+### 10. Get Account Ledger/Transaction History
+# Returns transaction ledger entries for the linked COA account.
+GET {{baseUrl}}/{{bankAccountId}}/ledger?from=2026-08-01T00:00:00.000Z&to=2026-08-31T23:59:59.000Z
+Authorization: Bearer {{accessToken}}
+
+
+### 11. Reconcile Bank Account
+# Submits statement lines, persists them in a reconciliation document, and performs automated ledger matching.
+POST {{baseUrl}}/{{bankAccountId}}/reconcile
+Content-Type: application/json
+Authorization: Bearer {{accessToken}}
+
+{
+  "statementDate": "2026-08-05T00:00:00.000Z",
+  "statementLines": [
+    {
+      "date": "2026-08-04T12:00:00.000Z",
+      "description": "UPI Pay to Grocer",
+      "amount": 1500.00,
+      "type": "debit",
+      "referenceNo": "REF100293"
+    },
+    {
+      "date": "2026-08-05T09:30:00.000Z",
+      "description": "Interest Credited",
+      "amount": 350.00,
+      "type": "credit",
+      "referenceNo": "REF100294"
+    }
+  ]
+}

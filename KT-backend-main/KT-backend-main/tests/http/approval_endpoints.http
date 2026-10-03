@@ -1,0 +1,58 @@
+### Kevalon Accounting ERP Backend - Module 21 — Workflow & Approval (Maker-Checker)
+
+# Variables
+@baseUrl = http://localhost:3000/api
+@token = YOUR_ACCESS_TOKEN
+@companyId = 6a7c193d269f35cc68af0916
+@accountantRoleId = 6a7c193d269f35cc68af0917
+@approverUserId = 6a7c193d269f35cc68af0916
+@taskId = 6a7c193e269f35cc68af0959
+
+### 1. POST /api/approval/config - Create or Update Approval Rule
+POST {{baseUrl}}/approval/config
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "companyId": "{{companyId}}",
+  "module": "PURCHASE_ORDER",
+  "thresholdAmount": 10000,
+  "levels": [
+    {
+      "level": 1,
+      "roleId": "{{accountantRoleId}}"
+    },
+    {
+      "level": 2,
+      "userIds": ["{{approverUserId}}"]
+    }
+  ],
+  "escalationEnabled": true,
+  "escalationAfterHours": 24
+}
+
+### 2. GET /api/approval/pending - Get Pending Approval Tasks for a User
+GET {{baseUrl}}/approval/pending?userId={{approverUserId}}&companyId={{companyId}}
+Authorization: Bearer {{token}}
+
+### 3. PUT /api/approval/:id/approve - Approve Task
+PUT {{baseUrl}}/approval/{{taskId}}/approve
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "reason": "Verified rates against supplier contract and matches terms."
+}
+
+### 4. PUT /api/approval/:id/reject - Reject Task
+PUT {{baseUrl}}/approval/{{taskId}}/reject
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "reason": "Unit prices are above negotiated contract rates."
+}
+
+### 5. GET /api/approval/:id/history - Get Approval and Escalation Audit History
+GET {{baseUrl}}/approval/{{taskId}}/history
+Authorization: Bearer {{token}}

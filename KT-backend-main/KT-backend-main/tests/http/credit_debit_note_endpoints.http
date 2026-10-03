@@ -1,0 +1,238 @@
+@baseUrl      = http://localhost:3000
+@token        = REPLACE_WITH_ACCESS_TOKEN
+@companyId    = REPLACE_WITH_COMPANY_ID
+@branchId     = REPLACE_WITH_BRANCH_ID
+@financialYearId = REPLACE_WITH_FINANCIAL_YEAR_ID
+@customerId   = REPLACE_WITH_CUSTOMER_ID
+@supplierId   = REPLACE_WITH_SUPPLIER_ID
+@invoiceId    = REPLACE_WITH_INVOICE_ID
+@purchaseId   = REPLACE_WITH_PURCHASE_ID
+@taxId        = REPLACE_WITH_TAX_ID
+
+###############################################################################
+# MODULE 24 — CREDIT NOTE
+###############################################################################
+
+### 1. Create Credit Note (companyId + branchId required)
+POST {{baseUrl}}/api/credit-note
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "companyId":         "{{companyId}}",
+  "branchId":          "{{branchId}}",
+  "financialYearId":   "{{financialYearId}}",
+  "customerId":        "{{customerId}}",
+  "originalInvoiceId": "{{invoiceId}}",
+  "date":              "2026-08-10",
+  "reason":            "SALES_RETURN",
+  "reference":         "CN-001",
+  "lineItems": [
+    {
+      "description": "Returned item",
+      "quantity":    1,
+      "rate":        1000,
+      "amount":      1000,
+      "taxRateId":   "{{taxId}}",
+      "taxAmount":   180,
+      "totalAmount": 1180
+    }
+  ],
+  "subTotal":    1000,
+  "taxAmount":   180,
+  "totalAmount": 1180
+}
+
+### 2. Create Credit Note — no linked invoice (standalone adjustment)
+POST {{baseUrl}}/api/credit-note
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "companyId":       "{{companyId}}",
+  "branchId":        "{{branchId}}",
+  "financialYearId": "{{financialYearId}}",
+  "customerId":      "{{customerId}}",
+  "date":            "2026-08-10",
+  "reason":          "DISCOUNT",
+  "reference":       "CN-002",
+  "lineItems": [
+    {
+      "description": "Post-sale discount",
+      "quantity":    1,
+      "rate":        500,
+      "amount":      500,
+      "taxAmount":   0,
+      "totalAmount": 500
+    }
+  ],
+  "subTotal":    500,
+  "taxAmount":   0,
+  "totalAmount": 500
+}
+
+### 3. List Credit Notes — company-wide (all branches)
+GET {{baseUrl}}/api/credit-note?companyId={{companyId}}
+Authorization: Bearer {{token}}
+
+### 4. List Credit Notes — branch-wise filter
+GET {{baseUrl}}/api/credit-note?companyId={{companyId}}&branchId={{branchId}}
+Authorization: Bearer {{token}}
+
+### 5. List Credit Notes — with FY + status + date range filters
+GET {{baseUrl}}/api/credit-note?companyId={{companyId}}&branchId={{branchId}}&financialYearId={{financialYearId}}&status=POSTED&from=2026-04-01&to=2026-03-31
+Authorization: Bearer {{token}}
+
+### 6. List Credit Notes — by customer
+GET {{baseUrl}}/api/credit-note?companyId={{companyId}}&customerId={{customerId}}
+Authorization: Bearer {{token}}
+
+### 7. Validation — missing branchId (should return 400)
+POST {{baseUrl}}/api/credit-note
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "companyId":       "{{companyId}}",
+  "financialYearId": "{{financialYearId}}",
+  "customerId":      "{{customerId}}",
+  "date":            "2026-08-10",
+  "reason":          "SALES_RETURN",
+  "lineItems": [
+    { "description": "Item", "quantity": 1, "rate": 100, "amount": 100, "taxAmount": 0, "totalAmount": 100 }
+  ],
+  "subTotal": 100, "taxAmount": 0, "totalAmount": 100
+}
+
+### 8. Validation — inconsistent totals (should return 400 INVALID_TOTALS)
+POST {{baseUrl}}/api/credit-note
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "companyId":       "{{companyId}}",
+  "branchId":        "{{branchId}}",
+  "financialYearId": "{{financialYearId}}",
+  "customerId":      "{{customerId}}",
+  "date":            "2026-08-10",
+  "reason":          "SALES_RETURN",
+  "lineItems": [
+    { "description": "Item", "quantity": 1, "rate": 100, "amount": 100, "taxAmount": 0, "totalAmount": 100 }
+  ],
+  "subTotal": 999,
+  "taxAmount": 0,
+  "totalAmount": 999
+}
+
+###############################################################################
+# MODULE 24 — DEBIT NOTE
+###############################################################################
+
+### 9. Create Debit Note (companyId + branchId required)
+POST {{baseUrl}}/api/debit-note
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "companyId":          "{{companyId}}",
+  "branchId":           "{{branchId}}",
+  "financialYearId":    "{{financialYearId}}",
+  "supplierId":         "{{supplierId}}",
+  "originalPurchaseId": "{{purchaseId}}",
+  "date":               "2026-08-10",
+  "reason":             "PURCHASE_RETURN",
+  "reference":          "DN-001",
+  "lineItems": [
+    {
+      "description": "Returned material",
+      "quantity":    1,
+      "rate":        1000,
+      "amount":      1000,
+      "taxRateId":   "{{taxId}}",
+      "taxAmount":   180,
+      "totalAmount": 1180
+    }
+  ],
+  "subTotal":    1000,
+  "taxAmount":   180,
+  "totalAmount": 1180
+}
+
+### 10. Create Debit Note — no linked purchase (standalone rate difference)
+POST {{baseUrl}}/api/debit-note
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "companyId":       "{{companyId}}",
+  "branchId":        "{{branchId}}",
+  "financialYearId": "{{financialYearId}}",
+  "supplierId":      "{{supplierId}}",
+  "date":            "2026-08-10",
+  "reason":          "RATE_DIFFERENCE",
+  "reference":       "DN-002",
+  "lineItems": [
+    {
+      "description": "Rate difference adjustment",
+      "quantity":    1,
+      "rate":        200,
+      "amount":      200,
+      "taxAmount":   0,
+      "totalAmount": 200
+    }
+  ],
+  "subTotal":    200,
+  "taxAmount":   0,
+  "totalAmount": 200
+}
+
+### 11. List Debit Notes — company-wide (all branches)
+GET {{baseUrl}}/api/debit-note?companyId={{companyId}}
+Authorization: Bearer {{token}}
+
+### 12. List Debit Notes — branch-wise filter
+GET {{baseUrl}}/api/debit-note?companyId={{companyId}}&branchId={{branchId}}
+Authorization: Bearer {{token}}
+
+### 13. List Debit Notes — with FY + status + date range filters
+GET {{baseUrl}}/api/debit-note?companyId={{companyId}}&branchId={{branchId}}&financialYearId={{financialYearId}}&status=POSTED&from=2026-04-01&to=2026-08-31
+Authorization: Bearer {{token}}
+
+### 14. List Debit Notes — by supplier
+GET {{baseUrl}}/api/debit-note?companyId={{companyId}}&supplierId={{supplierId}}
+Authorization: Bearer {{token}}
+
+### 15. Validation — missing branchId (should return 400)
+POST {{baseUrl}}/api/debit-note
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "companyId":       "{{companyId}}",
+  "financialYearId": "{{financialYearId}}",
+  "supplierId":      "{{supplierId}}",
+  "date":            "2026-08-10",
+  "reason":          "PURCHASE_RETURN",
+  "lineItems": [
+    { "description": "Mat", "quantity": 1, "rate": 100, "amount": 100, "taxAmount": 0, "totalAmount": 100 }
+  ],
+  "subTotal": 100, "taxAmount": 0, "totalAmount": 100
+}
+
+### 16. Validation — wrong reason value (should return 400)
+POST {{baseUrl}}/api/debit-note
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "companyId":       "{{companyId}}",
+  "branchId":        "{{branchId}}",
+  "financialYearId": "{{financialYearId}}",
+  "supplierId":      "{{supplierId}}",
+  "date":            "2026-08-10",
+  "reason":          "SALES_RETURN",
+  "lineItems": [
+    { "description": "Mat", "quantity": 1, "rate": 100, "amount": 100, "taxAmount": 0, "totalAmount": 100 }
+  ],
+  "subTotal": 100, "taxAmount": 0, "totalAmount": 100
+}

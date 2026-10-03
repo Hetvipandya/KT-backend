@@ -1,0 +1,120 @@
+@baseUrl = http://localhost:3000/api
+@token = REPLACE_WITH_ACCESS_TOKEN
+@companyId = REPLACE_WITH_COMPANY_ID
+@departmentId = REPLACE_WITH_DEPT_ID
+@userId = REPLACE_WITH_USER_ID
+@employeeId = REPLACE_WITH_EMPLOYEE_ID
+
+### ─── DEPARTMENT MASTER ──────────────────────────────────────────────────────────
+
+### 1. Create Department
+POST {{baseUrl}}/department
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "companyId": "{{companyId}}",
+  "name": "HR Department",
+  "code": "HR",
+  "description": "Human Resources and Staffing"
+}
+
+### 2. List Departments
+GET {{baseUrl}}/department?companyId={{companyId}}
+Authorization: Bearer {{token}}
+
+### 3. List Active Departments
+GET {{baseUrl}}/department?companyId={{companyId}}&isActive=true
+Authorization: Bearer {{token}}
+
+
+### ─── EMPLOYEE MASTER ────────────────────────────────────────────────────────────
+
+### 4. Create Employee (with optional departmentId and userId)
+POST {{baseUrl}}/employee
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "companyId": "{{companyId}}",
+  "employeeCode": "EMP101",
+  "firstName": "Rahul",
+  "middleName": "Kumar",
+  "lastName": "Sharma",
+  "email": "rahul.sharma@example.com",
+  "phone": "9876543210",
+  "dateOfJoining": "2025-01-15",
+  "designation": "HR Executive",
+  "departmentId": "{{departmentId}}",
+  "userId": "{{userId}}",
+  "status": "ACTIVE",
+  "address": {
+    "line1": "123, ABC Society",
+    "line2": "Near XYZ School",
+    "city": "Ahmedabad",
+    "state": "Gujarat",
+    "pincode": "380001",
+    "country": "India"
+  },
+  "emergencyContact": {
+    "name": "Sunita Sharma",
+    "phone": "9876543211",
+    "relation": "Spouse"
+  }
+}
+
+### 5. List Employees
+GET {{baseUrl}}/employee?companyId={{companyId}}
+Authorization: Bearer {{token}}
+
+### 6. List Employees with status/department filters
+GET {{baseUrl}}/employee?companyId={{companyId}}&status=ACTIVE&departmentId={{departmentId}}
+Authorization: Bearer {{token}}
+
+### 7. Get Single Employee Detail (includes address & emergencyContact)
+GET {{baseUrl}}/employee/{{employeeId}}
+Authorization: Bearer {{token}}
+
+### 8. Update Employee
+PUT {{baseUrl}}/employee/{{employeeId}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "designation": "Senior HR Manager",
+  "phone": "9999999999",
+  "address": {
+    "line1": "456, New Society",
+    "city": "Gandhinagar",
+    "pincode": "382001"
+  }
+}
+
+### ─── ERROR SCENARIOS (UNIQUENESS CONSTRAINTS) ───────────────────────────────────
+
+### 9. Create duplicate employeeCode; expect 400 DUPLICATE_EMPLOYEE_CODE
+POST {{baseUrl}}/employee
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "companyId": "{{companyId}}",
+  "employeeCode": "EMP101",
+  "firstName": "Duplicate",
+  "lastName": "Code",
+  "dateOfJoining": "2025-02-01"
+}
+
+### 10. Create duplicate email; expect 400 DUPLICATE_EMPLOYEE_EMAIL
+POST {{baseUrl}}/employee
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "companyId": "{{companyId}}",
+  "employeeCode": "EMP102",
+  "firstName": "Duplicate",
+  "lastName": "Email",
+  "email": "rahul.sharma@example.com",
+  "dateOfJoining": "2025-02-01"
+}

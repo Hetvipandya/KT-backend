@@ -1,0 +1,97 @@
+const { z } = require('zod');
+
+// E.164 phone format regex
+const phoneRegex = /^\+[1-9]\d{1,14}$/;
+
+// Password policy: min 8 chars, at least 1 letter and 1 number
+const passwordRegex = /^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d@$!%*#?&]{8,}$/;
+
+const registerSchema = z.object({
+  name: z.string({ required_error: 'name is required' }).min(1, 'name cannot be empty'),
+  email: z.string({ required_error: 'email is required' }).email('invalid email address'),
+  password: z.string({ required_error: 'password is required' })
+    .min(8, 'password must be at least 8 characters')
+    .regex(passwordRegex, 'password must contain at least one letter and one number'),
+  phone: z.string().regex(phoneRegex, 'phone must be in E.164 format (e.g., +1234567890)').optional(),
+  phoneNumber: z.string().regex(phoneRegex, 'phoneNumber must be in E.164 format (e.g., +1234567890)').optional(),
+  role: z.enum(['admin', 'hr', 'employee', 'intern', 'teamlead', 'team lead']).optional().default('admin')
+}).strict();
+
+
+const loginSchema = z.object({
+  email: z.string({ required_error: 'email is required' }).email('invalid email address'),
+  password: z.string({ required_error: 'password is required' }).min(1, 'password cannot be empty')
+}).strict();
+
+const refreshTokenSchema = z.object({
+  refreshToken: z.string({ required_error: 'refreshToken is required' }).min(1, 'refreshToken cannot be empty')
+}).strict();
+
+const logoutSchema = z.object({
+  refreshToken: z.string({ required_error: 'refreshToken is required' }).min(1, 'refreshToken cannot be empty')
+}).strict();
+
+const forgotPasswordSchema = z.object({
+  email: z.string().email('invalid email address').optional(),
+  login: z.string().optional(),
+  userEmail: z.string().optional(),
+}).passthrough().refine(data => Boolean(data.email || data.login || data.userEmail), {
+  message: 'email is required'
+});
+
+const resetPasswordSchema = z.object({
+  token: z.string().min(1, 'token cannot be empty').optional(),
+  resetToken: z.string().optional(),
+  tokenHash: z.string().optional(),
+  newPassword: z.string().optional(),
+  password: z.string().optional(),
+  confirmPassword: z.string().optional(),
+  email: z.string().optional(),
+  emailAddress: z.string().optional(),
+}).passthrough().refine(data => Boolean(data.token || data.resetToken || data.tokenHash), {
+  message: 'token is required'
+}).refine(data => Boolean(data.newPassword || data.password), {
+  message: 'newPassword is required'
+});
+
+const sendOtpSchema = z.object({
+  email: z.string({ required_error: 'email is required' }).email('invalid email address'),
+  purpose: z.enum(['login', '2fa_setup'], { required_error: 'purpose is required' })
+}).strict();
+
+const verifyOtpSchema = z.object({
+  email: z.string({ required_error: 'email is required' }).email('invalid email address'),
+  otp: z.string({ required_error: 'otp is required' }).regex(/^\d{6}$/, 'otp must be a 6-digit number'),
+  purpose: z.enum(['login', '2fa_setup'], { required_error: 'purpose is required' })
+}).strict();
+
+const verifyEmailSchema = z.object({
+  token: z.string({ required_error: 'token is required' }).min(1, 'token cannot be empty')
+}).strict();
+
+const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1, 'currentPassword cannot be empty').optional(),
+  oldPassword: z.string().min(1, 'oldPassword cannot be empty').optional(),
+  newPassword: z.string({ required_error: 'newPassword is required' })
+    .min(8, 'newPassword must be at least 8 characters')
+    .regex(passwordRegex, 'newPassword must contain at least one letter and one number'),
+  confirmPassword: z.string().min(1, 'confirmPassword cannot be empty').optional(),
+}).strict();
+
+const resendVerificationEmailSchema = z.object({
+  email: z.string({ required_error: 'email is required' }).email('invalid email address')
+}).strict();
+
+module.exports = {
+  registerSchema,
+  loginSchema,
+  refreshTokenSchema,
+  logoutSchema,
+  forgotPasswordSchema,
+  resetPasswordSchema,
+  changePasswordSchema,
+  sendOtpSchema,
+  verifyOtpSchema,
+  verifyEmailSchema,
+  resendVerificationEmailSchema
+};

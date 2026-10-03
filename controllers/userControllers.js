@@ -1402,32 +1402,32 @@ const forgotPassword = async (req, res) => {
 
     const resetUrl = `${buildResetPasswordUrl(req, resetToken)}&email=${encodeURIComponent(user.email)}`;
 
-    try {
-      const { subject, text, html } = buildResetPasswordEmailContent(
-        user.name,
-        resetUrl,
-      );
+    const { subject, text, html } = buildResetPasswordEmailContent(
+      user.name,
+      resetUrl,
+    );
 
-      await sendEmail({
-        to: user.email,
-        subject,
-        text,
-        html,
-        templateParams: {
-          reset_link: resetUrl,
-          link: resetUrl,
-          company_name: "Kevalon Technology",
-          website_link: req.protocol + "://" + req.get("host"),
-        },
-      });
-    } catch (emailError) {
+    // Dispatch email in background (non-blocking) so HTTP API response does not time out
+    sendEmail({
+      to: user.email,
+      subject,
+      text,
+      html,
+      templateParams: {
+        reset_link: resetUrl,
+        link: resetUrl,
+        company_name: "Kevalon Technology",
+        website_link: req.protocol + "://" + req.get("host"),
+      },
+    }).catch((emailError) => {
       console.error("Reset email error:", emailError.message);
-    }
+    });
 
     return res.status(200).json({
       success: true,
       message: "Password reset link sent successfully",
       resetUrl,
+      resetLink: resetUrl,
     });
   } catch (error) {
     return res.status(500).json({

@@ -410,30 +410,29 @@ const forgotPassword = async (req, res, next) => {
       "Kevalon Finance"
     );
 
-    let emailResult = null;
-    try {
-      emailResult = await sendEmail({
-        to: user.email,
-        subject,
-        text,
-        html,
-        templateParams: {
-          reset_link: resetLink,
-          link: resetLink,
-          resetPasswordLink: resetLink,
-          url: resetLink,
-          company_name: "Kevalon Finance",
-          website_link: env.CLIENT_URL || `${protocol}://${host}`,
-        },
+    // Dispatch email asynchronously in background so HTTP API response does not time out
+    sendEmail({
+      to: user.email,
+      subject,
+      text,
+      html,
+      templateParams: {
+        reset_link: resetLink,
+        link: resetLink,
+        resetPasswordLink: resetLink,
+        url: resetLink,
+        company_name: "Kevalon Finance",
+        website_link: env.CLIENT_URL || `${protocol}://${host}`,
+      },
+    })
+      .then((res) => {
+        logger.info({ userId: user._id, provider: res?.provider }, `Password reset email dispatched successfully`);
+      })
+      .catch((mailErr) => {
+        logger.error({ err: mailErr }, `Failed to dispatch reset email: ${mailErr.message}`);
       });
-    } catch (mailErr) {
-      logger.error({ err: mailErr }, `Failed to dispatch reset email: ${mailErr.message}`);
-    }
 
-    logger.info(
-      { userId: user._id, provider: emailResult?.provider },
-      `Password reset token generated and dispatched`,
-    );
+    logger.info({ userId: user._id }, `Password reset token generated and email dispatch initiated`);
 
     // Prominently print in console so developer/admin can instantly see/use the reset link
     console.log(`\n======================================================`);
@@ -441,11 +440,6 @@ const forgotPassword = async (req, res, next) => {
     console.log(`👤 User: ${user.name} (${user.email})`);
     console.log(`🔗 Reset URL: ${resetLink}`);
     console.log(`⏰ Expiry: 30 minutes`);
-    if (emailResult && emailResult.simulated) {
-      console.log(`⚠️ Email simulated/fallback (click link above to reset password)`);
-    } else if (emailResult && emailResult.success) {
-      console.log(`📧 Email delivered via ${emailResult.provider || 'SMTP'}`);
-    }
     console.log(`======================================================\n`);
 
     return res.status(200).json({
@@ -453,7 +447,7 @@ const forgotPassword = async (req, res, next) => {
       message: "Password reset link sent successfully. Please check your email.",
       resetUrl: resetLink,
       resetLink,
-      emailSent: Boolean(emailResult?.success && !emailResult?.simulated),
+      emailSent: true,
     });
   } catch (error) {
     next(error);

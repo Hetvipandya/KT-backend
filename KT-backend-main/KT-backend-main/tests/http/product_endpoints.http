@@ -1,0 +1,82 @@
+# Product / Service API Endpoints
+
+@baseUrl = http://localhost:3000/api/product
+@accessToken = YOUR_ACCESS_TOKEN_HERE
+@companyId = YOUR_COMPANY_ID_HERE
+@productId = YOUR_PRODUCT_ID_HERE
+@taxRateId = YOUR_TAX_RATE_ID_HERE
+
+### 1. Create Product (Goods)
+POST {{baseUrl}}
+Content-Type: application/json
+Authorization: Bearer {{accessToken}}
+
+{
+  "companyId": "{{companyId}}",
+  "name": "Gaming Wireless Mouse",
+  "code": "G-MS-909",
+  "description": "RGB high-performance gaming mouse",
+  "type": "PRODUCT",
+  "saleRate": 2500,
+  "purchaseRate": 1800,
+  "taxRateId": "{{taxRateId}}",
+  "gstRate": 18,
+  "hsnSacCode": "84713010",
+  "isStockItem": true,
+  "unitOfMeasure": "NOS"
+}
+
+### 2. Create Service
+POST {{baseUrl}}
+Content-Type: application/json
+Authorization: Bearer {{accessToken}}
+
+{
+  "companyId": "{{companyId}}",
+  "name": "Cloud Deployment Setup Service",
+  "code": "SRV-AWS-01",
+  "description": "One-time setup for AWS infrastructure",
+  "type": "SERVICE",
+  "saleRate": 15000,
+  "purchaseRate": 0,
+  "taxRateId": null,
+  "gstRate": 18,
+  "hsnSacCode": "998311",
+  "isStockItem": false,
+  "unitOfMeasure": "HRS"
+}
+
+### 3. List Products (All Active by default)
+GET {{baseUrl}}?companyId={{companyId}}
+Authorization: Bearer {{accessToken}}
+
+### 4. Search Products
+GET {{baseUrl}}?companyId={{companyId}}&search=Mouse
+Authorization: Bearer {{accessToken}}
+
+### 5. Filter Products by Type
+GET {{baseUrl}}?companyId={{companyId}}&type=SERVICE
+Authorization: Bearer {{accessToken}}
+
+### 6. Get Inactive Products
+GET {{baseUrl}}?companyId={{companyId}}&isActive=false
+Authorization: Bearer {{accessToken}}
+
+### 7. Retrieve Single Product Details
+GET {{baseUrl}}/{{productId}}
+Authorization: Bearer {{accessToken}}
+
+### 8. Update Product details
+PUT {{baseUrl}}/{{productId}}
+Content-Type: application/json
+Authorization: Bearer {{accessToken}}
+
+{
+  "name": "Premium Wireless Gaming Mouse V2",
+  "saleRate": 2799,
+  "description": "Updated RGB mouse description"
+}
+
+### 9. Deactivate/Soft-delete Product
+DELETE {{baseUrl}}/{{productId}}
+Authorization: Bearer {{accessToken}}

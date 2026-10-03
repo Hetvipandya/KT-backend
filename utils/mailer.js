@@ -71,6 +71,7 @@ const sendRegistrationEmail = async ({ name, email, password, role }) => {
           "Content-Type": "application/json",
           "Accept": "application/json",
         },
+        timeout: 4000,
       }
     );
 
@@ -162,6 +163,7 @@ const sendForgotPasswordEmail = async ({ name, email, password }) => {
           "Content-Type": "application/json",
           "Accept": "application/json",
         },
+        timeout: 4000,
       }
     );
 
@@ -272,6 +274,7 @@ const sendCustomEmail = async ({ to, name, subject, htmlContent }) => {
           "Content-Type": "application/json",
           "Accept": "application/json",
         },
+        timeout: 4000,
       }
     );
 
