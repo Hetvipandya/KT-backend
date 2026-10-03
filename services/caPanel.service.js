@@ -39,9 +39,14 @@ const calculateTax = (income, slabs = DEFAULT_TAX_SLABS) => {
  * @param {string} [branchId]
  * @returns {Promise<Object>}
  */
-const getFinancialSnapshot = async (companyId, financialYearId, branchId) => {
+const getFinancialSnapshot = async (companyId, financialYearId, branchId, options = {}) => {
   try {
-    const filters = { financialYearId };
+    const filters = {
+      financialYearId: financialYearId || undefined,
+      from: options.from || undefined,
+      to: options.to || undefined,
+      financialYear: options.financialYear || undefined
+    };
     const tb = await reportsService.getTrialBalance(
       companyId,
       branchId,
@@ -83,7 +88,7 @@ const getFinancialSnapshot = async (companyId, financialYearId, branchId) => {
  * @returns {Promise<Array>}
  */
 const getRecentAuditFlags = async (companyId) => {
-  const Alert = mongoose.model("Alert");
+  const Alert = mongoose.models.Alert || require("../models/Alert");
   const alerts = await Alert.find({
     companyId,
     isActive: true,
@@ -112,7 +117,7 @@ const getRecentAuditFlags = async (companyId) => {
  * @returns {Promise<Object>}
  */
 const getConsolidatedAuditReport = async (companyId, { from, to }) => {
-  const AuditLog = mongoose.model("AuditLog");
+  const AuditLog = mongoose.models.AuditLog || require("../models/AuditLog");
 
   const filter = { companyId: new mongoose.Types.ObjectId(companyId) };
   if (from || to) {
