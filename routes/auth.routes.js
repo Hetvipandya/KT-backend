@@ -57,6 +57,7 @@ router.post('/forgot-password', authLimiter, validateRequest(forgotPasswordSchem
 
 // 7. Reset password using valid token
 router.post('/reset-password', authLimiter, validateRequest(resetPasswordSchema), resetPassword);
+router.put('/reset-password', authLimiter, validateRequest(resetPasswordSchema), resetPassword);
 
 // 7.2 Web Reset password UI page and form handler
 router.get('/reset-password', showResetPasswordForm);

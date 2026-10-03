@@ -32,9 +32,9 @@ const logoutSchema = z.object({
 }).strict();
 
 const forgotPasswordSchema = z.object({
-  email: z.string().email('invalid email address').optional(),
-  login: z.string().optional(),
-  userEmail: z.string().optional(),
+  email: z.string().trim().email('invalid email address').optional(),
+  login: z.string().trim().optional(),
+  userEmail: z.string().trim().optional(),
 }).passthrough().refine(data => Boolean(data.email || data.login || data.userEmail), {
   message: 'email is required'
 });

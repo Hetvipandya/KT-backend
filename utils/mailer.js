@@ -184,6 +184,36 @@ const sendForgotPasswordEmail = async ({ name, email, password }) => {
   }
 };
 
+let lastBrevoCreditCheck = { time: 0, hasCredits: true };
+
+/**
+ * Check if Brevo account has active credits remaining
+ */
+const checkBrevoCredits = async (apiKey) => {
+  const now = Date.now();
+  if (now - lastBrevoCreditCheck.time < 60000) {
+    return lastBrevoCreditCheck.hasCredits;
+  }
+  try {
+    const res = await axios.get("https://api.brevo.com/v3/account", {
+      headers: { "api-key": apiKey },
+      timeout: 3000,
+    });
+    const plans = res.data?.plan || [];
+    const limitPlan = plans.find((p) => p.creditsType === "sendLimit" || p.type === "free");
+    if (limitPlan && typeof limitPlan.credits === "number" && limitPlan.credits <= 0) {
+      console.warn("⚠️ [Brevo Mailer]: Brevo account has 0 daily credits remaining (limit reached).");
+      lastBrevoCreditCheck = { time: now, hasCredits: false };
+      return false;
+    }
+    lastBrevoCreditCheck = { time: now, hasCredits: true };
+    return true;
+  } catch (err) {
+    // If credit check fails or times out, proceed to not block legitimate requests
+    return true;
+  }
+};
+
 /**
  * Send custom transactional email using Brevo API (v3)
  *
@@ -208,6 +238,14 @@ const sendCustomEmail = async ({ to, name, subject, htmlContent }) => {
       const errorMsg = "Recipient email address is required";
       console.error(`❌ [Brevo Mailer]: ${errorMsg}`);
       return { success: false, error: errorMsg };
+    }
+
+    // Proactively verify Brevo credits to avoid black-hole accepted-but-undelivered emails
+    const hasCredits = await checkBrevoCredits(apiKey);
+    if (!hasCredits) {
+      const errorMsg = "Brevo account daily send limit reached (0 credits remaining)";
+      console.warn(`⚠️ [Brevo Mailer]: ${errorMsg}. Skipping Brevo to allow fallback.`);
+      return { success: false, error: errorMsg, code: "INSUFFICIENT_CREDITS" };
     }
 
     const payload = {

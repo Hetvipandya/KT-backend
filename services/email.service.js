@@ -16,26 +16,32 @@ const isEmailJsConfigured = Boolean(
   process.env.EMAILJS_SERVICE_ID && process.env.EMAILJS_TEMPLATE_ID && process.env.EMAILJS_PUBLIC_KEY
 );
 
-// Initialize Nodemailer transporter if SMTP config or EMAIL_USER is present
-if (!isEmailJsConfigured && process.env.SMTP_HOST && process.env.SMTP_USER) {
-  transporter = nodemailer.createTransport({
-    host: process.env.SMTP_HOST,
-    port: parseInt(process.env.SMTP_PORT || '587', 10),
-    secure: parseInt(process.env.SMTP_PORT || '587', 10) === 465,
-    auth: {
-      user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASS
-    }
-  });
-} else if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
-  transporter = nodemailer.createTransport({
-    service: 'gmail',
-    auth: {
-      user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASS,
-    },
-  });
-}
+const getTransporter = () => {
+  if (!isEmailJsConfigured && process.env.SMTP_HOST && process.env.SMTP_USER) {
+    return nodemailer.createTransport({
+      host: process.env.SMTP_HOST,
+      port: parseInt(process.env.SMTP_PORT || '587', 10),
+      secure: parseInt(process.env.SMTP_PORT || '587', 10) === 465,
+      auth: {
+        user: String(process.env.SMTP_USER).trim(),
+        pass: String(process.env.SMTP_PASS || '').trim()
+      },
+      tls: {
+        rejectUnauthorized: false
+      }
+    });
+  }
+  if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
+    return nodemailer.createTransport({
+      service: 'gmail',
+      auth: {
+        user: String(process.env.EMAIL_USER).trim(),
+        pass: String(process.env.EMAIL_PASS).replace(/\s+/g, ''),
+      },
+    });
+  }
+  return null;
+};
 
 /**
  * Send an email through EmailJS's REST API.
@@ -111,31 +117,47 @@ const sendEmail = async ({ to, subject, text, html, templateParams = {} }) => {
   if (process.env.BREVO_API_KEY) {
     try {
       const result = await sendCustomEmail({ to, subject, htmlContent: html || text });
-      if (result && result.success) return result;
+      if (result && result.success) {
+        return { ...result, provider: 'brevo' };
+      }
+      logger.warn(`Brevo email sending skipped/failed (${result?.error || 'Unknown'}). Attempting Nodemailer fallback...`);
     } catch (err) {
-      logger.warn(`Brevo email failed: ${err.message}`);
+      logger.warn(`Brevo email failed: ${err.message}. Attempting Nodemailer fallback...`);
     }
   }
 
-  // Try Nodemailer
-  if (transporter) {
+  // Try Nodemailer (SMTP / Gmail)
+  const activeTransporter = getTransporter();
+  if (activeTransporter) {
     try {
-      const info = await transporter.sendMail({
-        from: process.env.SMTP_FROM || `"${process.env.BREVO_SENDER_NAME || 'Kevalon Technology'}" <${process.env.EMAIL_USER || process.env.SMTP_USER}>`,
+      const defaultSenderName = process.env.BREVO_SENDER_NAME || 'Kevalon Finance';
+      const senderUser = process.env.EMAIL_USER ? process.env.EMAIL_USER.trim() : process.env.SMTP_USER;
+      const info = await activeTransporter.sendMail({
+        from: process.env.SMTP_FROM || `"${defaultSenderName}" <${senderUser}>`,
         to,
         subject,
         text,
         html
       });
-      logger.info(`📧 Email sent successfully to ${to}. Message ID: ${info.messageId}`);
-      return { success: true, messageId: info.messageId };
+      logger.info(`📧 Email sent successfully to ${to} via Nodemailer. Message ID: ${info.messageId}`);
+      return { success: true, messageId: info.messageId, provider: 'nodemailer' };
     } catch (error) {
-      logger.error(`❌ SMTP transport failed to send email to ${to}: ${error.message}`);
+      logger.error(`❌ Nodemailer failed to send email to ${to}: ${error.message}`);
     }
   }
 
-  logger.info(`📧 [MOCK EMAIL] To: ${to} | Subject: ${subject}`);
-  return { success: true, messageId: 'mock-id-12345', preview: true, simulated: true };
+  const primaryLink = templateParams.reset_link || templateParams.link || templateParams.url || '';
+  logger.warn(`📧 [FALLBACK / CONSOLE] Email to: ${to} | Subject: ${subject}`);
+  if (primaryLink) {
+    logger.info(`🔗 Password Reset URL: ${primaryLink}`);
+  }
+  return { 
+    success: true, 
+    messageId: 'simulated-' + Date.now(), 
+    preview: true, 
+    simulated: true,
+    resetLink: primaryLink,
+  };
 };
 
 /**

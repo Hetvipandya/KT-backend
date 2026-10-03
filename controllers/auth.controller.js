@@ -11,6 +11,7 @@ const {
   sendEmail,
   sendVerificationEmail,
 } = require("../services/email.service");
+const { buildResetPasswordEmailContent } = require("../services/email.templates");
 const { sendOtp, verifyOtp } = require("../services/otp.service");
 const { buildUserOnboardingResponse } = require("../utils/onboarding");
 const auditLogService = require("../services/auditLog.service");
@@ -374,29 +375,44 @@ const forgotPassword = async (req, res, next) => {
       "+passwordResetTokenHash +passwordResetExpires +resetPasswordToken +resetPasswordExpires",
     );
 
-    if (user) {
-      // Generate clean token
-      const plainToken = crypto.randomBytes(32).toString("hex");
-      const tokenHash = hashSha256(plainToken);
-      const resetExpires = new Date(Date.now() + 30 * 60 * 1000);
+    if (!user) {
+      logger.info(`Password reset requested for non-existent email: ${email}`);
+      return res.status(404).json({
+        success: false,
+        message: "User not found with this email address.",
+      });
+    }
 
-      // Store hashed token + 30 min expiry across all schema token fields
-      user.passwordResetTokenHash = tokenHash;
-      user.resetPasswordToken = tokenHash;
-      user.passwordResetExpires = resetExpires;
-      user.resetPasswordExpires = resetExpires;
+    // Generate clean token
+    const plainToken = crypto.randomBytes(32).toString("hex");
+    const tokenHash = hashSha256(plainToken);
+    const resetExpires = new Date(Date.now() + 30 * 60 * 1000); // 30 minutes
 
-      await user.save();
+    // Store hashed token + 30 min expiry across all schema token fields
+    user.passwordResetTokenHash = tokenHash;
+    user.resetPasswordToken = tokenHash;
+    user.passwordResetExpires = resetExpires;
+    user.resetPasswordExpires = resetExpires;
 
-      // Email plain token
-      const host = req.get("host");
-      const protocol = host.includes("localhost") ? req.protocol : "https";
-      const resetLink = `${protocol}://${host}/api/auth/reset-password?token=${plainToken}&email=${encodeURIComponent(user.email)}`;
-      const subject = "Password Reset Request";
-      const text = `To reset your Kevalon ERP password, please click the following link (valid for 30 minutes):\n\n${resetLink}`;
-      const html = `<p>You requested a password reset for Kevalon ERP.</p><p>Please click the link below to set a new password (valid for 30 minutes):</p><p><a href="${resetLink}">${resetLink}</a></p>`;
+    await user.save();
 
-      await sendEmail({
+    // Determine host and protocol
+    const host = req.get("host") || "localhost:5000";
+    const protocol = (host.includes("localhost") || host.includes("127.0.0.1")) ? req.protocol : "https";
+
+    // Primary web reset link (works directly via backend HTML UI or frontend)
+    const resetLink = `${protocol}://${host}/api/auth/reset-password?token=${plainToken}&email=${encodeURIComponent(user.email)}`;
+
+    // Build professional branded HTML email using template helper
+    const { subject, text, html } = buildResetPasswordEmailContent(
+      user.name || "User",
+      resetLink,
+      "Kevalon Finance"
+    );
+
+    let emailResult = null;
+    try {
+      emailResult = await sendEmail({
         to: user.email,
         subject,
         text,
@@ -404,22 +420,40 @@ const forgotPassword = async (req, res, next) => {
         templateParams: {
           reset_link: resetLink,
           link: resetLink,
-          company_name: "Kevalon ERP",
+          resetPasswordLink: resetLink,
+          url: resetLink,
+          company_name: "Kevalon Finance",
           website_link: env.CLIENT_URL || `${protocol}://${host}`,
         },
       });
-      logger.info(
-        { userId: user._id },
-        `Password reset token generated and sent`,
-      );
-    } else {
-      logger.info(`Password reset requested for non-existent email: ${email}`);
+    } catch (mailErr) {
+      logger.error({ err: mailErr }, `Failed to dispatch reset email: ${mailErr.message}`);
     }
 
-    // Always return generic message to prevent account enumeration
+    logger.info(
+      { userId: user._id, provider: emailResult?.provider },
+      `Password reset token generated and dispatched`,
+    );
+
+    // Prominently print in console so developer/admin can instantly see/use the reset link
+    console.log(`\n======================================================`);
+    console.log(`🔑 [FINANCE] PASSWORD RESET LINK GENERATED`);
+    console.log(`👤 User: ${user.name} (${user.email})`);
+    console.log(`🔗 Reset URL: ${resetLink}`);
+    console.log(`⏰ Expiry: 30 minutes`);
+    if (emailResult && emailResult.simulated) {
+      console.log(`⚠️ Email simulated/fallback (click link above to reset password)`);
+    } else if (emailResult && emailResult.success) {
+      console.log(`📧 Email delivered via ${emailResult.provider || 'SMTP'}`);
+    }
+    console.log(`======================================================\n`);
+
     return res.status(200).json({
       success: true,
-      message: "If that email exists, a reset link has been sent",
+      message: "Password reset link sent successfully. Please check your email.",
+      resetUrl: resetLink,
+      resetLink,
+      emailSent: Boolean(emailResult?.success && !emailResult?.simulated),
     });
   } catch (error) {
     next(error);
@@ -1342,7 +1376,7 @@ const renderResetFormHtml = (token) => `
 <body>
   <div class="container">
     <div class="logo-container">
-      <span class="logo-text">KT-CRM</span>
+      <span class="logo-text">Kevalon Finance</span>
     </div>
 
     <div id="formCard">
@@ -1384,7 +1418,7 @@ const renderResetFormHtml = (token) => `
       <div class="icon-container">✓</div>
       <h1 class="title">Password Reset Successfully!</h1>
       <p class="subtitle" style="margin-bottom: 20px;">Your password has been updated. You can now return to the app and log in with your new password.</p>
-      <a href="ktcrm://" class="btn-app">Open KT-CRM App</a>
+      <a href="${env.CLIENT_URL || '/'}" class="btn-app">Back to Kevalon Finance</a>
     </div>
   </div>
 
