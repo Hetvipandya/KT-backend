@@ -197,5 +197,34 @@ describe("Holiday Exclusion Rule & Leave Days Calculation Tests", () => {
     assert.strictEqual(result.excludedHolidays, 1, "1 Jan Holiday");
     assert.strictEqual(result.excludedSaturdays, 0, "2 Jan 2027 is 1st Saturday");
   });
+
+  test("11. Timezone & Midnight/Boundary Regression Tests (00:00, 23:59, UTC->IST)", async () => {
+    // 1. ISO string with 00:00:00.000Z
+    expect(toDateString("2026-10-15T00:00:00.000Z")).toBe("2026-10-15");
+
+    // 2. ISO string with 23:59:59.999Z
+    expect(toDateString("2026-10-15T23:59:59.999Z")).toBe("2026-10-15");
+
+    // 3. String with timezone offset
+    expect(toDateString("2026-10-15T00:00:00+05:30")).toBe("2026-10-15");
+
+    // 4. Calculate leave using ISO datetime inputs without day-shift errors
+    const isoResult = await calculateWorkingLeaveDays("2026-10-05T00:00:00.000Z", "2026-10-09T23:59:59.999Z");
+    expect(isoResult.workingDays).toBe(5);
+    expect(isoResult.workingDates).toEqual([
+      "2026-10-05",
+      "2026-10-06",
+      "2026-10-07",
+      "2026-10-08",
+      "2026-10-09",
+    ]);
+
+    // 5. Month boundary calculation (31 Jan to 1 Feb)
+    const monthBoundary = await calculateWorkingLeaveDays("2026-01-31", "2026-02-01");
+    // 31 Jan 2026 is Saturday (5th Sat - working), 1 Feb 2026 is Sunday (excluded)
+    expect(monthBoundary.totalCalendarDays).toBe(2);
+    expect(monthBoundary.excludedSundays).toBe(1);
+    expect(monthBoundary.workingDays).toBe(1);
+  });
 });
 

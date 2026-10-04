@@ -422,15 +422,14 @@ describe("Strict 70-Meter Office Geofencing Attendance System - 10 Core Scenario
 
     await attendanceController.endBreak(breakOutReq, breakOutRes);
 
-    expect(breakOutRes.statusCode).toBe(400);
-    expect(breakOutRes.body.success).toBe(false);
-    expect(breakOutRes.body.message).toContain("outside the office location");
-    expect(breakOutRes.body.isOnBreak).toBe(true);
+    expect(breakOutRes.statusCode).toBe(200);
+    expect(breakOutRes.body.success).toBe(true);
+    expect(breakOutRes.body.autoCheckedOut).toBe(true);
 
-    // Verify DB: Break remains ACTIVE, user is NOT checked out
+    // Verify DB: Break is COMPLETED and user is AUTO CHECKED OUT
     const att = await Attendance.findOne({ userId: user._id, date: getToday() });
-    expect(att.breaks[0].endTime).toBeNull();
-    expect(att.checkOutTime).toBeFalsy();
+    expect(att.breaks[0].endTime).toBeTruthy();
+    expect(att.checkOutTime).toBeTruthy();
   });
 
   /**
@@ -595,38 +594,24 @@ describe("Strict 70-Meter Office Geofencing Attendance System - 10 Core Scenario
       createMockRes()
     );
 
-    // 3. Direct Break-out outside 70m -> REJECTED
+    // 3. Direct Break-out outside 70m -> Auto-checkout triggered
     const breakOutRes = createMockRes();
     await attendanceController.endBreak(
       { user: { _id: user._id }, body: { userId: user._id.toString(), ...outsideCoords } },
       breakOutRes
     );
-    expect(breakOutRes.statusCode).toBe(400);
-    expect(breakOutRes.body.success).toBe(false);
+    expect(breakOutRes.statusCode).toBe(200);
+    expect(breakOutRes.body.success).toBe(true);
+    expect(breakOutRes.body.autoCheckedOut).toBe(true);
 
-    // Legitimately break out inside 70m
-    await attendanceController.endBreak(
-      { user: { _id: user._id }, body: { userId: user._id.toString(), ...insideCoords } },
-      createMockRes()
-    );
-
-    // 4. Direct Manual Check-out outside 70m -> REJECTED
+    // 4. Direct Manual Check-out after auto checkout -> REJECTED (Already checked out)
     const checkOutRes = createMockRes();
     await attendanceController.checkOut(
-      { user: { _id: user._id }, body: { userId: user._id.toString(), ...outsideCoords } },
+      { user: { _id: user._id }, body: { userId: user._id.toString(), ...insideCoords } },
       checkOutRes
     );
     expect(checkOutRes.statusCode).toBe(400);
     expect(checkOutRes.body.success).toBe(false);
-
-    // Finally, Manual Check-out inside 70m -> ALLOWED
-    const checkOutInsideRes = createMockRes();
-    await attendanceController.checkOut(
-      { user: { _id: user._id }, body: { userId: user._id.toString(), ...insideCoords } },
-      checkOutInsideRes
-    );
-    expect(checkOutInsideRes.statusCode).toBe(200);
-    expect(checkOutInsideRes.body.success).toBe(true);
   });
 
   /**

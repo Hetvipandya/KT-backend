@@ -44,7 +44,7 @@ exports.getEmployeeDashboard = async (req, res) => {
     const today = getTodayIST();
 
     // 1. Employee Info
-    const user = await User.findById(userId).select("-password -plainPassword");
+    const user = await User.findById(userId).select("-password");
     const employee = await Employee.findOne({
       $or: [{ userID: userId }, { userId }],
     });

@@ -517,7 +517,6 @@ const resetPassword = async (req, res, next) => {
     // Set new password cleanly so pre-save hook syncs both password and passwordHash
     user.password = String(requestedPassword).trim();
     user.passwordHash = undefined;
-    user.plainPassword = String(requestedPassword).trim();
 
     // Clear reset tokens
     user.passwordResetTokenHash = null;
@@ -593,7 +592,6 @@ const changePassword = async (req, res, next) => {
 
     user.passwordHash = await hashPassword(newPassword);
     user.password = newPassword;
-    user.plainPassword = newPassword;
     user.mustChangePassword = false;
     user.isFirstLogin = false;
     await user.save();
@@ -1030,7 +1028,6 @@ const handleResetPasswordWeb = async (req, res, next) => {
     // Set new password cleanly
     user.password = String(requestedPassword).trim();
     user.passwordHash = undefined;
-    user.plainPassword = String(requestedPassword).trim();
 
     user.passwordResetTokenHash = null;
     user.resetPasswordToken = null;

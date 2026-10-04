@@ -235,16 +235,10 @@ app.use('/api/screenshot', screenshotRoutes);
 // Company endpoints use one authenticated, validated controller and route entry.
 app.use('/api/company', finCompanyRoutes);
 
-app.use('/api/department', ktDepartmentRoutes);
+// Unified Module Routes (Combining HRMS + Finance Endpoints)
 app.use('/api/department', finDepartmentRoutes);
-
-app.use('/api/employee', ktEmployeeRoutes);
 app.use('/api/employee', finEmployeeRoutes);
-
-app.use('/api/expense', ktExpenseRoutes);
 app.use('/api/expense', finExpenseRoutes);
-
-app.use('/api/role', ktRoleRoutes);
 app.use('/api/role', finRoleRoutes);
 
 // FIN Specific Routes

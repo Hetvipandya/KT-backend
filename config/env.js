@@ -16,6 +16,9 @@ const envSchema = z.object({
   JWT_REFRESH_SECRET: z.string().default('your_jwt_refresh_secret_minimum_32_characters_long'),
   INVITE_TOKEN_EXPIRY_HOURS: z.coerce.number().default(48),
 
+  RATE_LIMIT_WINDOW_MS: z.coerce.number().default(15 * 60 * 1000),
+  RATE_LIMIT_MAX: z.coerce.number().default(10),
+
   EMAIL_USER: z.string().optional().or(z.literal('')),
   EMAIL_PASS: z.string().optional().or(z.literal('')),
   SMTP_HOST: z.string().optional().or(z.literal('')),

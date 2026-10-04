@@ -63,6 +63,16 @@ const departmentSchema = new mongoose.Schema(
   }
 );
 
+departmentSchema.index(
+  { companyId: 1, departmentName: 1 },
+  { unique: true, partialFilterExpression: { companyId: { $ne: null }, departmentName: { $gt: "" } } }
+);
+
+departmentSchema.index(
+  { companyId: 1, code: 1 },
+  { unique: true, partialFilterExpression: { companyId: { $ne: null }, code: { $type: "string" } } }
+);
+
 departmentSchema.pre('validate', function (next) {
   if (this.name && !this.departmentName) {
     this.departmentName = this.name;

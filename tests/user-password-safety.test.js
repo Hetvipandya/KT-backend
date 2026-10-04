@@ -54,19 +54,52 @@ describe("password safety for user updates", () => {
     expect(buildLoginLookupQuery("   ")).toBeNull();
   });
 
-  it("retains the updated password in the compatibility plaintext field after a password update", () => {
+  it("updates password securely without setting plainPassword", () => {
     const user = new User({
       name: "Amit Patel",
       email: "amit@example.com",
       password: "OldPass123",
-      plainPassword: "OldPass123",
       role: "employee",
     });
 
     __test__applyPasswordUpdate(user, "NewPass456");
 
     expect(user.password).toBe("NewPass456");
-    expect(user.plainPassword).toBe("NewPass456");
+    expect(user.plainPassword).toBeUndefined();
+  });
+
+  it("ensures passwords are hashed and plainPassword is never exposed in JSON output", async () => {
+    const bcrypt = require("bcryptjs");
+    const user = new User({
+      name: "Security Test",
+      email: "sec@example.com",
+      password: "MySecurePassword123!",
+      role: "employee",
+    });
+
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(user.password, salt);
+    user.password = hashedPassword;
+    user.passwordHash = hashedPassword;
+
+    // Verification 1: Password is stored in hashed format
+    expect(user.password).toMatch(/^\$2[ab]\$/);
+    expect(user.passwordHash).toMatch(/^\$2[ab]\$/);
+    expect(user.plainPassword).toBeUndefined();
+
+    // Verification 2: Login comparison works with correct password
+    const isMatch = await user.comparePassword("MySecurePassword123!");
+    expect(isMatch).toBe(true);
+
+    // Verification 3: Login comparison fails with wrong password
+    const isWrongMatch = await user.comparePassword("WrongPassword!");
+    expect(isWrongMatch).toBe(false);
+
+    // Verification 4: JSON serialization strips password fields
+    const jsonOutput = JSON.parse(JSON.stringify(user));
+    expect(jsonOutput.password).toBeUndefined();
+    expect(jsonOutput.passwordHash).toBeUndefined();
+    expect(jsonOutput.plainPassword).toBeUndefined();
   });
 
   it("does not force a password reset on ordinary successful logins for hr and team lead accounts", () => {

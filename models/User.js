@@ -107,6 +107,7 @@ const userSchema =
 
       password: {
         type: String,
+        select: false,
         required: function () {
           return !this.passwordHash;
         },
@@ -115,12 +116,6 @@ const userSchema =
       passwordHash: {
         type: String,
         select: false,
-        default: null,
-      },
-
-      // testing mate
-      plainPassword: {
-        type: String,
         default: null,
       },
 
@@ -254,18 +249,38 @@ const userSchema =
     }
   );
 
+// Ensure sensitive password fields are never serialized in API responses
+userSchema.set("toJSON", {
+  transform: function (doc, ret) {
+    delete ret.password;
+    delete ret.passwordHash;
+    delete ret.plainPassword;
+    return ret;
+  },
+});
+userSchema.set("toObject", {
+  transform: function (doc, ret) {
+    delete ret.password;
+    delete ret.passwordHash;
+    delete ret.plainPassword;
+    return ret;
+  },
+});
+
 // ================= PRE SAVE =================
 userSchema.pre(
   "save",
   async function (next) {
     try {
-      if (this.isModified("password")) {
-        const salt = await bcrypt.genSalt(10);
-        const hashedPassword = await bcrypt.hash(this.password, salt);
-
-        this.password = hashedPassword;
-        this.passwordHash = hashedPassword;
-
+      if (this.isModified("password") && this.password) {
+        if (!this.password.startsWith("$2a$") && !this.password.startsWith("$2b$")) {
+          const salt = await bcrypt.genSalt(10);
+          const hashedPassword = await bcrypt.hash(this.password, salt);
+          this.password = hashedPassword;
+          this.passwordHash = hashedPassword;
+        } else {
+          this.passwordHash = this.password;
+        }
         return next();
       }
 
@@ -286,9 +301,7 @@ userSchema.methods.comparePassword =
   async function (
     enteredPassword
   ) {
-    const hasTemporaryPasswordFlow =
-      this.isFirstLogin === true ||
-      this.mustChangePassword === true;
+    if (!enteredPassword) return false;
 
     const hashCandidates = [
       this.passwordHash,
@@ -300,28 +313,35 @@ userSchema.methods.comparePassword =
         value !== ""
     );
 
-    if (!hashCandidates.length && !hasTemporaryPasswordFlow) {
-      return false;
-    }
-
     for (const candidate of hashCandidates) {
-      try {
-        const isHashMatch = await bcrypt.compare(
-          enteredPassword,
-          candidate
-        );
-
-        if (isHashMatch) {
+      if (typeof candidate === "string") {
+        if (candidate.startsWith("$2a$") || candidate.startsWith("$2b$")) {
+          try {
+            const isHashMatch = await bcrypt.compare(
+              String(enteredPassword),
+              candidate
+            );
+            if (isHashMatch) {
+              return true;
+            }
+          } catch (error) {
+            // Ignore invalid hash values and continue.
+          }
+        } else if (candidate === String(enteredPassword)) {
+          // Self-healing migration for legacy unhashed passwords:
+          // Immediately upgrade to bcrypt hash in DB
+          try {
+            const salt = await bcrypt.genSalt(10);
+            const hashedPassword = await bcrypt.hash(String(enteredPassword), salt);
+            this.password = hashedPassword;
+            this.passwordHash = hashedPassword;
+            this.plainPassword = undefined;
+            await this.save();
+          } catch (err) {
+            // ignore save error during auth check
+          }
           return true;
         }
-      } catch (error) {
-        // Ignore invalid hash values and continue.
-      } 
-    }
-
-    if (hasTemporaryPasswordFlow && this.plainPassword) {
-      if (String(this.plainPassword) === String(enteredPassword)) {
-        return true;
       }
     }
 

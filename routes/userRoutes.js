@@ -3,6 +3,8 @@ const express =
 
 const router =
   express.Router();
+
+const { authLimiter } = require("../middleware/rateLimiter");
  
 const {
   updateProfile,
@@ -60,6 +62,7 @@ router.put(
 // ================= LOGIN =================
 router.post(
   "/login",
+  authLimiter,
   loginUser
 );  //done
 
@@ -72,6 +75,7 @@ router.post(
 // ================= FORGOT PASSWORD =================
 router.post(
   "/forgot-password",
+  authLimiter,
   forgotPassword
 ); //done
 

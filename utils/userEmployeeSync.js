@@ -103,8 +103,6 @@ exports.syncEmployeeToUser = async ({ employee, role, userData = {} }) => {
     user = await User.create({
       ...payload,
       password: generatedPassword,
-      passwordHash: generatedPassword,
-      plainPassword: generatedPassword,
     });
 
     try {
@@ -120,11 +118,9 @@ exports.syncEmployeeToUser = async ({ employee, role, userData = {} }) => {
   } else {
     // Never overwrite a user who already has a valid, emailed temp password.
     // Approval and employee sync must not regenerate credentials for an existing account.
-    if (!user.passwordHash && !user.password && !user.plainPassword) {
+    if (!user.passwordHash && !user.password) {
       const generatedPassword = Math.random().toString(36).slice(-8);
       user.password = generatedPassword;
-      user.passwordHash = generatedPassword;
-      user.plainPassword = generatedPassword;
     }
 
     Object.assign(user, payload);

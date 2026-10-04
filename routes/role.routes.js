@@ -1,57 +1,19 @@
 const express = require('express');
 const router = express.Router();
+
+const ktRoleRoutes = require('./roleRoutes');
+const finRoleController = require('../controllers/role.controller');
 const authenticate = require('../middleware/authenticate');
 const checkCompanyAccess = require('../middleware/companyAccess');
-const roleController = require('../controllers/role.controller');
 
-/**
- * NOTE — Permission enforcement:
- * Since Module 16 (User Management) does not exist yet, these endpoints are
- * open to any authenticated user that belongs to the target company.
- * Once Module 16 is built, add a permission-gate middleware here that checks
- * the caller's role has at least "manage" on UserManagement before allowing
- * POST /api/role, PUT .../permissions, and DELETE /api/role/:id.
- */
+// 1. KT HRMS Role Endpoints (/create, /list, /get/:id, /update/:id, /delete/:id)
+router.use('/', ktRoleRoutes);
 
-// POST /api/role/seed-default — MUST be registered BEFORE /:id routes to avoid
-// the literal string "seed-default" being mistaken for a MongoDB ObjectId.
-router.post(
-  '/seed-default',
-  authenticate,
-  checkCompanyAccess,
-  roleController.seedDefault
-);
-
-// POST /api/role — Create a custom role
-router.post(
-  '/',
-  authenticate,
-  checkCompanyAccess,
-  roleController.createRole
-);
-
-// GET /api/role?companyId= — List all roles for a company
-router.get(
-  '/',
-  authenticate,
-  checkCompanyAccess,
-  roleController.listRoles
-);
-
-// PUT /api/role/:id/permissions — Merge-update a role's permission matrix
-router.put(
-  '/:id/permissions',
-  authenticate,
-  checkCompanyAccess,
-  roleController.updatePermissions
-);
-
-// DELETE /api/role/:id — Delete a custom (non-system) role
-router.delete(
-  '/:id',
-  authenticate,
-  checkCompanyAccess,
-  roleController.deleteRole
-);
+// 2. Finance Role Endpoints (/seed-default, /, /:id/permissions, /:id)
+router.post('/seed-default', authenticate, checkCompanyAccess, finRoleController.seedDefault);
+router.post('/', authenticate, checkCompanyAccess, finRoleController.createRole);
+router.get('/', authenticate, checkCompanyAccess, finRoleController.listRoles);
+router.put('/:id/permissions', authenticate, checkCompanyAccess, finRoleController.updatePermissions);
+router.delete('/:id', authenticate, checkCompanyAccess, finRoleController.deleteRole);
 
 module.exports = router;

@@ -46,7 +46,6 @@ const applyPasswordUpdate = (user, newPassword) => {
 
   user.password = normalizedPassword;
   user.passwordHash = undefined;
-  user.plainPassword = normalizedPassword;
 
   return user;
 };
@@ -766,9 +765,6 @@ const registerUser = async (req, res) => {
       // Mongoose pre-save middleware will bcrypt hash it.
       password: generatedPassword,
 
-      // Keep this only if your existing system needs it.
-      plainPassword: generatedPassword,
-
       role: normalizedRole,
 
       // Employee, intern and team lead accounts
@@ -1037,11 +1033,10 @@ const approveEmployee = async (req, res) => {
 
     user.isApproved = true;
 
-    const pwdToSend = user.plainPassword || user.password;
-    if (pwdToSend && user.email) {
+    if (user.email) {
       sendTemporaryPasswordEmail(
         user.email,
-        pwdToSend,
+        "Temporary Password Sent During Creation",
         "Kevalon Technology",
       ).catch((emailError) => {
         console.error("Approved user password email error:", emailError.message);
@@ -1152,7 +1147,7 @@ const loginUser = async (req, res) => {
     }
 
     const user = await User.findOne(lookup).select(
-      "+password +passwordHash +plainPassword",
+      "+password +passwordHash",
     );
 
     if (!user) {
@@ -1208,10 +1203,6 @@ const loginUser = async (req, res) => {
         success: false,
         message: "Invalid Password",
       });
-    }
-
-    if (user.plainPassword && String(user.plainPassword) === String(password.trim())) {
-      user.plainPassword = null;
     }
 
     // --------------------------------------------------------
@@ -1306,7 +1297,7 @@ const changePassword = async (req, res) => {
     }
 
     const user = await User.findById(requestedUserId).select(
-      "+password +passwordHash +plainPassword",
+      "+password +passwordHash",
     );
 
     if (!user) {

@@ -173,7 +173,6 @@ const inviteUser = async ({ companyId, branchId, name, email, phoneNumber, role,
       phoneNumber,
       role,
       passwordHash,
-      plainPassword,
       mustChangePassword: true,
       isEmailVerified: false,
     });

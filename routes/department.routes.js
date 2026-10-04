@@ -1,4 +1,8 @@
 const express = require('express');
+const router = express.Router();
+
+const ktDepartmentRoutes = require('./departmentRoutes');
+const finDepartmentController = require('../controllers/department.controller');
 const authenticate = require('../middleware/authenticate');
 const access = require('../middleware/companyAccess');
 const validate = require('../middleware/validateRequest');
@@ -7,11 +11,12 @@ const {
   deptQuerySchema,
   validateQuery
 } = require('../validators/department.validators');
-const controller = require('../controllers/department.controller');
 
-const router = express.Router();
+// 1. KT HRMS Department Endpoints (/create, /list, /update)
+router.use('/', ktDepartmentRoutes);
 
-router.post('/', authenticate, validate(createDepartmentSchema), access, controller.create);
-router.get('/', authenticate, validateQuery(deptQuerySchema), access, controller.list);
+// 2. Finance Department Endpoints (/, /)
+router.post('/', authenticate, validate(createDepartmentSchema), access, finDepartmentController.create);
+router.get('/', authenticate, validateQuery(deptQuerySchema), access, finDepartmentController.list);
 
 module.exports = router;
