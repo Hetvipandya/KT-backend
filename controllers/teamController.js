@@ -5,7 +5,7 @@ const TeamMember =
   require( 
     "../models/TeamMember" 
   );
- 
+  
 // =================
 // CREATE TEAM
 // =================
@@ -130,10 +130,6 @@ exports.getTeamList =
           )
           .populate(
             "developers",
-            "name email"
-          )
-          .populate(
-            "interns",
             "name email"
           )
           .populate(

@@ -6,7 +6,7 @@ const router =
 
 const {
   createTeam,
-  assignTeam,
+  assignTeam, 
   getTeamList,
   updateTeam,
   removeTeam,
