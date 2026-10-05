@@ -133,6 +133,10 @@ exports.getTeamList =
             "name email"
           )
           .populate(
+            "interns",
+            "name email"
+          )
+          .populate(
             "designers",
             "name email"
           )

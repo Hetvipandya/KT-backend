@@ -34,9 +34,18 @@ const teamSchema = new mongoose.Schema(
         ref: "Employee",
       },
     ],
+
+    // Interns
+    interns: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+      },
+    ],
   },
   {
     timestamps: true,
+    strictPopulate: false,
   }
 );
 
