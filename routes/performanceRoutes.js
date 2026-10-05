@@ -10,16 +10,21 @@ const {
   getPerformanceDropdown,
 } = require("../controllers/performanceController"); 
 
-router.post("/create", createPerformance); 
+const { protect } = require("../middleware/authMiddleware");
+const { authorizeRoles } = require("../middleware/roleMiddleware");
 
-router.get("/all", getAllPerformance);
+// All routes require authentication
+router.use(protect);
 
-router.get("/dropdown", getPerformanceDropdown);
+// Team Leads, Admin, and HR can submit/give feedback for employees
+router.post("/create", authorizeRoles("team lead", "admin", "hr"), createPerformance); 
+router.post("/feedback", authorizeRoles("team lead", "admin", "hr"), createPerformance); 
+router.put("/update/:id", authorizeRoles("team lead", "admin", "hr"), updatePerformance);
 
-router.get("/:id", getPerformanceById);
-
-router.put("/update/:id", updatePerformance);
-
-router.delete("/delete/:id", deletePerformance);
+// ONLY HR and Admin can view performance records and feedback
+router.get("/all", authorizeRoles("admin", "hr"), getAllPerformance);
+router.get("/dropdown", authorizeRoles("admin", "hr", "team lead"), getPerformanceDropdown);
+router.get("/:id", authorizeRoles("admin", "hr"), getPerformanceById);
+router.delete("/delete/:id", authorizeRoles("admin", "hr"), deletePerformance);
 
 module.exports = router;

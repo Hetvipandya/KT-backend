@@ -76,6 +76,9 @@ const FinanceUser = require("../models/FinanceUser");
 
 exports.protect = async (req, res, next) => {
   try {
+    if (req.user) {
+      return next();
+    }
     let token;
 
     // ================= GET TOKEN =================

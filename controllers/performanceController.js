@@ -2,9 +2,10 @@ const EmployeePerformance = require("../models/EmployeePerformance");
 const Employee = require("../models/Employee");
 const User = require("../models/User");
 const TeamLead = require("../models/Team");
+const TeamLeadActivity = require("../models/TeamLeadActivity");
 
 // =============================
-// Create Performance
+// Create Performance / Team Lead Feedback
 // =============================
 exports.createPerformance = async (req, res) => {
   try {
@@ -12,6 +13,8 @@ exports.createPerformance = async (req, res) => {
       employeeID,
       performancePercentage,
       remarks,
+      feedback,
+      rating,
     } = req.body;
 
     // ============================================================
@@ -25,7 +28,7 @@ exports.createPerformance = async (req, res) => {
     }
 
     // ============================================================
-    // 2. Validate Performance Percentage
+    // 2. Validate Performance Percentage / Rating
     // ============================================================
     let percentage = 0;
 
@@ -48,6 +51,16 @@ exports.createPerformance = async (req, res) => {
       }
     }
 
+    let numericRating = 0;
+    if (rating !== undefined && rating !== null && rating !== "") {
+      numericRating = Number(rating);
+      if (Number.isNaN(numericRating) || numericRating < 0 || numericRating > 10) {
+        numericRating = 0;
+      }
+    }
+
+    const feedbackText = feedback || remarks || "";
+
     // ============================================================
     // 3. Find Employee / Intern / Team Lead
     // ============================================================
@@ -55,28 +68,22 @@ exports.createPerformance = async (req, res) => {
     let employeeName = "";
     let employeeEmail = "";
 
-    // ============================================================
     // 3.1 Check Employee Collection
-    // ============================================================
     const empData = await Employee.findById(employeeID).select(
       "name email firstName lastName"
     );
 
     if (empData) {
       employeeType = "employee";
-
       employeeName =
         empData.name ||
         `${empData.firstName || ""} ${empData.lastName || ""}`.trim() ||
         empData.email ||
         "Unknown Employee";
-
       employeeEmail = empData.email || "";
     }
 
-    // ============================================================
     // 3.2 Check Intern in User Collection
-    // ============================================================
     if (!empData) {
       const userData = await User.findById(employeeID).select(
         "name email role firstName lastName"
@@ -84,20 +91,16 @@ exports.createPerformance = async (req, res) => {
 
       if (userData && userData.role === "intern") {
         employeeType = "intern";
-
         employeeName =
           userData.name ||
           `${userData.firstName || ""} ${userData.lastName || ""}`.trim() ||
           userData.email ||
           "Unknown Intern";
-
         employeeEmail = userData.email || "";
       }
     }
 
-    // ============================================================
     // 3.3 Check Team Lead
-    // ============================================================
     if (!empData && !employeeType) {
       const teamLeadData = await TeamLead.findOne({
         $or: [
@@ -115,21 +118,16 @@ exports.createPerformance = async (req, res) => {
 
         if (leadData) {
           employeeType = "teamlead";
-
           employeeName =
             leadData.name ||
             `${leadData.firstName || ""} ${leadData.lastName || ""}`.trim() ||
             leadData.email ||
             "Unknown Team Lead";
-
           employeeEmail = leadData.email || "";
         }
       }
     }
 
-    // ============================================================
-    // 4. Employee Not Found
-    // ============================================================
     if (!employeeType) {
       return res.status(404).json({
         success: false,
@@ -139,44 +137,72 @@ exports.createPerformance = async (req, res) => {
     }
 
     // ============================================================
-    // 5. Check Duplicate Performance
+    // 4. Evaluator / SubmittedBy Info
     // ============================================================
-    const exists = await EmployeePerformance.findOne({
+    const submittedBy = req.user?._id || null;
+    const evaluatorName = req.user?.name || `${req.user?.firstName || ''} ${req.user?.lastName || ''}`.trim() || req.user?.email || "";
+    const evaluatorRole = req.user?.role || "";
+
+    // ============================================================
+    // 5. Create or Update Performance Record
+    // ============================================================
+    let performance = await EmployeePerformance.findOne({
       employeeID,
     });
 
-    if (exists) {
-      return res.status(400).json({
-        success: false,
-        message: "Performance already exists for this employee.",
+    if (performance) {
+      if (percentage > 0) performance.performancePercentage = percentage;
+      if (numericRating > 0) performance.rating = numericRating;
+      if (feedbackText) {
+        performance.feedback = feedbackText;
+        performance.remarks = feedbackText;
+      }
+      performance.submittedBy = submittedBy || performance.submittedBy;
+      performance.evaluatorName = evaluatorName || performance.evaluatorName;
+      performance.evaluatorRole = evaluatorRole || performance.evaluatorRole;
+
+      await performance.save();
+    } else {
+      performance = await EmployeePerformance.create({
+        employeeID,
+        employeeType,
+        employeeName,
+        employeeEmail,
+        performancePercentage: percentage,
+        rating: numericRating,
+        remarks: feedbackText,
+        feedback: feedbackText,
+        submittedBy,
+        evaluatorName,
+        evaluatorRole,
       });
     }
 
-    // ============================================================
-    // 6. Create Performance
-    // ============================================================
-    const performance = await EmployeePerformance.create({
-      employeeID,
-      employeeType,
-      employeeName,
-      employeeEmail,
+    // Record Team Lead Activity if submitted by a Team Lead
+    const normRole = (evaluatorRole || "").toLowerCase().replace(/[_\s]+/g, "");
+    if (normRole === "teamlead" || normRole === "teamleader") {
+      try {
+        await TeamLeadActivity.create({
+          teamLeadId: submittedBy,
+          employeeId: employeeID,
+          activityType: "performance_monitoring",
+          referenceId: performance._id,
+          status: "completed",
+          remarks: feedbackText,
+        });
+      } catch (actErr) {
+        console.error("TeamLeadActivity creation warning:", actErr.message);
+      }
+    }
 
-      performancePercentage: percentage,
-
-      remarks: remarks || "",
-    });
-
-    // ============================================================
-    // 7. Success Response
-    // ============================================================
     return res.status(201).json({
       success: true,
-      message: "Performance record created successfully.",
+      message: "Performance feedback saved successfully.",
       data: performance,
     });
 
   } catch (err) {
-    console.error("Error creating performance:", err);
+    console.error("Error creating performance feedback:", err);
 
     return res.status(500).json({
       success: false,
@@ -186,14 +212,27 @@ exports.createPerformance = async (req, res) => {
 };
 
 // =============================
-// Get All Performance
+// Get All Performance (ONLY HR & ADMIN)
 // =============================
 exports.getAllPerformance = async (req, res) => {
   try {
+    // Restrict access: Only HR and Admin can view performance feedback
+    const userRole = (req.user?.role || "").toLowerCase().replace(/[_\s]+/g, "");
+    if (userRole !== "admin" && userRole !== "hr") {
+      return res.status(403).json({
+        success: false,
+        message: "Access restricted. Only HR and Admin can view performance feedback.",
+      });
+    }
+
     const performances = await EmployeePerformance.find()
       .populate(
         "employeeID",
         "name email department firstName lastName"
+      )
+      .populate(
+        "submittedBy",
+        "name email role"
       )
       .sort({ createdAt: -1 });
 
@@ -213,16 +252,30 @@ exports.getAllPerformance = async (req, res) => {
 };
 
 // =============================
-// Get Single Performance
+// Get Single Performance (ONLY HR & ADMIN)
 // =============================
 exports.getPerformanceById = async (req, res) => {
   try {
+    // Restrict access: Only HR and Admin can view performance feedback
+    const userRole = (req.user?.role || "").toLowerCase().replace(/[_\s]+/g, "");
+    if (userRole !== "admin" && userRole !== "hr") {
+      return res.status(403).json({
+        success: false,
+        message: "Access restricted. Only HR and Admin can view performance feedback.",
+      });
+    }
+
     const performance = await EmployeePerformance.findById(
       req.params.id
-    ).populate(
-      "employeeID",
-      "name email department firstName lastName"
-    );
+    )
+      .populate(
+        "employeeID",
+        "name email department firstName lastName"
+      )
+      .populate(
+        "submittedBy",
+        "name email role"
+      );
 
     if (!performance) {
       return res.status(404).json({

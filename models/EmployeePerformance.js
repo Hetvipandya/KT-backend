@@ -32,7 +32,35 @@ const employeePerformanceSchema = new mongoose.Schema(
       max: 100,
     },
 
+    rating: {
+      type: Number,
+      default: 0,
+      min: 0,
+      max: 10,
+    },
+
     remarks: {
+      type: String,
+      default: "",
+    },
+
+    feedback: {
+      type: String,
+      default: "",
+    },
+
+    submittedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
+
+    evaluatorName: {
+      type: String,
+      default: "",
+    },
+
+    evaluatorRole: {
       type: String,
       default: "",
     },
