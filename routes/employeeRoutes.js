@@ -53,6 +53,26 @@ const employeeDocuments = upload.fields([
     name: "certificates",
     maxCount: 10,
   },
+  {
+    name: "profileImage",
+    maxCount: 1,
+  },
+  {
+    name: "profileImg",
+    maxCount: 1,
+  },
+  {
+    name: "profilePhoto",
+    maxCount: 1,
+  },
+  {
+    name: "photo",
+    maxCount: 1,
+  },
+  {
+    name: "avatar",
+    maxCount: 1,
+  },
 ]);
 
 // ============================================================
@@ -139,6 +159,7 @@ router.put(
 // Update employee with action / fields
 router.put(
   "/update/:id",
+  employeeDocuments,
   updateEmployee
 );
 
@@ -152,6 +173,7 @@ router.put(
 // General PUT by ID fallback
 router.put(
   "/:id",
+  employeeDocuments,
   updateEmployee
 );
 

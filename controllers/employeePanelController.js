@@ -61,10 +61,24 @@ exports.getEmployeeDashboard = async (req, res) => {
       joiningDate: employee?.joiningDate || user.createdAt,
       profilePhoto:
         employee?.profileImage ||
+        employee?.profileImg ||
         user?.profileImage ||
+        user?.profileImg ||
         user?.photo ||
         user?.imageUrl ||
         user?.avatar ||
+        "",
+      profileImage:
+        employee?.profileImage ||
+        employee?.profileImg ||
+        user?.profileImage ||
+        user?.profileImg ||
+        "",
+      profileImg:
+        employee?.profileImage ||
+        employee?.profileImg ||
+        user?.profileImage ||
+        user?.profileImg ||
         "",
     };
 
@@ -179,7 +193,9 @@ exports.getEmployeeDashboard = async (req, res) => {
             upcomingBirthdays.push({
               name: u.name,
               designation: empData?.designation || u.role,
-              profilePhoto: empData?.profileImage || "",
+              profilePhoto: empData?.profileImage || empData?.profileImg || "",
+              profileImage: empData?.profileImage || empData?.profileImg || "",
+              profileImg: empData?.profileImage || empData?.profileImg || "",
               birthdayDate: birthdayThisYear,
               daysRemaining: diffDays,
             });
@@ -219,10 +235,13 @@ exports.getEmployeeDashboard = async (req, res) => {
       const empData = l.employeeId
         ? employeeMap.get(l.employeeId._id.toString())
         : null;
+      const empImg = empData?.profileImage || empData?.profileImg || "";
       return {
         name: l.employeeId?.name || "Employee",
         designation: empData?.designation || l.employeeId?.role || "",
-        profilePhoto: empData?.profileImage || "",
+        profilePhoto: empImg,
+        profileImage: empImg,
+        profileImg: empImg,
         leaveType: l.leaveType,
         startDate: l.startDate,
         endDate: l.endDate,

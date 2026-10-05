@@ -99,6 +99,10 @@ const employeeSchema = new mongoose.Schema(
       type: String,
       default: ''
     },
+    profileImg: {
+      type: String,
+      default: ''
+    },
 
     // Addresses
     address: {
@@ -237,6 +241,13 @@ employeeSchema.pre('validate', function (next) {
     this.userID = this.userId;
   }
 
+  if (this.profileImage && !this.profileImg) {
+    this.profileImg = this.profileImage;
+  }
+  if (this.profileImg && !this.profileImage) {
+    this.profileImage = this.profileImg;
+  }
+
   if (this.mobile && !this.phone) {
     this.phone = this.mobile;
   }
@@ -260,6 +271,25 @@ employeeSchema.pre('validate', function (next) {
   }
 
   next();
+});
+
+employeeSchema.set('toJSON', {
+  transform: function (doc, ret) {
+    const imgUrl = ret.profileImage || ret.profileImg || '';
+    ret.profileImage = imgUrl;
+    ret.profileImg = imgUrl;
+    ret.profilePhoto = imgUrl;
+    return ret;
+  },
+});
+employeeSchema.set('toObject', {
+  transform: function (doc, ret) {
+    const imgUrl = ret.profileImage || ret.profileImg || '';
+    ret.profileImage = imgUrl;
+    ret.profileImg = imgUrl;
+    ret.profilePhoto = imgUrl;
+    return ret;
+  },
 });
 
 const Employee = mongoose.models.Employee || mongoose.model('Employee', employeeSchema);

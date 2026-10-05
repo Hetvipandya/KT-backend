@@ -189,6 +189,9 @@ const resolveProfileImage = (user) => {
 
   return (
     user.profileImage ||
+    user.profileImg ||
+    user.profilePhoto ||
+    user.profile_img ||
     user.photo ||
     user.imageUrl ||
     user.avatar ||
@@ -231,6 +234,8 @@ const buildUserResponse = (user) => {
     return null;
   }
 
+  const profileImgUrl = resolveProfileImage(user) || null;
+
   return {
     _id: user._id,
     name: user.name,
@@ -239,7 +244,10 @@ const buildUserResponse = (user) => {
     phoneNumber: user.phoneNumber ?? user.phone ?? null,
     dob: user.dob,
     address: user.address,
-    profileImage: resolveProfileImage(user) || null,
+    profileImage: profileImgUrl,
+    profileImg: profileImgUrl,
+    profilePhoto: profileImgUrl,
+    avatar: profileImgUrl,
     department: user.department,
     designation: user.designation,
     gender: user.gender,
@@ -322,6 +330,7 @@ const createEmployeeForUser = async (user) => {
     phoneNumber: user.phoneNumber || user.phone || "",
 
     profileImage: resolveProfileImage(user),
+    profileImg: resolveProfileImage(user),
 
     dob: user.dob || "",
 
@@ -369,7 +378,9 @@ const syncUserToEmployee = async (user) => {
 
   employee.phoneNumber = user.phoneNumber || user.phone || employee.phoneNumber || "";
 
-  employee.profileImage = resolveProfileImage(user) || employee.profileImage || "";
+  const syncedProfileImg = resolveProfileImage(user) || employee.profileImage || employee.profileImg || "";
+  employee.profileImage = syncedProfileImg;
+  employee.profileImg = syncedProfileImg;
 
   employee.dob = user.dob || employee.dob;
 
@@ -403,12 +414,15 @@ const updateProfile = async (req, res) => {
   try {
     const payload = sanitizeUserUpdatePayload(req.body?.user || req.body);
 
-    if (req.file?.path) {
-      payload.profileImage = req.file.path;
+    const uploadedPath = req.file?.path || req.file?.secure_url || req.file?.url;
+    if (uploadedPath) {
+      payload.profileImage = uploadedPath;
+      payload.profileImg = uploadedPath;
     }
 
     const profileImageField = [
       "profileImage",
+      "profileImg",
       "profilePhoto",
       "photo",
       "imageUrl",
@@ -524,8 +538,17 @@ const updateProfile = async (req, res) => {
     }
 
     if (profileImageField) {
-      const profileImage = payload[profileImageField];
-      user.profileImage = profileImage == null ? "" : String(profileImage).trim();
+      const rawProfileImage = payload[profileImageField];
+      if (rawProfileImage) {
+        const { uploadProfileImage: uploadToCloudinary } = require("../services/cloudinary.service");
+        const uploadResult = await uploadToCloudinary(rawProfileImage, user._id || user.email);
+        const finalUrl = uploadResult.secure_url || String(rawProfileImage).trim();
+        user.profileImage = finalUrl;
+        user.profileImg = finalUrl;
+      } else {
+        user.profileImage = "";
+        user.profileImg = "";
+      }
     }
 
     // --------------------------------------------------------
@@ -588,7 +611,10 @@ const getMyProfile = async (req, res) => {
     }).lean();
 
     if (employee) {
-      employee.profileImage = employee.profileImage || resolveProfileImage(user) || "";
+      const empImg = employee.profileImage || employee.profileImg || resolveProfileImage(user) || "";
+      employee.profileImage = empImg;
+      employee.profileImg = empImg;
+      employee.profilePhoto = empImg;
     }
 
     return res.status(200).json({
@@ -630,8 +656,11 @@ const registerUser = async (req, res) => {
       ifscCode,
       role,
       profileImage,
+      profileImg,
+      profilePhoto,
       photo,
       imageUrl,
+      avatar,
     } = req.body;
 
     // --------------------------------------------------------
@@ -639,7 +668,16 @@ const registerUser = async (req, res) => {
     // --------------------------------------------------------
 
     const resolvedPhoneNumber = phoneNumber ?? phone ?? null;
-    const resolvedProfileImage = profileImage || photo || imageUrl || null;
+    const uploadedPath = req.file?.path || req.file?.secure_url || req.file?.url;
+    const rawProfileImage =
+      uploadedPath ||
+      profileImage ||
+      profileImg ||
+      profilePhoto ||
+      photo ||
+      imageUrl ||
+      avatar ||
+      null;
 
     if (
       !name ||
@@ -686,7 +724,15 @@ const registerUser = async (req, res) => {
     const normalizedEmail = email.trim().toLowerCase();
 
     const normalizedPhoneNumber = String(resolvedPhoneNumber).trim();
-    const normalizedProfileImage = resolvedProfileImage ? String(resolvedProfileImage).trim() : null;
+    let normalizedProfileImage = null;
+    if (rawProfileImage) {
+      const { uploadProfileImage: uploadToCloudinary } = require("../services/cloudinary.service");
+      const uploadResult = await uploadToCloudinary(
+        rawProfileImage,
+        normalizedEmail || "user"
+      );
+      normalizedProfileImage = uploadResult.secure_url || String(rawProfileImage).trim();
+    }
 
     // --------------------------------------------------------
     // CHECK EXISTING USER
@@ -734,6 +780,7 @@ const registerUser = async (req, res) => {
       phoneNumber: normalizedPhoneNumber,
 
       profileImage: normalizedProfileImage,
+      profileImg: normalizedProfileImage,
 
       dob,
 
@@ -912,6 +959,8 @@ const registerUser = async (req, res) => {
         phoneNumber: user.phoneNumber,
 
         profileImage: user.profileImage || null,
+        profileImg: user.profileImage || null,
+        profilePhoto: user.profileImage || null,
 
         bankAccount: user.bankAccountNumber || user.bankAccount || null,
         bankAccountNumber: user.bankAccountNumber || user.bankAccount || null,
@@ -1739,6 +1788,74 @@ const renderResetPasswordPage = (req, res) => {
   `);
 };
 
+// ============================================================
+// UPLOAD PROFILE IMAGE (DIRECT CLOUDINARY)
+// ============================================================
+const uploadProfileImage = async (req, res) => {
+  try {
+    let imageSource = null;
+
+    if (req.file?.path || req.file?.secure_url || req.file?.url) {
+      imageSource = req.file.path || req.file.secure_url || req.file.url;
+    } else {
+      const body = req.body || {};
+      imageSource =
+        body.profileImage ||
+        body.profileImg ||
+        body.profilePhoto ||
+        body.image ||
+        body.avatar ||
+        body.photo ||
+        body.file;
+    }
+
+    if (!imageSource) {
+      return res.status(400).json({
+        success: false,
+        message: "No profile image file or data provided",
+      });
+    }
+
+    const { uploadProfileImage: uploadToCloudinary } = require("../services/cloudinary.service");
+    const uploadResult = await uploadToCloudinary(
+      imageSource,
+      req.user?._id || "user"
+    );
+    const cloudinaryUrl = uploadResult.secure_url || imageSource;
+
+    let updatedEmployee = null;
+    let updatedProfile = null;
+
+    if (req.user?._id) {
+      const user = await User.findById(req.user._id);
+      if (user) {
+        user.profileImage = cloudinaryUrl;
+        user.profileImg = cloudinaryUrl;
+        await user.save();
+        updatedEmployee = await syncUserToEmployee(user);
+        updatedProfile = buildUserResponse(user);
+      }
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Profile image uploaded to Cloudinary successfully",
+      profileImage: cloudinaryUrl,
+      profileImg: cloudinaryUrl,
+      url: cloudinaryUrl,
+      secure_url: cloudinaryUrl,
+      profile: updatedProfile,
+      employee: updatedEmployee,
+    });
+  } catch (error) {
+    console.error("Upload Profile Image Error:", error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Failed to upload profile image",
+    });
+  }
+};
+
 // Import OTP controller methods for backward compatibility
 const { sendOTP, verifyOTP } = require("./otpController");
 
@@ -1755,6 +1872,7 @@ module.exports = {
   // HRMS
   updateProfile,
   getMyProfile,
+  uploadProfileImage,
   registerUser,
   getAllUsers,
   approveEmployee,

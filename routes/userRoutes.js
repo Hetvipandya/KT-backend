@@ -8,7 +8,8 @@ const { authLimiter } = require("../middleware/rateLimiter");
  
 const {
   updateProfile,
-  getMyProfile, 
+  getMyProfile,
+  uploadProfileImage,
   registerUser,
   approveEmployee,
   rejectEmployee,
@@ -28,12 +29,28 @@ const {
 
 const { protect } = require("../middleware/authMiddleware");
 const upload = require("../middleware/uploadMiddleware");
+const profileImageUpload = upload.profileImageUpload || upload.single("profileImage");
 
+// ================= PROFILE & CLOUDINARY IMAGE =================
 router.put(
   "/profile/update",
   protect,
-  upload.single("profileImage"),
+  profileImageUpload,
   updateProfile 
+);
+
+router.post(
+  "/profile/update",
+  protect,
+  profileImageUpload,
+  updateProfile 
+);
+
+router.put(
+  "/profile", 
+  protect,
+  profileImageUpload,
+  updateProfile
 );
 
 router.get(
@@ -42,9 +59,24 @@ router.get(
   getMyProfile
 );
 
+router.post(
+  "/profile/upload",
+  protect,
+  profileImageUpload,
+  uploadProfileImage
+);
+
+router.post(
+  "/upload-profile-image",
+  protect,
+  profileImageUpload,
+  uploadProfileImage
+);
+
 // ================= REGISTER =================
 router.post(
   "/register",
+  profileImageUpload,
   registerUser
 );  //done 
 

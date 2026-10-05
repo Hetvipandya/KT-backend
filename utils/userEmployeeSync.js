@@ -76,11 +76,22 @@ exports.syncEmployeeToUser = async ({ employee, role, userData = {} }) => {
 
   const safeUserData = sanitizeUserUpdatePayload(userData || {});
 
+  const profileImgValue =
+    safeUserData.profileImage ||
+    safeUserData.profileImg ||
+    employee?.profileImage ||
+    employee?.profileImg ||
+    user?.profileImage ||
+    user?.profileImg ||
+    "";
+
   const payload = {
     name,
     email: safeUserData.email || employee.email || "",
     phoneNumber: safeUserData.phoneNumber || safeUserData.phone || employee.phoneNumber || employee.mobile || "",
     dob: formatDob(safeUserData.dob || employee.dob),
+    profileImage: profileImgValue,
+    profileImg: profileImgValue,
     address:
       safeUserData.address ||
       employee.currentAddress ||

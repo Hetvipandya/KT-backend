@@ -332,6 +332,42 @@ exports.editEmployee = async (req, res) => {
     await employeeDocument.save();
 
     // ==========================================
+    // PROFILE IMAGE (Cloudinary)
+    // ==========================================
+    const uploadedProfileImg =
+      files?.profileImage?.[0]?.path ||
+      files?.profileImg?.[0]?.path ||
+      files?.profilePhoto?.[0]?.path ||
+      files?.photo?.[0]?.path ||
+      files?.avatar?.[0]?.path ||
+      req.file?.path;
+
+    const rawProfileImg =
+      uploadedProfileImg ||
+      req.body.profileImage ||
+      req.body.profileImg ||
+      req.body.profilePhoto ||
+      req.body.photo ||
+      req.body.avatar;
+
+    if (rawProfileImg) {
+      const { uploadProfileImage } = require("../services/cloudinary.service");
+      const uploadRes = await uploadProfileImage(rawProfileImg, updatedEmployee.employeeID || employeeId);
+      const finalImgUrl = uploadRes.secure_url || String(rawProfileImg).trim();
+      updatedEmployee.profileImage = finalImgUrl;
+      updatedEmployee.profileImg = finalImgUrl;
+      await updatedEmployee.save();
+
+      if (updatedEmployee.userID) {
+        const User = require("../models/User");
+        await User.findByIdAndUpdate(updatedEmployee.userID, {
+          profileImage: finalImgUrl,
+          profileImg: finalImgUrl,
+        });
+      }
+    }
+
+    // ==========================================
     // HISTORY
     // ==========================================
     await EmployeeHistory.create({
@@ -713,12 +749,39 @@ exports.addEmployee = async (req, res) => {
       employeeRole = "intern";
     }
 
+    // ✅ PROFILE IMAGE (Cloudinary)
+    const files = req.files || {};
+    const uploadedProfileImg =
+      files?.profileImage?.[0]?.path ||
+      files?.profileImg?.[0]?.path ||
+      files?.profilePhoto?.[0]?.path ||
+      files?.photo?.[0]?.path ||
+      files?.avatar?.[0]?.path ||
+      req.file?.path;
+
+    const rawProfileImg =
+      uploadedProfileImg ||
+      req.body.profileImage ||
+      req.body.profileImg ||
+      req.body.profilePhoto ||
+      req.body.photo ||
+      req.body.avatar;
+
+    let finalProfileImgUrl = "";
+    if (rawProfileImg) {
+      const { uploadProfileImage } = require("../services/cloudinary.service");
+      const uploadRes = await uploadProfileImage(rawProfileImg, employeeID || email);
+      finalProfileImgUrl = uploadRes.secure_url || String(rawProfileImg).trim();
+    }
+
     // ✅ CREATE EMPLOYEE
     const employee = await Employee.create({
       ...req.body,
       phoneNumber: resolvedPhoneNumber,
       mobile: undefined,
       employeeID,
+      profileImage: finalProfileImgUrl || req.body.profileImage || "",
+      profileImg: finalProfileImgUrl || req.body.profileImg || "",
       role: employeeRole,
       currentAction: "created",
       isTeamLead: employeeRole === "team lead",
@@ -734,6 +797,8 @@ exports.addEmployee = async (req, res) => {
     name: `${firstName} ${lastName}`.trim(),
     email,
     phoneNumber: resolvedPhoneNumber,
+    profileImage: finalProfileImgUrl || employee.profileImage || "",
+    profileImg: finalProfileImgUrl || employee.profileImg || "",
     address:
       req.body.currentAddress ||
       req.body.permanentAddress ||
@@ -762,9 +827,6 @@ exports.addEmployee = async (req, res) => {
         await employee.save();
       }
     }
-
-    // ✅ FILES
-    const files = req.files || {};
 
     // ✅ CREATE DOCUMENTS
     const employeeDocuments = await EmployeeDocument.create({
@@ -852,8 +914,12 @@ exports.getEmployeeList = async (req, res) => {
           Employee.findByIdAndUpdate(employee._id, { designation: linkedUser.designation }).catch(() => {});
         }
 
+        const empImg = employeeData.profileImage || employeeData.profileImg || linkedUser?.profileImage || linkedUser?.profileImg || "";
         return {
           ...employeeData,
+          profileImage: empImg,
+          profileImg: empImg,
+          profilePhoto: empImg,
           role: finalRole || (employeeData.isTeamLead ? "team lead" : "employee"),
           designation: finalDesignation,
           department: departmentName,
@@ -916,10 +982,14 @@ exports.getEmployeeProfile =
           createdAt: -1,
         });
 
+      const empImg = employee.profileImage || employee.profileImg || "";
       res.status(200).json({
         success: true,
         employee: {
           ...employee.toObject(),
+          profileImage: empImg,
+          profileImg: empImg,
+          profilePhoto: empImg,
           department: departmentName,
         },
         documents,
@@ -1075,6 +1145,32 @@ exports.updateEmployee = async (req, res) => {
 
     delete updateData.action;
 
+    // Handle profile image upload to Cloudinary
+    const files = req.files || {};
+    const uploadedProfileImg =
+      files?.profileImage?.[0]?.path ||
+      files?.profileImg?.[0]?.path ||
+      files?.profilePhoto?.[0]?.path ||
+      files?.photo?.[0]?.path ||
+      files?.avatar?.[0]?.path ||
+      req.file?.path;
+
+    const rawProfileImg =
+      uploadedProfileImg ||
+      req.body.profileImage ||
+      req.body.profileImg ||
+      req.body.profilePhoto ||
+      req.body.photo ||
+      req.body.avatar;
+
+    if (rawProfileImg) {
+      const { uploadProfileImage } = require("../services/cloudinary.service");
+      const uploadRes = await uploadProfileImage(rawProfileImg, employee.employeeID || employeeId);
+      const finalImgUrl = uploadRes.secure_url || String(rawProfileImg).trim();
+      updateData.profileImage = finalImgUrl;
+      updateData.profileImg = finalImgUrl;
+    }
+
     const updatedEmployee = await Employee.findByIdAndUpdate(
       employee._id,
       updateData,
@@ -1108,6 +1204,8 @@ exports.updateEmployee = async (req, res) => {
           name: `${updatedEmployee.firstName} ${updatedEmployee.lastName}`.trim(),
           email: updatedEmployee.email,
           phoneNumber: updatedEmployee.mobile,
+          profileImage: updatedEmployee.profileImage || updatedEmployee.profileImg || "",
+          profileImg: updatedEmployee.profileImage || updatedEmployee.profileImg || "",
           address: updatedEmployee.currentAddress || updatedEmployee.permanentAddress || "",
           department: updatedEmployee.department,
           designation: updatedEmployee.designation,
@@ -1123,7 +1221,6 @@ exports.updateEmployee = async (req, res) => {
       ).catch(() => {});
     }
 
-    const files = req.files || {};
     let employeeDocument = await EmployeeDocument.findOne({
       employeeID: employee._id,
     });

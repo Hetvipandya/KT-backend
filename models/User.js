@@ -42,6 +42,12 @@ const userSchema =
         trim: true,
       },
 
+      profileImg: {
+        type: String,
+        default: null,
+        trim: true,
+      },
+
       dob: {
         type: String,
         default: null,
@@ -255,6 +261,10 @@ userSchema.set("toJSON", {
     delete ret.password;
     delete ret.passwordHash;
     delete ret.plainPassword;
+    const imgUrl = ret.profileImage || ret.profileImg || null;
+    ret.profileImage = imgUrl;
+    ret.profileImg = imgUrl;
+    ret.profilePhoto = imgUrl;
     return ret;
   },
 });
@@ -263,6 +273,10 @@ userSchema.set("toObject", {
     delete ret.password;
     delete ret.passwordHash;
     delete ret.plainPassword;
+    const imgUrl = ret.profileImage || ret.profileImg || null;
+    ret.profileImage = imgUrl;
+    ret.profileImg = imgUrl;
+    ret.profilePhoto = imgUrl;
     return ret;
   },
 });
@@ -272,6 +286,12 @@ userSchema.pre(
   "save",
   async function (next) {
     try {
+      if (this.profileImage && !this.profileImg) {
+        this.profileImg = this.profileImage;
+      } else if (this.profileImg && !this.profileImage) {
+        this.profileImage = this.profileImg;
+      }
+
       if (this.isModified("password") && this.password) {
         if (!this.password.startsWith("$2a$") && !this.password.startsWith("$2b$")) {
           const salt = await bcrypt.genSalt(10);

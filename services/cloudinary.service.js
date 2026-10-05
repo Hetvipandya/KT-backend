@@ -1,19 +1,11 @@
 'use strict';
 
-const cloudinary = require('cloudinary').v2;
+const cloudinary = require('../config/cloudinary');
 
-// Configure Cloudinary only if the configuration variables are present
-const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
-const apiKey = process.env.CLOUDINARY_API_KEY;
-const apiSecret = process.env.CLOUDINARY_API_SECRET;
-
-if (cloudName && apiKey && apiSecret) {
-  cloudinary.config({
-    cloud_name: cloudName,
-    api_key: apiKey,
-    api_secret: apiSecret
-  });
-}
+// Ensure configuration variables are present with defaults
+const cloudName = process.env.CLOUDINARY_CLOUD_NAME || 'domq86row';
+const apiKey = process.env.CLOUDINARY_API_KEY || '831937586592815';
+const apiSecret = process.env.CLOUDINARY_API_SECRET || '2PoHEcgp9Xk7usiFKJFTBFuJzko';
 
 /**
  * Uploads an invoice PDF buffer to Cloudinary.
@@ -238,11 +230,68 @@ const uploadScreenshot = async (imageSource, userId) => {
   };
 };
 
+/**
+ * Uploads a profile image (file buffer, data URI base64, or remote image URL) to Cloudinary.
+ * If the input is already a Cloudinary URL, it returns it directly.
+ * 
+ * @param {string|Buffer} imageSource - Base64 data URI, remote image URL, or file Buffer
+ * @param {string} [identifier='user'] - Identifier used for generating public_id
+ * @returns {Promise<{ secure_url: string, public_id: string }>}
+ */
+const uploadProfileImage = async (imageSource, identifier = 'user') => {
+  if (!imageSource) {
+    return { secure_url: '', public_id: '' };
+  }
+
+  // If already hosted on Cloudinary, return as is
+  if (
+    typeof imageSource === 'string' &&
+    (imageSource.includes('res.cloudinary.com') || imageSource.includes('cloudinary.com'))
+  ) {
+    return { secure_url: imageSource.trim(), public_id: '' };
+  }
+
+  const cleanId = String(identifier).replace(/[^a-zA-Z0-9_-]/g, '_');
+  const publicId = `profile_${cleanId}_${Date.now()}`;
+
+  if (Buffer.isBuffer(imageSource)) {
+    return new Promise((resolve, reject) => {
+      const stream = cloudinary.uploader.upload_stream(
+        {
+          folder: 'kt-crm/profiles',
+          public_id: publicId,
+          resource_type: 'image',
+        },
+        (error, result) => {
+          if (error) return reject(error);
+          resolve({
+            secure_url: result.secure_url,
+            public_id: result.public_id,
+          });
+        }
+      );
+      stream.end(imageSource);
+    });
+  }
+
+  const result = await cloudinary.uploader.upload(imageSource, {
+    folder: 'kt-crm/profiles',
+    public_id: publicId,
+    resource_type: 'image',
+  });
+
+  return {
+    secure_url: result.secure_url,
+    public_id: result.public_id,
+  };
+};
+
 module.exports = {
   uploadInvoicePdf,
   deleteInvoicePdf,
   uploadLedgerPdf,
   uploadReportPdf,
   uploadCompanyLogo,
-  uploadScreenshot
+  uploadScreenshot,
+  uploadProfileImage
 };
