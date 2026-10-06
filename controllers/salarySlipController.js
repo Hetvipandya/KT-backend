@@ -9,9 +9,9 @@ const { renderPayslipHtml, renderPayslipPdf } = require("../services/payslipRend
 // =====================================================
 const getSalarySlipHtml = async (req, res) => {
   try {
-    const { salaryId } = req.params;
+    const salaryId = req.params.salaryId || req.params.id;
 
-    if (!mongoose.Types.ObjectId.isValid(salaryId)) {
+    if (!salaryId || !mongoose.Types.ObjectId.isValid(salaryId)) {
       return res.status(400).send("<h3>Invalid Salary ID</h3>");
     }
 
@@ -30,7 +30,6 @@ const getSalarySlipHtml = async (req, res) => {
         const company = await Company.findById(monthlySalary.companyId).maxTimeMS(2000);
         if (company) companyData = company.toObject();
       } catch (err) {
-        // Fallback gracefully if company query fails or DB unavailable
         companyData = {};
       }
     }
@@ -51,13 +50,13 @@ const getSalarySlipHtml = async (req, res) => {
 
 // =====================================================
 // GET SALARY SLIP PDF DOWNLOAD
-// GET /api/salary-slips/:salaryId/pdf
+// GET /api/salary-slips/:salaryId/pdf OR /api/payroll/payslip/pdf/:id
 // =====================================================
 const getSalarySlipPdf = async (req, res) => {
   try {
-    const { salaryId } = req.params;
+    const salaryId = req.params.salaryId || req.params.id;
 
-    if (!mongoose.Types.ObjectId.isValid(salaryId)) {
+    if (!salaryId || !mongoose.Types.ObjectId.isValid(salaryId)) {
       return res.status(400).json({
         success: false,
         message: "Invalid Salary ID",

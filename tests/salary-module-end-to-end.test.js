@@ -11,6 +11,7 @@ const Attendance = require("../models/Attendance");
 const salaryStructureRoutes = require("../routes/salaryStructureRoutes");
 const monthlySalaryRoutes = require("../routes/monthlySalaryRoutes");
 const salarySlipRoutes = require("../routes/salarySlipRoutes");
+const payrollRoutes = require("../routes/payrollRoutes");
 
 describe("Salary Module End-to-End Test Suite", () => {
   let app;
@@ -72,6 +73,7 @@ describe("Salary Module End-to-End Test Suite", () => {
     app.use("/api/salary-structures", salaryStructureRoutes);
     app.use("/api/salaries", monthlySalaryRoutes);
     app.use("/api/salary-slips", salarySlipRoutes);
+    app.use("/api/payroll", payrollRoutes);
   });
 
   beforeEach(() => {
@@ -278,6 +280,27 @@ describe("Salary Module End-to-End Test Suite", () => {
       expect(res.status).toBe(200);
       expect(res.text).toContain("PAYSLIP");
       expect(res.text).toContain("Gross Earnings");
+    });
+
+    test("GET /api/payroll/payslip/pdf/:id - Generates styled PDF salary slip", async () => {
+      jest.spyOn(Company, "findById").mockReturnValue({
+        maxTimeMS: jest.fn().mockResolvedValue({ name: "KEVALON TECH" }),
+      });
+
+      jest.spyOn(MonthlySalary, "findById").mockImplementation(() => {
+        const queryChain = {
+          populate: jest.fn().mockReturnThis(),
+          then: function (resolve) {
+            return resolve(monthlySalaryDoc);
+          },
+        };
+        return queryChain;
+      });
+
+      const res = await request(app).get(`/api/payroll/payslip/pdf/${monthlySalaryDoc._id}`);
+
+      expect(res.status).toBe(200);
+      expect(res.headers["content-type"]).toBe("application/pdf");
     });
   });
 });
