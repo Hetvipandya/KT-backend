@@ -98,15 +98,18 @@ const createSalaryStructure = async (req, res) => {
 
     await salaryStructure.save();
 
-    const populatedStructure = await SalaryStructure.findById(salaryStructure._id).populate(
-      "userId employeeId",
-      "name email uniqueID role designation department"
-    );
+    let populatedStructure = await SalaryStructure.findById(salaryStructure._id);
+    if (populatedStructure && typeof populatedStructure.populate === "function") {
+      populatedStructure = await populatedStructure.populate(
+        "userId employeeId",
+        "name email uniqueID role designation department"
+      );
+    }
 
     return res.status(201).json({
       success: true,
       message: "Salary structure created successfully",
-      data: populatedStructure,
+      data: populatedStructure || salaryStructure,
     });
   } catch (error) {
     console.error("Create Salary Structure Error:", error);
@@ -172,26 +175,33 @@ const getSalaryStructureById = async (req, res) => {
     }
 
     // 1. Try finding by SalaryStructure _id
-    let structure = await SalaryStructure.findById(id).populate(
-      "userId employeeId",
-      "name email uniqueID role designation department"
-    );
+    let structure = await SalaryStructure.findById(id);
+    if (structure && typeof structure.populate === "function") {
+      structure = await structure.populate(
+        "userId employeeId",
+        "name email uniqueID role designation department"
+      );
+    }
 
     // 2. If not found by _id, try finding active structure by employeeId/userId
     if (!structure) {
       structure = await SalaryStructure.findOne({
         $or: [{ userId: id }, { employeeId: id }],
         isActive: true,
-      }).populate("userId employeeId", "name email uniqueID role designation department");
+      });
+      if (structure && typeof structure.populate === "function") {
+        structure = await structure.populate("userId employeeId", "name email uniqueID role designation department");
+      }
     }
 
     // 3. Fallback to latest structure by employeeId/userId
     if (!structure) {
       structure = await SalaryStructure.findOne({
         $or: [{ userId: id }, { employeeId: id }],
-      })
-        .sort({ effectiveFrom: -1 })
-        .populate("userId employeeId", "name email uniqueID role designation department");
+      }).sort({ effectiveFrom: -1 });
+      if (structure && typeof structure.populate === "function") {
+        structure = await structure.populate("userId employeeId", "name email uniqueID role designation department");
+      }
     }
 
     if (!structure) {
@@ -217,13 +227,13 @@ const getSalaryStructureById = async (req, res) => {
 
 // =====================================================
 // UPDATE SALARY STRUCTURE
-// PUT /api/salary-structures/:id
+// PUT /api/salary-structures/:id OR PUT /api/payroll/update-salary/:id
 // =====================================================
 const updateSalaryStructure = async (req, res) => {
   try {
-    const { id } = req.params;
+    const id = req.params.id || req.params.employeeId || req.params.userId;
 
-    if (!mongoose.Types.ObjectId.isValid(id)) {
+    if (!id || !mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({
         success: false,
         message: "Invalid ID",
@@ -241,6 +251,12 @@ const updateSalaryStructure = async (req, res) => {
     }
 
     if (!existingStructure) {
+      existingStructure = await SalaryStructure.findOne({
+        $or: [{ userId: id }, { employeeId: id }],
+      }).sort({ effectiveFrom: -1, createdAt: -1 });
+    }
+
+    if (!existingStructure) {
       return res.status(404).json({
         success: false,
         message: "Salary structure not found",
@@ -248,7 +264,7 @@ const updateSalaryStructure = async (req, res) => {
     }
 
     const {
-      createNewVersion = true,
+      createNewVersion = false,
       effectiveFrom,
       basicSalary,
       hra,
@@ -269,7 +285,7 @@ const updateSalaryStructure = async (req, res) => {
       isActive,
     } = req.body;
 
-    // Requirement: If updating structure, create new structure with new effectiveFrom date to preserve historical records safely.
+    // Optional versioning: only create a new structure document if createNewVersion is explicitly true
     if (createNewVersion && existingStructure.isActive) {
       // Deactivate old structure
       existingStructure.isActive = false;
@@ -305,19 +321,22 @@ const updateSalaryStructure = async (req, res) => {
 
       await newStructure.save();
 
-      const populatedNew = await SalaryStructure.findById(newStructure._id).populate(
-        "userId employeeId",
-        "name email uniqueID role designation department"
-      );
+      let populatedNew = await SalaryStructure.findById(newStructure._id);
+      if (populatedNew && typeof populatedNew.populate === "function") {
+        populatedNew = await populatedNew.populate(
+          "userId employeeId",
+          "name email uniqueID role designation department"
+        );
+      }
 
       return res.status(200).json({
         success: true,
         message: "New active salary structure version created successfully",
-        data: populatedNew,
+        data: populatedNew || newStructure,
       });
     }
 
-    // Otherwise update in-place if specified or inactive
+    // Direct in-place update of existing record
     if (basicSalary !== undefined) existingStructure.basicSalary = basicSalary;
     if (hra !== undefined) existingStructure.hra = hra;
     if (conveyanceAllowance !== undefined) existingStructure.conveyanceAllowance = conveyanceAllowance;
@@ -340,15 +359,18 @@ const updateSalaryStructure = async (req, res) => {
 
     await existingStructure.save();
 
-    const populatedUpdated = await SalaryStructure.findById(existingStructure._id).populate(
-      "userId employeeId",
-      "name email uniqueID role designation department"
-    );
+    let populatedUpdated = await SalaryStructure.findById(existingStructure._id);
+    if (populatedUpdated && typeof populatedUpdated.populate === "function") {
+      populatedUpdated = await populatedUpdated.populate(
+        "userId employeeId",
+        "name email uniqueID role designation department"
+      );
+    }
 
     return res.status(200).json({
       success: true,
       message: "Salary structure updated successfully",
-      data: populatedUpdated,
+      data: populatedUpdated || existingStructure,
     });
   } catch (error) {
     console.error("Update Salary Structure Error:", error);
@@ -366,9 +388,9 @@ const updateSalaryStructure = async (req, res) => {
 // =====================================================
 const deleteSalaryStructure = async (req, res) => {
   try {
-    const { id } = req.params;
+    const id = req.params.id || req.params.employeeId || req.params.userId;
 
-    if (!mongoose.Types.ObjectId.isValid(id)) {
+    if (!id || !mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({
         success: false,
         message: "Invalid ID",

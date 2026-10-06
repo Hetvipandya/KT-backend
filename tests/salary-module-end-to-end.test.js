@@ -143,6 +143,24 @@ describe("Salary Module End-to-End Test Suite", () => {
       expect(res.body.success).toBe(true);
       expect(res.body.data._id.toString()).toBe(mockStructure._id.toString());
     });
+
+    test("PUT /api/payroll/update-salary/:id - Updates existing salary structure in-place", async () => {
+      jest.spyOn(SalaryStructure, "findById").mockResolvedValue(mockStructure);
+      jest.spyOn(SalaryStructure, "findOne").mockResolvedValue(mockStructure);
+
+      const res = await request(app)
+        .put(`/api/payroll/update-salary/${mockStructure._id}`)
+        .send({
+          basicSalary: 30000,
+          hra: 12000,
+        });
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.message).toBe("Salary structure updated successfully");
+      expect(mockStructure.basicSalary).toBe(30000);
+      expect(mockStructure.hra).toBe(12000);
+    });
   });
 
   describe("2. Monthly Salary Generation & Workflow", () => {
