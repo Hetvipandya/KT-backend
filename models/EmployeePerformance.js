@@ -7,7 +7,7 @@ const employeePerformanceSchema = new mongoose.Schema(
       required: true,
       ref: "Employee",
     },
-
+ 
     employeeType: {
       type: String,
       enum: ["employee", "intern", "teamlead"],

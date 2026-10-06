@@ -9,7 +9,7 @@ const User = require("../models/User");
 const createSalaryStructure = async (req, res) => {
   try {
     const {
-      userId,
+      userId, 
       basicSalary,
       hra,
       allowance,

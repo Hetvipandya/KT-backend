@@ -1,6 +1,6 @@
 const SalaryStructure = require("../models/SalaryStructure");
 const Payroll = require("../models/Payroll");
-const Payslip = require("../models/Payslip"); 
+const Payslip = require("../models/Payslip");  
 
 const toNumber = (value, fallback = 0) => {
   const parsed = Number(value);
@@ -361,6 +361,7 @@ exports.generatePayslip = async (req, res) => {
       });
     }
 
+    
     const existingPayslip = await Payslip.findOne({ payrollId });
 
     if (existingPayslip) {

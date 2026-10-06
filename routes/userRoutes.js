@@ -23,6 +23,7 @@ const {
   renderResetPasswordPage, 
   refreshUserToken,
   logoutUser,
+  deleteUser,
 } = require(
   "../controllers/userControllers"
 );
@@ -172,5 +173,21 @@ router.get(
   getAllUsers
 ); //done
 
+// ================= DELETE USER =================
+router.delete(
+  "/delete/:id",
+  deleteUser
+);
+
+router.delete(
+  "/:id",
+  deleteUser
+);
+
+router.delete(
+  "/",
+  deleteUser
+);
+
 module.exports =
-  router;
+  router;

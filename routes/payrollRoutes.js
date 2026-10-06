@@ -1,7 +1,7 @@
 const express = require("express");
 
 const router = express.Router();
-
+5
 const {
   createSalaryStructure,
   getSalaryStructure,
@@ -9,7 +9,7 @@ const {
   updateSalaryStructure, 
   processPayroll,
   generatePayslip,  
-  getPayroll,
+  getPayroll, 
   getPayslips,
   markSalaryPaid,
   downloadPrintablePayslip,

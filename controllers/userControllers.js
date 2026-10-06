@@ -1,3 +1,4 @@
+const mongoose = require("mongoose");
 const User = require("../models/User");
 const Employee = require("../models/Employee");
 
@@ -1858,6 +1859,62 @@ const uploadProfileImage = async (req, res) => {
 
 // Import OTP controller methods for backward compatibility
 const { sendOTP, verifyOTP } = require("./otpController");
+const { cascadeDeleteUser } = require("../utils/userCascadeDelete");
+
+// ============================================================
+// DELETE USER (CASCADES TO EMPLOYEE & TEAM MEMBER)
+// ============================================================
+
+const deleteUser = async (req, res) => {
+  try {
+    const userId = req.params?.id || req.body?.userId || req.query?.id;
+
+    if (!userId) {
+      return res.status(400).json({
+        success: false,
+        message: "User ID is required",
+      });
+    }
+
+    let user = null;
+    if (mongoose.Types.ObjectId.isValid(userId)) {
+      user = await User.findById(userId);
+    }
+
+    if (!user) {
+      user = await User.findOne({
+        $or: [
+          { email: String(userId).toLowerCase().trim() },
+          { phoneNumber: String(userId).trim() },
+        ],
+      });
+    }
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    const cascadeResult = await cascadeDeleteUser(user);
+
+    await User.findByIdAndDelete(user._id, { skipCascade: true });
+
+    return res.status(200).json({
+      success: true,
+      message: "User deleted successfully",
+      deletedUserId: user._id,
+      deletedEmployeeIds: cascadeResult?.deletedEmployeeIds || [],
+    });
+  } catch (error) {
+    console.error("Delete User Error:", error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Failed to delete user",
+    });
+  }
+};
 
 // ============================================================
 // EXPORTS
@@ -1877,6 +1934,7 @@ module.exports = {
   getAllUsers,
   approveEmployee,
   rejectEmployee,
+  deleteUser,
 
   // Authentication
   loginUser,
@@ -1889,4 +1947,5 @@ module.exports = {
   refreshUserToken,
   logoutUser,
 };
+
 

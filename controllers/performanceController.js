@@ -149,7 +149,7 @@ exports.createPerformance = async (req, res) => {
     let performance = await EmployeePerformance.findOne({
       employeeID,
     });
-
+ 
     if (performance) {
       if (percentage > 0) performance.performancePercentage = percentage;
       if (numericRating > 0) performance.rating = numericRating;

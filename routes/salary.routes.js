@@ -4,8 +4,8 @@ const router = express.Router();
 
 const {
   createSalaryStructure,
-  getAllSalaryStructures,
-  getSalaryStructureById,
+  getAllSalaryStructures, 
+  getSalaryStructureById, 
   updateSalaryStructure, 
   patchSalaryStructure,
   deleteSalaryStructure,
