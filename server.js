@@ -217,9 +217,16 @@ app.use('/api/interviewRound', ktInterviewRoundRoutes);
 app.use('/api/attendance', ktAttendanceRoutes);
 app.use('/api/leave', ktLeaveRoutes);
 app.use('/api/projectManage', ktProjectRoutes); 
+const salaryStructureRoutes = require('./routes/salaryStructureRoutes');
+const monthlySalaryRoutes = require('./routes/monthlySalaryRoutes');
+const salarySlipRoutes = require('./routes/salarySlipRoutes');
+
 app.use('/api/task', ktTaskManagementRoutes); 
 app.use('/api/crm', ktCrmRoutes);
 app.use('/api/payroll', ktPayrollRoutes);
+app.use('/api/salary-structures', salaryStructureRoutes);
+app.use('/api/salaries', monthlySalaryRoutes);
+app.use('/api/salary-slips', salarySlipRoutes);
 app.use('/api/document', ktDocumentRoutes);
 app.use('/api/project', ktProjectManagementRoutes);
 app.use('/api/dailyUpdate', ktDailyReportRoutes);
