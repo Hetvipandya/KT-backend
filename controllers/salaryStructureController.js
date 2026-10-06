@@ -21,6 +21,8 @@ const createSalaryStructure = async (req, res) => {
       medicalAllowance,
       specialAllowance,
       allowance,
+      dearnessAllowance,
+      da,
       otherAllowances,
       fixedBonus,
       pfDeduction,
@@ -31,6 +33,8 @@ const createSalaryStructure = async (req, res) => {
       fixedDeduction,
       otherDeductions,
       employerContributions,
+      yearsOfService,
+      autoCalculateStatutory,
       isActive,
     } = req.body;
 
@@ -58,7 +62,6 @@ const createSalaryStructure = async (req, res) => {
     }
 
     // Rule: Only one active salary structure per employee at a time.
-    // Deactivate previous active structures to preserve history safely.
     if (isActive !== false) {
       await SalaryStructure.updateMany(
         {
@@ -81,6 +84,7 @@ const createSalaryStructure = async (req, res) => {
       conveyanceAllowance: conveyanceAllowance ?? 0,
       medicalAllowance: medicalAllowance ?? 0,
       specialAllowance: specialAllowance ?? allowance ?? 0,
+      dearnessAllowance: dearnessAllowance ?? da ?? 0,
       otherAllowances: otherAllowances ?? 0,
       fixedBonus: fixedBonus ?? 0,
       pfDeduction: pfDeduction ?? 0,
@@ -90,7 +94,9 @@ const createSalaryStructure = async (req, res) => {
       tdsPercentage: tdsPercentage ?? 0,
       fixedDeduction: fixedDeduction ?? 0,
       otherDeductions: otherDeductions ?? 0,
-      employerContributions: employerContributions || { pf: 0, esic: 0, other: 0 },
+      employerContributions: employerContributions || { pf: 0, esic: 0, gratuity: 0, other: 0 },
+      yearsOfService: yearsOfService ?? 1,
+      autoCalculateStatutory: autoCalculateStatutory ?? true,
       isActive: isActive ?? true,
       createdBy: req.user ? req.user._id : null,
       updatedBy: req.user ? req.user._id : null,
@@ -108,7 +114,7 @@ const createSalaryStructure = async (req, res) => {
 
     return res.status(201).json({
       success: true,
-      message: "Salary structure created successfully",
+      message: "Salary structure created successfully with HR Payroll Formula calculations",
       data: populatedStructure || salaryStructure,
     });
   } catch (error) {
@@ -174,7 +180,6 @@ const getSalaryStructureById = async (req, res) => {
       });
     }
 
-    // 1. Try finding by SalaryStructure _id
     let structure = await SalaryStructure.findById(id);
     if (structure && typeof structure.populate === "function") {
       structure = await structure.populate(
@@ -183,7 +188,6 @@ const getSalaryStructureById = async (req, res) => {
       );
     }
 
-    // 2. If not found by _id, try finding active structure by employeeId/userId
     if (!structure) {
       structure = await SalaryStructure.findOne({
         $or: [{ userId: id }, { employeeId: id }],
@@ -194,7 +198,6 @@ const getSalaryStructureById = async (req, res) => {
       }
     }
 
-    // 3. Fallback to latest structure by employeeId/userId
     if (!structure) {
       structure = await SalaryStructure.findOne({
         $or: [{ userId: id }, { employeeId: id }],
@@ -242,7 +245,6 @@ const updateSalaryStructure = async (req, res) => {
 
     let existingStructure = await SalaryStructure.findById(id);
 
-    // If ID was employeeId instead of structureId
     if (!existingStructure) {
       existingStructure = await SalaryStructure.findOne({
         $or: [{ userId: id }, { employeeId: id }],
@@ -272,6 +274,8 @@ const updateSalaryStructure = async (req, res) => {
       medicalAllowance,
       specialAllowance,
       allowance,
+      dearnessAllowance,
+      da,
       otherAllowances,
       fixedBonus,
       pfDeduction,
@@ -282,16 +286,15 @@ const updateSalaryStructure = async (req, res) => {
       fixedDeduction,
       otherDeductions,
       employerContributions,
+      yearsOfService,
+      autoCalculateStatutory,
       isActive,
     } = req.body;
 
-    // Optional versioning: only create a new structure document if createNewVersion is explicitly true
     if (createNewVersion && existingStructure.isActive) {
-      // Deactivate old structure
       existingStructure.isActive = false;
       await existingStructure.save();
 
-      // Create new structure version
       const newStructure = new SalaryStructure({
         userId: existingStructure.userId,
         employeeId: existingStructure.employeeId,
@@ -304,6 +307,7 @@ const updateSalaryStructure = async (req, res) => {
         conveyanceAllowance: conveyanceAllowance ?? existingStructure.conveyanceAllowance,
         medicalAllowance: medicalAllowance ?? existingStructure.medicalAllowance,
         specialAllowance: specialAllowance ?? allowance ?? existingStructure.specialAllowance,
+        dearnessAllowance: dearnessAllowance ?? da ?? existingStructure.dearnessAllowance,
         otherAllowances: otherAllowances ?? existingStructure.otherAllowances,
         fixedBonus: fixedBonus ?? existingStructure.fixedBonus,
         pfDeduction: pfDeduction ?? existingStructure.pfDeduction,
@@ -314,6 +318,8 @@ const updateSalaryStructure = async (req, res) => {
         fixedDeduction: fixedDeduction ?? existingStructure.fixedDeduction,
         otherDeductions: otherDeductions ?? existingStructure.otherDeductions,
         employerContributions: employerContributions || existingStructure.employerContributions,
+        yearsOfService: yearsOfService ?? existingStructure.yearsOfService,
+        autoCalculateStatutory: autoCalculateStatutory ?? existingStructure.autoCalculateStatutory,
         isActive: isActive ?? true,
         createdBy: req.user ? req.user._id : existingStructure.createdBy,
         updatedBy: req.user ? req.user._id : null,
@@ -336,13 +342,15 @@ const updateSalaryStructure = async (req, res) => {
       });
     }
 
-    // Direct in-place update of existing record
+    // Direct in-place update
     if (basicSalary !== undefined) existingStructure.basicSalary = basicSalary;
     if (hra !== undefined) existingStructure.hra = hra;
     if (conveyanceAllowance !== undefined) existingStructure.conveyanceAllowance = conveyanceAllowance;
     if (medicalAllowance !== undefined) existingStructure.medicalAllowance = medicalAllowance;
     if (specialAllowance !== undefined || allowance !== undefined)
       existingStructure.specialAllowance = specialAllowance ?? allowance;
+    if (dearnessAllowance !== undefined || da !== undefined)
+      existingStructure.dearnessAllowance = dearnessAllowance ?? da;
     if (otherAllowances !== undefined) existingStructure.otherAllowances = otherAllowances;
     if (fixedBonus !== undefined) existingStructure.fixedBonus = fixedBonus;
     if (pfDeduction !== undefined) existingStructure.pfDeduction = pfDeduction;
@@ -353,6 +361,8 @@ const updateSalaryStructure = async (req, res) => {
     if (fixedDeduction !== undefined) existingStructure.fixedDeduction = fixedDeduction;
     if (otherDeductions !== undefined) existingStructure.otherDeductions = otherDeductions;
     if (employerContributions !== undefined) existingStructure.employerContributions = employerContributions;
+    if (yearsOfService !== undefined) existingStructure.yearsOfService = yearsOfService;
+    if (autoCalculateStatutory !== undefined) existingStructure.autoCalculateStatutory = autoCalculateStatutory;
     if (effectiveFrom) existingStructure.effectiveFrom = new Date(effectiveFrom);
     if (isActive !== undefined) existingStructure.isActive = isActive;
     if (req.user) existingStructure.updatedBy = req.user._id;

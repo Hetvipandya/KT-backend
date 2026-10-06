@@ -73,12 +73,23 @@ const monthlySalarySchema = new mongoose.Schema(
       default: "CALENDAR_DAYS",
     },
 
+    // Formula 8: DAYS PAYABLE = (Total Working Days / Total Days) * Days Present
     totalDays: {
       type: Number,
       default: 30,
     },
 
+    workingDays: {
+      type: Number,
+      default: 30,
+    },
+
     presentDays: {
+      type: Number,
+      default: 30,
+    },
+
+    daysPayable: {
       type: Number,
       default: 30,
     },
@@ -103,7 +114,7 @@ const monthlySalarySchema = new mongoose.Schema(
       default: 0,
     },
 
-    // Earnings Snapshot & Calculations
+    // 1. EARNINGS COMPONENTS
     basicSalary: {
       type: Number,
       default: 0,
@@ -134,6 +145,11 @@ const monthlySalarySchema = new mongoose.Schema(
       default: 0,
     },
 
+    dearnessAllowance: {
+      type: Number,
+      default: 0,
+    },
+
     otherAllowances: {
       type: Number,
       default: 0,
@@ -149,26 +165,33 @@ const monthlySalarySchema = new mongoose.Schema(
       default: 0,
     },
 
+    // Formula 1: GROSS SALARY
     grossSalary: {
       type: Number,
       required: true,
       default: 0,
     },
 
-    // Deductions Snapshot & Calculations
-    pfDeduction: {
+    // Formula 9: BASIC FOR PF
+    basicForPf: {
       type: Number,
       default: 0,
+    },
+
+    // 2. DEDUCTIONS COMPONENTS
+    pfDeduction: {
+      type: Number,
+      default: 0, // Formula 2: PF Employee 12%
     },
 
     esicDeduction: {
       type: Number,
-      default: 0,
+      default: 0, // Formula 4: ESI Employee 0.75%
     },
 
     professionalTax: {
       type: Number,
-      default: 0,
+      default: 0, // Formula 5: PT As per state rules
     },
 
     tds: {
@@ -201,15 +224,25 @@ const monthlySalarySchema = new mongoose.Schema(
       default: 0,
     },
 
+    // Formula 6: TOTAL DEDUCTIONS
     totalDeduction: {
       type: Number,
       default: 0,
     },
 
+    // Formula 7: NET SALARY
     netSalary: {
       type: Number,
       required: true,
       default: 0,
+    },
+
+    // Employer & Gratuity Details
+    employerContributions: {
+      pf: { type: Number, default: 0 }, // Formula 3: Employer PF 12%
+      esic: { type: Number, default: 0 },
+      gratuity: { type: Number, default: 0 }, // Formula 10: Gratuity
+      other: { type: Number, default: 0 },
     },
 
     status: {
@@ -269,14 +302,9 @@ const monthlySalarySchema = new mongoose.Schema(
 );
 
 monthlySalarySchema.pre("save", async function () {
-  if (!this.userId && this.employeeId) {
-    this.userId = this.employeeId;
-  }
-  if (!this.employeeId && this.userId) {
-    this.employeeId = this.userId;
-  }
+  if (!this.userId && this.employeeId) this.userId = this.employeeId;
+  if (!this.employeeId && this.userId) this.employeeId = this.userId;
 
-  // Format month name if missing
   const monthNames = [
     "January", "February", "March", "April", "May", "June",
     "July", "August", "September", "October", "November", "December"
