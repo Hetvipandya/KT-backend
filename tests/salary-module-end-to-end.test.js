@@ -233,6 +233,47 @@ describe("HR Payroll Formula Module Test Suite", () => {
       expect(res.body.message).toBe("Salary structure updated successfully");
       expect(mockStructure.basicSalary).toBe(30000);
     });
+
+    test("GET /api/salaries - Allows CA and Accountant roles to view monthly salary records", async () => {
+      // Test with CA role
+      const caUser = { _id: new mongoose.Types.ObjectId(), role: "ca", name: "Test CA User" };
+      
+      const queryChain = {
+        populate: jest.fn().mockReturnThis(),
+        sort: jest.fn().mockReturnThis(),
+        then: function (resolve) {
+          return resolve([{ ...mockStructure, month: 9, year: 2026, status: "Approved" }]);
+        },
+      };
+      jest.spyOn(MonthlySalary, "find").mockReturnValue(queryChain);
+
+      // Create express app with CA user
+      const caApp = express();
+      caApp.use(express.json());
+      caApp.use((req, res, next) => {
+        req.user = caUser;
+        next();
+      });
+      caApp.use("/api/salaries", monthlySalaryRoutes);
+
+      const caRes = await request(caApp).get("/api/salaries");
+      expect(caRes.status).toBe(200);
+      expect(caRes.body.success).toBe(true);
+
+      // Test with Accountant role
+      const acctUser = { _id: new mongoose.Types.ObjectId(), role: "accountant", name: "Test Accountant" };
+      const acctApp = express();
+      acctApp.use(express.json());
+      acctApp.use((req, res, next) => {
+        req.user = acctUser;
+        next();
+      });
+      acctApp.use("/api/salaries", monthlySalaryRoutes);
+
+      const acctRes = await request(acctApp).get("/api/salaries");
+      expect(acctRes.status).toBe(200);
+      expect(acctRes.body.success).toBe(true);
+    });
   });
 
   describe("2. Monthly Salary Generation with Days Payable (Rule 8)", () => {
