@@ -17,12 +17,19 @@ const {
 // =====================================================
 
 // Create
+router.post("/", createSalaryStructure);
 router.post("/create", createSalaryStructure);
 
-// Get All
+// Get All (Supports ?companyId=...&branchId=...&employeeId=...)
+router.get("/", getAllSalaryStructures);
 router.get("/all", getAllSalaryStructures);
 
-// Get By User ID or Structure ID
+// Get By Company ID
+router.get("/company/:companyId", getAllSalaryStructures);
+router.get("/company/:companyId/branch/:branchId", getAllSalaryStructures);
+
+// Get By User ID, Employee ID, or Structure ID
+router.get("/employee/:employeeId", getSalaryStructureById);
 router.get("/user/:userId", getSalaryStructureById);
 router.get("/:id", getSalaryStructureById);
 

@@ -17,6 +17,10 @@ router.post("/create", createSalaryStructure);
 router.get("/", getAllSalaryStructures);
 router.get("/all", getAllSalaryStructures);
 
+// Get By Company ID
+router.get("/company/:companyId", getAllSalaryStructures);
+router.get("/company/:companyId/branch/:branchId", getAllSalaryStructures);
+
 // Get By Structure ID or Employee ID
 router.get("/employee/:employeeId", getSalaryStructureById);
 router.get("/user/:userId", getSalaryStructureById);
