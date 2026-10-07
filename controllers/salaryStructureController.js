@@ -2,6 +2,7 @@ const mongoose = require("mongoose");
 const SalaryStructure = require("../models/SalaryStructure");
 const User = require("../models/User");
 const Employee = require("../models/Employee");
+const Company = require("../models/Company");
 
 // =====================================================
 // CREATE SALARY STRUCTURE
@@ -151,14 +152,30 @@ const getAllSalaryStructures = async (req, res) => {
       query.isActive = isActive === "true" || isActive === true;
     }
 
-    const structures = await SalaryStructure.find(query)
-      .populate("userId employeeId", "name email uniqueID role designation department")
-      .sort({ effectiveFrom: -1, createdAt: -1 });
+    let structuresQuery = SalaryStructure.find(query);
+    if (structuresQuery && typeof structuresQuery.populate === "function") {
+      structuresQuery = structuresQuery.populate([
+        { path: "userId employeeId", select: "name email uniqueID role designation department" },
+        { path: "companyId", select: "name companyName" },
+        { path: "branchId", select: "branchName" },
+      ]);
+    }
+    if (structuresQuery && typeof structuresQuery.sort === "function") {
+      structuresQuery = structuresQuery.sort({ effectiveFrom: -1, createdAt: -1 });
+    }
+
+    const structures = await structuresQuery;
+
+    const formattedStructures = (structures || []).map((s) => {
+      const obj = s && typeof s.toObject === "function" ? s.toObject() : { ...s };
+      obj.companyName = obj.companyId?.companyName || obj.companyId?.name || "";
+      return obj;
+    });
 
     return res.status(200).json({
       success: true,
-      count: structures.length,
-      data: structures,
+      count: formattedStructures.length,
+      data: formattedStructures,
     });
   } catch (error) {
     console.error("Get Salary Structures Error:", error);
@@ -311,12 +328,40 @@ const getSalaryStructureById = async (req, res) => {
         const structuresByCompany = await compQuery;
 
         if (structuresByCompany && structuresByCompany.length > 0) {
+          const formattedCompanyStructures = await Promise.all(
+            structuresByCompany.map(async (item) => {
+              const itemObj =
+                item && typeof item.toObject === "function" ? item.toObject() : { ...item };
+              let cName = itemObj.companyId?.companyName || itemObj.companyId?.name || "";
+              let cId = itemObj.companyId?._id || itemObj.companyId || targetCompanyId;
+
+              if (!cName && cId && mongoose.Types.ObjectId.isValid(cId.toString()) && mongoose.connection && mongoose.connection.readyState === 1) {
+                try {
+                  if (typeof Company.findById === "function") {
+                    const compDoc = await Company.findById(cId).select("name companyName");
+                    if (compDoc) {
+                      cName = compDoc.companyName || compDoc.name || "";
+                      itemObj.companyId = {
+                        _id: compDoc._id,
+                        name: compDoc.name,
+                        companyName: compDoc.companyName || compDoc.name,
+                      };
+                    }
+                  }
+                } catch (e) {}
+              }
+
+              itemObj.companyName = cName || "";
+              return itemObj;
+            })
+          );
+
           return res.status(200).json({
             success: true,
             message: "Salary structures fetched for company",
-            count: structuresByCompany.length,
-            data: structuresByCompany.length === 1 ? structuresByCompany[0] : structuresByCompany,
-            structures: structuresByCompany,
+            count: formattedCompanyStructures.length,
+            data: formattedCompanyStructures.length === 1 ? formattedCompanyStructures[0] : formattedCompanyStructures,
+            structures: formattedCompanyStructures,
           });
         }
       }
@@ -385,11 +430,31 @@ const getSalaryStructureById = async (req, res) => {
 
     // 3. Fallback: if user exists in DB but has no custom salary structure yet
     if (!structure && targetUserDoc) {
+      let defaultCompId = companyId || targetUserDoc.companyId || null;
+      let defaultCompName = "";
+
+      if (defaultCompId && mongoose.Types.ObjectId.isValid(defaultCompId.toString()) && mongoose.connection && mongoose.connection.readyState === 1) {
+        try {
+          if (typeof Company.findById === "function") {
+            const compDoc = await Company.findById(defaultCompId).select("name companyName");
+            if (compDoc) {
+              defaultCompName = compDoc.companyName || compDoc.name || "";
+              defaultCompId = {
+                _id: compDoc._id,
+                name: compDoc.name,
+                companyName: compDoc.companyName || compDoc.name,
+              };
+            }
+          }
+        } catch (e) {}
+      }
+
       const defaultStructure = {
         _id: targetUserDoc._id,
         userId: targetUserDoc._id,
         employeeId: targetUserDoc._id,
-        companyId: companyId || targetUserDoc.companyId || null,
+        companyId: defaultCompId,
+        companyName: defaultCompName,
         branchId: branchId || targetUserDoc.branchId || null,
         effectiveFrom: new Date(),
         basicSalary: 0,
@@ -444,9 +509,38 @@ const getSalaryStructureById = async (req, res) => {
       }
     }
 
+    let resData =
+      structure && typeof structure.toObject === "function"
+        ? structure.toObject()
+        : { ...structure };
+
+    // Extract and ensure companyId and companyName are present
+    let cId = resData.companyId?._id || resData.companyId || null;
+    let cName = resData.companyId?.companyName || resData.companyId?.name || "";
+
+    if (!cName && cId && mongoose.Types.ObjectId.isValid(cId.toString()) && mongoose.connection && mongoose.connection.readyState === 1) {
+      try {
+        if (typeof Company.findById === "function") {
+          const compDoc = await Company.findById(cId).select("name companyName");
+          if (compDoc) {
+            cName = compDoc.companyName || compDoc.name || "";
+            if (!resData.companyId || typeof resData.companyId !== "object" || !resData.companyId.companyName) {
+              resData.companyId = {
+                _id: compDoc._id,
+                name: compDoc.name,
+                companyName: compDoc.companyName || compDoc.name,
+              };
+            }
+          }
+        }
+      } catch (e) {}
+    }
+
+    resData.companyName = cName || (resData.companyId && (resData.companyId.companyName || resData.companyId.name)) || "";
+
     return res.status(200).json({
       success: true,
-      data: structure,
+      data: resData,
     });
   } catch (error) {
     console.error("Get Salary Structure Error:", error);

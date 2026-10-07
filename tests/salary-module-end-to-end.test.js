@@ -53,7 +53,11 @@ describe("HR Payroll Formula Module Test Suite", () => {
       _id: new mongoose.Types.ObjectId(),
       userId: testUserId,
       employeeId: testUserId,
-      companyId,
+      companyId: {
+        _id: companyId,
+        name: "KEVALON Technology",
+        companyName: "KEVALON Technology",
+      },
       branchId,
       effectiveFrom: new Date("2026-06-01"),
       basicSalary: 20000,
@@ -165,6 +169,8 @@ describe("HR Payroll Formula Module Test Suite", () => {
       expect(res.body.success).toBe(true);
       expect(res.body.data.grossSalary).toBe(40000);
       expect(res.body.data.netSalary).toBe(36500);
+      expect(res.body.data.companyId).toBeDefined();
+      expect(res.body.data.companyName).toBe("KEVALON Technology");
     });
 
     test("GET /api/salary/:id - Retrieves salary structure by companyId when passed in path", async () => {
