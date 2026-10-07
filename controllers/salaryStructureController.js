@@ -296,13 +296,21 @@ const getSalaryStructureById = async (req, res) => {
         const companyQuery = { companyId: targetCompanyId };
         if (branchId) companyQuery.branchId = branchId;
 
-        const structuresByCompany = await SalaryStructure.find(companyQuery)
-          .populate("userId employeeId", "name email uniqueID role designation department")
-          .populate("companyId", "name companyName")
-          .populate("branchId", "branchName")
-          .sort({ effectiveFrom: -1 });
+        let compQuery = SalaryStructure.find(companyQuery);
+        if (compQuery && typeof compQuery.populate === "function") {
+          compQuery = compQuery.populate([
+            { path: "userId employeeId", select: "name email uniqueID role designation department" },
+            { path: "companyId", select: "name companyName" },
+            { path: "branchId", select: "branchName" },
+          ]);
+        }
+        if (compQuery && typeof compQuery.sort === "function") {
+          compQuery = compQuery.sort({ effectiveFrom: -1 });
+        }
 
-        if (structuresByCompany.length > 0) {
+        const structuresByCompany = await compQuery;
+
+        if (structuresByCompany && structuresByCompany.length > 0) {
           return res.status(200).json({
             success: true,
             message: "Salary structures fetched for company",
@@ -422,12 +430,18 @@ const getSalaryStructureById = async (req, res) => {
     }
 
     if (structure && typeof structure.populate === "function") {
-      structure = await structure.populate(
-        "userId employeeId",
-        "name email uniqueID role designation department"
-      );
-      structure = await structure.populate("companyId", "name companyName");
-      structure = await structure.populate("branchId", "branchName");
+      try {
+        structure = await structure.populate([
+          { path: "userId employeeId", select: "name email uniqueID role designation department" },
+          { path: "companyId", select: "name companyName" },
+          { path: "branchId", select: "branchName" },
+        ]);
+      } catch (err) {
+        structure = await structure.populate(
+          "userId employeeId",
+          "name email uniqueID role designation department"
+        );
+      }
     }
 
     return res.status(200).json({
