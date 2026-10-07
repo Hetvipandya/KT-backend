@@ -12,6 +12,7 @@ const salaryStructureRoutes = require("../routes/salaryStructureRoutes");
 const monthlySalaryRoutes = require("../routes/monthlySalaryRoutes");
 const salarySlipRoutes = require("../routes/salarySlipRoutes");
 const payrollRoutes = require("../routes/payrollRoutes");
+const salaryRoutes = require("../routes/salary.routes");
 
 describe("HR Payroll Formula Module Test Suite", () => {
   let app;
@@ -87,6 +88,7 @@ describe("HR Payroll Formula Module Test Suite", () => {
     app.use("/api/salaries", monthlySalaryRoutes);
     app.use("/api/salary-slips", salarySlipRoutes);
     app.use("/api/payroll", payrollRoutes);
+    app.use("/api/salary", salaryRoutes);
   });
 
   beforeEach(() => {
@@ -163,6 +165,56 @@ describe("HR Payroll Formula Module Test Suite", () => {
       expect(res.body.success).toBe(true);
       expect(res.body.data.grossSalary).toBe(40000);
       expect(res.body.data.netSalary).toBe(36500);
+    });
+
+    test("GET /api/salary/:id - Retrieves salary structure by companyId when passed in path", async () => {
+      jest.spyOn(SalaryStructure, "findById").mockReturnValue({
+        populate: jest.fn().mockResolvedValue(null),
+      });
+      const findOneChain = {
+        populate: jest.fn().mockResolvedValue(null),
+        sort: jest.fn().mockReturnThis(),
+      };
+      jest.spyOn(SalaryStructure, "findOne").mockReturnValue(findOneChain);
+      jest.spyOn(SalaryStructure, "find").mockReturnValue({
+        populate: jest.fn().mockReturnValue({
+          sort: jest.fn().mockResolvedValue([mockStructure]),
+        }),
+      });
+
+      const res = await request(app).get(`/api/salary/${companyId}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.count).toBe(1);
+    });
+
+    test("GET /api/salary?companyId=... - Retrieves all structures for given companyId", async () => {
+      jest.spyOn(SalaryStructure, "find").mockReturnValue({
+        populate: jest.fn().mockReturnValue({
+          sort: jest.fn().mockResolvedValue([mockStructure]),
+        }),
+      });
+
+      const res = await request(app).get(`/api/salary?companyId=${companyId}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.count).toBe(1);
+    });
+
+    test("GET /api/salary/company/:companyId - Retrieves structures using dedicated company route", async () => {
+      jest.spyOn(SalaryStructure, "find").mockReturnValue({
+        populate: jest.fn().mockReturnValue({
+          sort: jest.fn().mockResolvedValue([mockStructure]),
+        }),
+      });
+
+      const res = await request(app).get(`/api/salary/company/${companyId}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.count).toBe(1);
     });
 
     test("PUT /api/payroll/update-salary/:id - Updates salary structure in-place", async () => {

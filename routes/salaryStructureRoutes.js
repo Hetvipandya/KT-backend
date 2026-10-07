@@ -21,6 +21,10 @@ router.get("/employee/:employeeId", authorizeRoles("ca", "accountant", "admin", 
 router.get("/user/:userId", authorizeRoles("ca", "accountant", "admin", "hr", "super admin", "employee"), getSalaryStructureById);
 router.get("/:id", authorizeRoles("ca", "accountant", "admin", "hr", "super admin", "employee"), getSalaryStructureById);
 
+// Get By Company ID
+router.get("/company/:companyId", authorizeRoles("ca", "accountant", "admin", "hr", "super admin", "employee"), getAllSalaryStructures);
+router.get("/company/:companyId/branch/:branchId", authorizeRoles("ca", "accountant", "admin", "hr", "super admin", "employee"), getAllSalaryStructures);
+
 // Create, Update, Delete (CA, Accountant, Admin, HR, Super Admin)
 router.post("/", authorizeRoles("ca", "accountant", "admin", "hr", "super admin"), createSalaryStructure);
 router.post("/create", authorizeRoles("ca", "accountant", "admin", "hr", "super admin"), createSalaryStructure);
