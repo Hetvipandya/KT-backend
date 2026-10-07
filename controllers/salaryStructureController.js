@@ -298,6 +298,8 @@ const getSalaryStructureById = async (req, res) => {
 
         const structuresByCompany = await SalaryStructure.find(companyQuery)
           .populate("userId employeeId", "name email uniqueID role designation department")
+          .populate("companyId", "name companyName")
+          .populate("branchId", "branchName")
           .sort({ effectiveFrom: -1 });
 
         if (structuresByCompany.length > 0) {
@@ -424,6 +426,8 @@ const getSalaryStructureById = async (req, res) => {
         "userId employeeId",
         "name email uniqueID role designation department"
       );
+      structure = await structure.populate("companyId", "name companyName");
+      structure = await structure.populate("branchId", "branchName");
     }
 
     return res.status(200).json({
