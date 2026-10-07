@@ -1,3 +1,4 @@
+const mongoose = require("mongoose");
 const EmployeePerformance = require("../models/EmployeePerformance");
 const Employee = require("../models/Employee");
 const User = require("../models/User");
@@ -9,8 +10,13 @@ const TeamLeadActivity = require("../models/TeamLeadActivity");
 // =============================
 exports.createPerformance = async (req, res) => {
   try {
+    const rawEmployeeID =
+      req.body.employeeID ||
+      req.body.employeeId ||
+      req.body.userId ||
+      req.body.id;
+
     const {
-      employeeID,
       performancePercentage,
       remarks,
       feedback,
@@ -20,7 +26,7 @@ exports.createPerformance = async (req, res) => {
     // ============================================================
     // 1. Validate Employee ID
     // ============================================================
-    if (!employeeID) {
+    if (!rawEmployeeID) {
       return res.status(400).json({
         success: false,
         message: "Employee ID is required",
@@ -31,7 +37,6 @@ exports.createPerformance = async (req, res) => {
     // 2. Validate Performance Percentage / Rating
     // ============================================================
     let percentage = 0;
-
     if (
       performancePercentage !== undefined &&
       performancePercentage !== null &&
@@ -67,13 +72,29 @@ exports.createPerformance = async (req, res) => {
     let employeeType = "";
     let employeeName = "";
     let employeeEmail = "";
+    let realEmployeeID = null;
+
+    const isValidObjId = mongoose.Types.ObjectId.isValid(rawEmployeeID);
 
     // 3.1 Check Employee Collection
-    const empData = await Employee.findById(employeeID).select(
-      "name email firstName lastName"
-    );
+    let empData = null;
+    if (isValidObjId) {
+      empData = await Employee.findById(rawEmployeeID).select(
+        "name email firstName lastName"
+      );
+    }
+    if (!empData) {
+      empData = await Employee.findOne({
+        $or: [
+          { employeeID: rawEmployeeID },
+          { employeeCode: rawEmployeeID },
+          ...(isValidObjId ? [{ userId: rawEmployeeID }, { userID: rawEmployeeID }] : []),
+        ],
+      }).select("name email firstName lastName");
+    }
 
     if (empData) {
+      realEmployeeID = empData._id;
       employeeType = "employee";
       employeeName =
         empData.name ||
@@ -84,39 +105,54 @@ exports.createPerformance = async (req, res) => {
     }
 
     // 3.2 Check Intern in User Collection
-    if (!empData) {
-      const userData = await User.findById(employeeID).select(
+    let userData = null;
+    if (!empData && isValidObjId) {
+      userData = await User.findById(rawEmployeeID).select(
         "name email role firstName lastName"
       );
+    }
+    if (!empData && !userData) {
+      userData = await User.findOne({
+        $or: [
+          { uniqueID: rawEmployeeID },
+          { email: rawEmployeeID },
+        ],
+      }).select("name email role firstName lastName");
+    }
 
-      if (userData && userData.role === "intern") {
-        employeeType = "intern";
-        employeeName =
-          userData.name ||
-          `${userData.firstName || ""} ${userData.lastName || ""}`.trim() ||
-          userData.email ||
-          "Unknown Intern";
-        employeeEmail = userData.email || "";
-      }
+    if (!empData && userData) {
+      realEmployeeID = userData._id;
+      employeeType = userData.role === "intern" ? "intern" : "employee";
+      employeeName =
+        userData.name ||
+        `${userData.firstName || ""} ${userData.lastName || ""}`.trim() ||
+        userData.email ||
+        "Unknown Intern";
+      employeeEmail = userData.email || "";
     }
 
     // 3.3 Check Team Lead
-    if (!empData && !employeeType) {
-      const teamLeadData = await TeamLead.findOne({
-        $or: [
-          { teamLead: employeeID },
-          { user: employeeID },
-        ],
-      }).populate(
-        "teamLead user",
-        "name email firstName lastName"
-      );
+    if (!realEmployeeID) {
+      let teamLeadData = null;
+      if (isValidObjId) {
+        teamLeadData = await TeamLead.findOne({
+          $or: [
+            { teamLead: rawEmployeeID },
+            { user: rawEmployeeID },
+            { _id: rawEmployeeID },
+          ],
+        }).populate(
+          "teamLead user",
+          "name email firstName lastName"
+        );
+      }
 
       if (teamLeadData) {
         const leadData =
           teamLeadData.teamLead || teamLeadData.user;
 
         if (leadData) {
+          realEmployeeID = leadData._id || teamLeadData._id;
           employeeType = "teamlead";
           employeeName =
             leadData.name ||
@@ -128,7 +164,7 @@ exports.createPerformance = async (req, res) => {
       }
     }
 
-    if (!employeeType) {
+    if (!realEmployeeID) {
       return res.status(404).json({
         success: false,
         message:
@@ -140,16 +176,23 @@ exports.createPerformance = async (req, res) => {
     // 4. Evaluator / SubmittedBy Info
     // ============================================================
     const submittedBy = req.user?._id || null;
-    const evaluatorName = req.user?.name || `${req.user?.firstName || ''} ${req.user?.lastName || ''}`.trim() || req.user?.email || "";
+    const evaluatorName =
+      req.user?.name ||
+      `${req.user?.firstName || ""} ${req.user?.lastName || ""}`.trim() ||
+      req.user?.email ||
+      "";
     const evaluatorRole = req.user?.role || "";
 
     // ============================================================
     // 5. Create or Update Performance Record
     // ============================================================
     let performance = await EmployeePerformance.findOne({
-      employeeID,
+      $or: [
+        { employeeID: realEmployeeID },
+        ...(isValidObjId ? [{ employeeID: rawEmployeeID }] : []),
+      ],
     });
- 
+
     if (performance) {
       if (percentage > 0) performance.performancePercentage = percentage;
       if (numericRating > 0) performance.rating = numericRating;
@@ -164,8 +207,8 @@ exports.createPerformance = async (req, res) => {
       await performance.save();
     } else {
       performance = await EmployeePerformance.create({
-        employeeID,
-        employeeType,
+        employeeID: realEmployeeID,
+        employeeType: employeeType || "employee",
         employeeName,
         employeeEmail,
         performancePercentage: percentage,
@@ -180,11 +223,11 @@ exports.createPerformance = async (req, res) => {
 
     // Record Team Lead Activity if submitted by a Team Lead
     const normRole = (evaluatorRole || "").toLowerCase().replace(/[_\s]+/g, "");
-    if (normRole === "teamlead" || normRole === "teamleader") {
+    if (submittedBy && (normRole === "teamlead" || normRole === "teamleader")) {
       try {
         await TeamLeadActivity.create({
           teamLeadId: submittedBy,
-          employeeId: employeeID,
+          employeeId: realEmployeeID,
           activityType: "performance_monitoring",
           referenceId: performance._id,
           status: "completed",
@@ -206,7 +249,7 @@ exports.createPerformance = async (req, res) => {
 
     return res.status(500).json({
       success: false,
-      message: err.message,
+      message: err.message || "Failed to create performance feedback",
     });
   }
 };
