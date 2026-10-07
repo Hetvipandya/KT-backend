@@ -1,7 +1,7 @@
 const express = require("express");
 
 const router = express.Router();
-5
+
 const {
   createSalaryStructure,
   getSalaryStructure,
