@@ -3,6 +3,8 @@ const MonthlySalary = require("../models/MonthlySalary");
 const SalaryStructure = require("../models/SalaryStructure");
 const User = require("../models/User");
 const Attendance = require("../models/Attendance");
+const Company = require("../models/Company");
+const Branch = require("../models/Branch");
 
 const monthNames = [
   "January", "February", "March", "April", "May", "June",
@@ -503,21 +505,74 @@ const updateMonthlySalary = async (req, res) => {
 // =====================================================
 const approveMonthlySalary = async (req, res) => {
   try {
-    const { id } = req.params;
+    const targetSalaryId =
+      (req.params && (req.params.id || req.params.salaryId)) ||
+      (req.body && (req.body.id || req.body.salaryId));
+    const { companyId, branchId, remarks } = req.body || {};
 
-    if (!mongoose.Types.ObjectId.isValid(id)) {
+    // Support batch approval if salaryIds array is passed
+    if (!targetSalaryId && Array.isArray(req.body && req.body.salaryIds) && req.body.salaryIds.length > 0) {
+      const filter = { _id: { $in: req.body.salaryIds } };
+      const updateData = {
+        status: "Approved",
+        approvedAt: new Date(),
+        approvedBy: req.user ? req.user._id : null,
+      };
+      if (companyId) updateData.companyId = companyId;
+      if (branchId) updateData.branchId = branchId;
+      if (remarks) updateData.remarks = remarks;
+
+      await MonthlySalary.updateMany(filter, { $set: updateData });
+      const approvedList = await MonthlySalary.find(filter)
+        .populate("employeeId userId", "name email uniqueID role designation department")
+        .populate("companyId", "name companyName")
+        .populate("branchId", "branchName");
+
+      return res.status(200).json({
+        success: true,
+        message: `${approvedList.length} monthly salaries approved successfully`,
+        count: approvedList.length,
+        data: approvedList,
+      });
+    }
+
+    if (!targetSalaryId || !mongoose.Types.ObjectId.isValid(targetSalaryId)) {
       return res.status(400).json({
         success: false,
         message: "Invalid ID",
       });
     }
 
-    const salary = await MonthlySalary.findById(id);
+    const salary = await MonthlySalary.findById(targetSalaryId);
     if (!salary) {
       return res.status(404).json({
         success: false,
         message: "Monthly salary record not found",
       });
+    }
+
+    if (companyId) {
+      if (!mongoose.Types.ObjectId.isValid(companyId)) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid companyId",
+        });
+      }
+      salary.companyId = companyId;
+    }
+
+    if (branchId) {
+      if (!mongoose.Types.ObjectId.isValid(branchId)) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid branchId",
+        });
+      }
+      salary.branchId = branchId;
+    }
+
+    if (remarks) {
+      salary.remarks = remarks;
     }
 
     salary.status = "Approved";
@@ -526,14 +581,50 @@ const approveMonthlySalary = async (req, res) => {
 
     await salary.save();
 
+    let companyDoc = null;
+    let branchDoc = null;
+    if (salary.companyId && mongoose.connection && mongoose.connection.readyState === 1) {
+      try {
+        if (typeof Company.findById === "function") {
+          companyDoc = await Company.findById(salary.companyId);
+        }
+      } catch (_) {}
+    }
+    if (salary.branchId && mongoose.connection && mongoose.connection.readyState === 1) {
+      try {
+        if (typeof Branch.findById === "function") {
+          branchDoc = await Branch.findById(salary.branchId);
+        }
+      } catch (_) {}
+    }
+
     const approvedSalary = await MonthlySalary.findById(salary._id)
       .populate("employeeId userId", "name email uniqueID role designation department")
+      .populate("companyId", "name companyName")
+      .populate("branchId", "branchName")
       .populate("approvedBy", "name email");
+
+    const resultData =
+      approvedSalary && approvedSalary.toObject ? approvedSalary.toObject() : (approvedSalary || salary);
+
+    if (resultData) {
+      if (companyDoc && !resultData.companyName) {
+        resultData.companyName = companyDoc.companyName || companyDoc.name;
+      } else if (resultData.companyId && typeof resultData.companyId === "object" && !resultData.companyName) {
+        resultData.companyName = resultData.companyId.companyName || resultData.companyId.name;
+      }
+
+      if (branchDoc && !resultData.branchName) {
+        resultData.branchName = branchDoc.branchName;
+      } else if (resultData.branchId && typeof resultData.branchId === "object" && !resultData.branchName) {
+        resultData.branchName = resultData.branchId.branchName;
+      }
+    }
 
     return res.status(200).json({
       success: true,
       message: "Monthly salary approved successfully",
-      data: approvedSalary,
+      data: resultData,
     });
   } catch (error) {
     console.error("Approve Monthly Salary Error:", error);

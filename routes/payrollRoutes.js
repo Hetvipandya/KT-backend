@@ -8,6 +8,8 @@ const {
   getSalaryStructureByUserId,
   updateSalaryStructure, 
   processPayroll,
+  approvePayroll,
+  approveMonthlySalary,
   generatePayslip,  
   getPayroll, 
   getPayslips,
@@ -59,6 +61,36 @@ router.get(
 router.put(
   "/pay",
   markSalaryPaid
+);
+
+router.post(
+  "/approve",
+  approvePayroll || approveMonthlySalary
+);
+
+router.put(
+  "/approve",
+  approvePayroll || approveMonthlySalary
+);
+
+router.post(
+  "/approve/:id",
+  approvePayroll || approveMonthlySalary
+);
+
+router.put(
+  "/approve/:id",
+  approvePayroll || approveMonthlySalary
+);
+
+router.post(
+  "/salary/approve",
+  approvePayroll || approveMonthlySalary
+);
+
+router.put(
+  "/salary/approve",
+  approvePayroll || approveMonthlySalary
 );
 
 

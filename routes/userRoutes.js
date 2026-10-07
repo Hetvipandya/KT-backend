@@ -87,8 +87,38 @@ router.put(
   approveEmployee
 );  //done
 
+router.post(
+  "/approve",
+  approveEmployee
+);
+
 router.put(
+  "/approve/:id",
+  approveEmployee
+);
+
+router.post(
+  "/approve/:id",
+  approveEmployee
+);
+
+router.put(
+  "/approve-employee",
+  approveEmployee
+);
+
+router.post(
+  "/approve-employee",
+  approveEmployee
+);
+
+router.put( 
   "/reject", 
+  rejectEmployee
+);
+
+router.post(
+  "/reject",
   rejectEmployee
 );
 
@@ -169,9 +199,22 @@ router.post(
 
 // ================= GET USERS =================
 router.get(
+  "/",
+  getAllUsers
+);
+
+router.get(
   "/all",
   getAllUsers
 ); //done
+
+router.get(
+  "/pending",
+  (req, res, next) => {
+    req.query.isApproved = "false";
+    return getAllUsers(req, res, next);
+  }
+);
 
 // ================= DELETE USER =================
 router.delete(

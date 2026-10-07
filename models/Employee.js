@@ -29,6 +29,12 @@ const employeeSchema = new mongoose.Schema(
       default: null,
       index: true
     },
+    branchId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Branch',
+      default: null,
+      index: true
+    },
     employeeID: {
       type: String,
       sparse: true,

@@ -26,6 +26,9 @@ router.post("/generate", authorizeRoles("ca", "accountant", "admin", "hr", "supe
 router.post("/process", authorizeRoles("ca", "accountant", "admin", "hr", "super admin"), generateMonthlySalary);
 router.put("/:id", authorizeRoles("ca", "accountant", "admin", "hr", "super admin"), updateMonthlySalary);
 router.post("/:id/approve", authorizeRoles("ca", "accountant", "admin", "hr", "super admin"), approveMonthlySalary);
+router.put("/:id/approve", authorizeRoles("ca", "accountant", "admin", "hr", "super admin"), approveMonthlySalary);
+router.post("/approve", authorizeRoles("ca", "accountant", "admin", "hr", "super admin"), approveMonthlySalary);
+router.put("/approve", authorizeRoles("ca", "accountant", "admin", "hr", "super admin"), approveMonthlySalary);
 router.post("/:id/pay", authorizeRoles("ca", "accountant", "admin", "hr", "super admin"), payMonthlySalary);
 router.put("/:id/pay", authorizeRoles("ca", "accountant", "admin", "hr", "super admin"), payMonthlySalary);
 router.post("/:id/cancel", authorizeRoles("ca", "accountant", "admin", "hr", "super admin"), cancelMonthlySalary);

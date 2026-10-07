@@ -1,6 +1,10 @@
 const mongoose = require("mongoose");
 const User = require("../models/User");
 const Employee = require("../models/Employee");
+const Company = require("../models/Company");
+const Branch = require("../models/Branch");
+const SalaryStructure = require("../models/SalaryStructure");
+const MonthlySalary = require("../models/MonthlySalary");
 
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
@@ -1010,15 +1014,26 @@ const registerUser = async (req, res) => {
 
 const getAllUsers = async (req, res) => {
   try {
-    const users = await User.find().sort({
+    const filter = {};
+    if (req.query.isApproved !== undefined) {
+      filter.isApproved = req.query.isApproved === "true";
+    } else if (req.query.pending === "true") {
+      filter.isApproved = false;
+    }
+    if (req.query.companyId && mongoose.Types.ObjectId.isValid(req.query.companyId)) {
+      filter.companyId = req.query.companyId;
+    }
+    if (req.query.branchId && mongoose.Types.ObjectId.isValid(req.query.branchId)) {
+      filter.branchId = req.query.branchId;
+    }
+
+    const users = await User.find(filter).sort({
       createdAt: -1,
     });
 
     return res.status(200).json({
       success: true,
-
       totalUsers: users.length,
-
       users: users.map((user) => buildUserResponse(user)),
     });
   } catch (error) {
@@ -1036,16 +1051,32 @@ const getAllUsers = async (req, res) => {
 
 const approveEmployee = async (req, res) => {
   try {
-    const { userId } = req.body;
+    const targetUserId =
+      (req.body && (req.body.userId || req.body.id || req.body.employeeId)) ||
+      (req.params && (req.params.id || req.params.userId));
+    const { companyId, branchId } = req.body || {};
 
-    if (!userId) {
+    if (!targetUserId) {
       return res.status(400).json({
         success: false,
         message: "userId is required",
       });
     }
 
-    const user = await User.findById(userId);
+    if (!mongoose.Types.ObjectId.isValid(targetUserId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid userId",
+      });
+    }
+
+    let user = await User.findById(targetUserId);
+    if (!user) {
+      const emp = await Employee.findById(targetUserId);
+      if (emp && emp.userID) {
+        user = await User.findById(emp.userID);
+      }
+    }
 
     if (!user) {
       return res.status(404).json({
@@ -1059,6 +1090,56 @@ const approveEmployee = async (req, res) => {
         success: false,
         message: "Employee is already approved",
       });
+    }
+
+    // Validate and assign companyId if provided
+    let companyDoc = null;
+    if (companyId) {
+      if (!mongoose.Types.ObjectId.isValid(companyId)) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid companyId",
+        });
+      }
+      user.companyId = companyId;
+      if (mongoose.connection && mongoose.connection.readyState === 1) {
+        try {
+          if (typeof Company.findById === "function") {
+            companyDoc = await Company.findById(companyId);
+          }
+        } catch (_) {}
+      }
+    } else if (user.companyId && mongoose.connection && mongoose.connection.readyState === 1) {
+      try {
+        if (typeof Company.findById === "function") {
+          companyDoc = await Company.findById(user.companyId);
+        }
+      } catch (_) {}
+    }
+
+    // Validate and assign branchId if provided
+    let branchDoc = null;
+    if (branchId) {
+      if (!mongoose.Types.ObjectId.isValid(branchId)) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid branchId",
+        });
+      }
+      user.branchId = branchId;
+      if (mongoose.connection && mongoose.connection.readyState === 1) {
+        try {
+          if (typeof Branch.findById === "function") {
+            branchDoc = await Branch.findById(branchId);
+          }
+        } catch (_) {}
+      }
+    } else if (user.branchId && mongoose.connection && mongoose.connection.readyState === 1) {
+      try {
+        if (typeof Branch.findById === "function") {
+          branchDoc = await Branch.findById(user.branchId);
+        }
+      } catch (_) {}
     }
 
     // --------------------------------------------------------
@@ -1077,17 +1158,52 @@ const approveEmployee = async (req, res) => {
       employee = await createEmployeeForUser(user);
     }
 
+    if (employee) {
+      if (companyId) employee.companyId = companyId;
+      if (branchId) employee.branchId = branchId;
+      await employee.save();
+    }
+
+    // Sync companyId and branchId on SalaryStructure if existing
+    if (mongoose.connection && mongoose.connection.readyState === 1) {
+      try {
+        if (SalaryStructure && (companyId || branchId)) {
+          const syncUpdate = {};
+          if (companyId) syncUpdate.companyId = companyId;
+          if (branchId) syncUpdate.branchId = branchId;
+          await SalaryStructure.updateMany(
+            { $or: [{ userId: user._id }, { employeeId: user._id }] },
+            { $set: syncUpdate }
+          );
+        }
+      } catch (_) {}
+
+      // Sync companyId and branchId on MonthlySalary if existing
+      try {
+        if (MonthlySalary && (companyId || branchId)) {
+          const syncSalary = {};
+          if (companyId) syncSalary.companyId = companyId;
+          if (branchId) syncSalary.branchId = branchId;
+          await MonthlySalary.updateMany(
+            { $or: [{ userId: user._id }, { employeeId: user._id }] },
+            { $set: syncSalary }
+          );
+        }
+      } catch (_) {}
+    }
+
     // --------------------------------------------------------
     // APPROVE & SEND CREDENTIALS
     // --------------------------------------------------------
 
     user.isApproved = true;
+    user.status = "Active";
 
     if (user.email) {
       sendTemporaryPasswordEmail(
         user.email,
         "Temporary Password Sent During Creation",
-        "Kevalon Technology",
+        (companyDoc && (companyDoc.companyName || companyDoc.name)) || "Kevalon Technology",
       ).catch((emailError) => {
         console.error("Approved user password email error:", emailError.message);
       });
@@ -1097,23 +1213,21 @@ const approveEmployee = async (req, res) => {
 
     return res.status(200).json({
       success: true,
-
       message: "Employee approved successfully and login credentials sent via email.",
-
       data: {
         userId: user._id,
-
         employeeID: employee ? employee.employeeID : null,
-
         username: user.name,
-
         email: user.email,
-
+        role: user.role,
+        companyId: user.companyId || null,
+        companyName: companyDoc ? (companyDoc.companyName || companyDoc.name) : null,
+        branchId: user.branchId || null,
+        branchName: branchDoc ? branchDoc.branchName : null,
         designation: employee ? employee.designation : user.designation,
-
         joiningDate: employee ? employee.joiningDate : null,
-
         isApproved: user.isApproved,
+        status: user.status,
       },
     });
   } catch (error) {

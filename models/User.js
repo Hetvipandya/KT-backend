@@ -152,6 +152,27 @@ const userSchema =
         default: false,
       },
 
+      // ================= COMPANY & BRANCH =================
+      companyId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Company",
+        default: null,
+        index: true,
+      },
+
+      branchId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Branch",
+        default: null,
+        index: true,
+      },
+
+      financialYearId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "FinancialYear",
+        default: null,
+      },
+
       // ================= FIRST LOGIN =================
       isFirstLogin: {
         type: Boolean,

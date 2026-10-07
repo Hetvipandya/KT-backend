@@ -24,6 +24,8 @@ module.exports = {
   getSalaryStructureByUserId: getSalaryStructureById,
   updateSalaryStructure,
   processPayroll: generateMonthlySalary,
+  approvePayroll: approveMonthlySalary,
+  approveMonthlySalary,
   generatePayslip: getSalarySlipHtml,
   getPayroll: getMonthlySalaries,
   getPayslips: getMonthlySalaries,
