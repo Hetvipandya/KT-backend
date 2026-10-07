@@ -3,6 +3,7 @@ const router = express.Router();
 const authenticate = require('../middleware/authenticate');
 const requirePermission = require('../middleware/requirePermission');
 const userController = require('../controllers/user.controller');
+const ktUserControllers = require('../controllers/userControllers');
 
 /**
  * All 4 endpoints are gated by:
@@ -47,6 +48,12 @@ router.put(
   userController.updateUser
 );
 
+// DELETE /api/user/delete/:id — Delete user with cascade
+router.delete(
+  '/delete/:id',
+  ktUserControllers.deleteUser
+);
+
 // DELETE /api/user/:id?companyId= — Revoke company access
 router.delete(
   '/:id',
@@ -56,3 +63,4 @@ router.delete(
 );
 
 module.exports = router;
+

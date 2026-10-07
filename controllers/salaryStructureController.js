@@ -11,7 +11,7 @@ const createSalaryStructure = async (req, res) => {
     const {
       employeeId,
       userId,
-      companyId,
+      companyId, 
       branchId,
       financialYearId,
       effectiveFrom,
@@ -171,46 +171,60 @@ const getAllSalaryStructures = async (req, res) => {
 // =====================================================
 const getSalaryStructureById = async (req, res) => {
   try {
-    const id = req.params.id || req.params.employeeId || req.params.userId;
+    const { companyId, branchId, id, employeeId, userId } = req.params;
 
-    if (!id || !mongoose.Types.ObjectId.isValid(id)) {
+    // Validate companyId
+    if (!companyId || !mongoose.Types.ObjectId.isValid(companyId)) {
       return res.status(400).json({
         success: false,
-        message: "Invalid ID parameter",
+        message: "Invalid companyId",
       });
     }
 
-    let structure = await SalaryStructure.findById(id);
-    if (structure && typeof structure.populate === "function") {
-      structure = await structure.populate(
+    // Validate branchId
+    if (!branchId || !mongoose.Types.ObjectId.isValid(branchId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid branchId",
+      });
+    }
+
+    // Find salary structure using companyId + branchId
+    let query = {
+      companyId,
+      branchId,
+      isActive: true,
+    };
+
+    // If employee/user/id is provided, also filter by it
+    const searchId = id || employeeId || userId;
+
+    if (searchId) {
+      if (!mongoose.Types.ObjectId.isValid(searchId)) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid employee/user ID",
+        });
+      }
+
+      query.$or = [
+        { _id: searchId },
+        { userId: searchId },
+        { employeeId: searchId },
+      ];
+    }
+
+    let structure = await SalaryStructure.findOne(query)
+      .populate(
         "userId employeeId",
         "name email uniqueID role designation department"
-      );
-    }
-
-    if (!structure) {
-      structure = await SalaryStructure.findOne({
-        $or: [{ userId: id }, { employeeId: id }],
-        isActive: true,
-      });
-      if (structure && typeof structure.populate === "function") {
-        structure = await structure.populate("userId employeeId", "name email uniqueID role designation department");
-      }
-    }
-
-    if (!structure) {
-      structure = await SalaryStructure.findOne({
-        $or: [{ userId: id }, { employeeId: id }],
-      }).sort({ effectiveFrom: -1 });
-      if (structure && typeof structure.populate === "function") {
-        structure = await structure.populate("userId employeeId", "name email uniqueID role designation department");
-      }
-    }
+      )
+      .sort({ effectiveFrom: -1 });
 
     if (!structure) {
       return res.status(404).json({
         success: false,
-        message: "Salary structure not found",
+        message: "Salary structure not found for this company and branch",
       });
     }
 
@@ -220,6 +234,7 @@ const getSalaryStructureById = async (req, res) => {
     });
   } catch (error) {
     console.error("Get Salary Structure Error:", error);
+
     return res.status(500).json({
       success: false,
       message: "Failed to fetch salary structure",

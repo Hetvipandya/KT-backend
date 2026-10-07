@@ -9,7 +9,7 @@ const {
   updateSalaryStructure, 
   processPayroll,
   generatePayslip,  
-  getPayroll,
+  getPayroll, 
   getPayslips,
   markSalaryPaid,
   downloadPrintablePayslip,

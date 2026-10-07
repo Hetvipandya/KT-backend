@@ -3,7 +3,7 @@ const router = express.Router();
 
 const { 
   createPerformance,
-  getAllPerformance,
+  getAllPerformance, 
   getPerformanceById,
   updatePerformance,
   deletePerformance,

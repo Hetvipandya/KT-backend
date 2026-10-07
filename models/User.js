@@ -368,8 +368,50 @@ userSchema.methods.comparePassword =
     return false;
   };
 
+// ================= CASCADE DELETE HOOKS =================
+userSchema.pre("findOneAndDelete", async function () {
+  try {
+    const options = this.getOptions();
+    if (options && options.skipCascade) return;
+
+    const query = this.getQuery();
+    const docToDelete = await this.model.findOne(query);
+    if (docToDelete) {
+      const { cascadeDeleteUser } = require("../utils/userCascadeDelete");
+      await cascadeDeleteUser(docToDelete);
+    }
+  } catch (err) {
+    console.error("User pre findOneAndDelete cascade error:", err);
+  }
+});
+
+userSchema.pre("deleteOne", { document: false, query: true }, async function () {
+  try {
+    const options = this.getOptions();
+    if (options && options.skipCascade) return;
+
+    const query = this.getQuery();
+    const docToDelete = await this.model.findOne(query);
+    if (docToDelete) {
+      const { cascadeDeleteUser } = require("../utils/userCascadeDelete");
+      await cascadeDeleteUser(docToDelete);
+    }
+  } catch (err) {
+    console.error("User pre deleteOne query cascade error:", err);
+  }
+});
+
+userSchema.pre("deleteOne", { document: true, query: false }, async function () {
+  try {
+    const { cascadeDeleteUser } = require("../utils/userCascadeDelete");
+    await cascadeDeleteUser(this);
+  } catch (err) {
+    console.error("User pre deleteOne doc cascade error:", err);
+  }
+});
+
 module.exports =
   mongoose.model(
     "User",
     userSchema
-  );
+  );

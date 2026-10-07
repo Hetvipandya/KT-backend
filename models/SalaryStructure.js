@@ -28,7 +28,7 @@ const salaryStructureSchema = new mongoose.Schema(
       required: true,
       index: true,
     },
-
+ 
     employeeId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",

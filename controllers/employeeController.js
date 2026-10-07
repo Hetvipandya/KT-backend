@@ -10,6 +10,7 @@ const LeaveBalance = require("../models/LeaveBalance");
 const EmployeePerformance = require("../models/EmployeePerformance");
 const User = require("../models/User");
 const Team = require("../models/Team");
+const TeamMember = require("../models/TeamMember");
 const { syncEmployeeToUser } = require("../utils/userEmployeeSync");
 const sanitizeUserUpdatePayload = require("../utils/userPayloadSanitizer");
 const generateEmployeeID = require("../utils/employeeId");
@@ -455,6 +456,15 @@ exports.deleteEmployee = async (req, res) => {
       ],
     });
 
+    const targetUserIds = [employee._id];
+    if (user?._id) targetUserIds.push(user._id);
+    if (employee.userID) targetUserIds.push(employee.userID);
+    if (employee.userId) targetUserIds.push(employee.userId);
+
+    await TeamMember.deleteMany({
+      userId: { $in: targetUserIds },
+    });
+
     // If employee is inside another team's employees/interns
     await Team.updateMany(
       {},
@@ -605,6 +615,11 @@ exports.removeTeamLead = async (req, res) => {
         ...(empId ? [{ teamLeadEmployee: empId }] : []),
         ...(userId ? [{ teamLeadUser: userId }] : [])
       ]
+    });
+
+    await TeamMember.deleteMany({
+      userId: { $in: [empId, userId, employee?.userID, employee?.userId].filter(Boolean) },
+      role: "Team Lead",
     });
 
     res.status(200).json({
@@ -1313,10 +1328,16 @@ exports.removeEmployee =
   message: `${employee.firstName} ${employee.lastName} removed from company`,
 });
 
+      // DELETE FROM TEAMMEMBER
+      await TeamMember.deleteMany({
+        userId: { $in: [employee._id, employee.userID, employee.userId].filter(Boolean) },
+      });
+
       // DELETE EMPLOYEE
       await Employee.findByIdAndDelete(
         employeeId
       );
+
 
       res.status(200).json({
         success: true,
