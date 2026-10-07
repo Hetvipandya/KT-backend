@@ -1,5 +1,7 @@
 const express = require("express");
 const router = express.Router();
+const { protect } = require("../middleware/authMiddleware");
+const { authorizeRoles } = require("../middleware/roleMiddleware");
 
 const {
   createSalaryStructure,
@@ -9,24 +11,21 @@ const {
   deleteSalaryStructure,
 } = require("../controllers/salaryStructureController");
 
-// Create Salary Structure
-router.post("/", createSalaryStructure);
-router.post("/create", createSalaryStructure);
+// Protect all salary structure routes
+router.use(protect);
 
-// Get All Salary Structures
-router.get("/", getAllSalaryStructures);
-router.get("/all", getAllSalaryStructures);
+// View Salary Structures (CA, Accountant, Admin, HR, Super Admin, Employee)
+router.get("/", authorizeRoles("ca", "accountant", "admin", "hr", "super admin", "employee"), getAllSalaryStructures);
+router.get("/all", authorizeRoles("ca", "accountant", "admin", "hr", "super admin", "employee"), getAllSalaryStructures);
+router.get("/employee/:employeeId", authorizeRoles("ca", "accountant", "admin", "hr", "super admin", "employee"), getSalaryStructureById);
+router.get("/user/:userId", authorizeRoles("ca", "accountant", "admin", "hr", "super admin", "employee"), getSalaryStructureById);
+router.get("/:id", authorizeRoles("ca", "accountant", "admin", "hr", "super admin", "employee"), getSalaryStructureById);
 
-// Get By Structure ID or Employee ID
-router.get("/employee/:employeeId", getSalaryStructureById);
-router.get("/user/:userId", getSalaryStructureById);
-router.get("/:id", getSalaryStructureById);
-
-// Update Salary Structure
-router.put("/:id", updateSalaryStructure);
-router.patch("/:id", updateSalaryStructure);
-
-// Delete / Deactivate Salary Structure
-router.delete("/:id", deleteSalaryStructure);
+// Create, Update, Delete (CA, Accountant, Admin, HR, Super Admin)
+router.post("/", authorizeRoles("ca", "accountant", "admin", "hr", "super admin"), createSalaryStructure);
+router.post("/create", authorizeRoles("ca", "accountant", "admin", "hr", "super admin"), createSalaryStructure);
+router.put("/:id", authorizeRoles("ca", "accountant", "admin", "hr", "super admin"), updateSalaryStructure);
+router.patch("/:id", authorizeRoles("ca", "accountant", "admin", "hr", "super admin"), updateSalaryStructure);
+router.delete("/:id", authorizeRoles("ca", "accountant", "admin", "hr", "super admin"), deleteSalaryStructure);
 
 module.exports = router;

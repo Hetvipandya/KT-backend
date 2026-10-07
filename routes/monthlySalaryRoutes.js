@@ -1,5 +1,7 @@
 const express = require("express");
 const router = express.Router();
+const { protect } = require("../middleware/authMiddleware");
+const { authorizeRoles } = require("../middleware/roleMiddleware");
 
 const {
   generateMonthlySalary,
@@ -11,24 +13,21 @@ const {
   cancelMonthlySalary,
 } = require("../controllers/monthlySalaryController");
 
-// Generate Monthly Salary
-router.post("/generate", generateMonthlySalary);
-router.post("/process", generateMonthlySalary);
+// Protect all monthly salary routes
+router.use(protect);
 
-// Get Monthly Salaries
-router.get("/", getMonthlySalaries);
-router.get("/all", getMonthlySalaries);
+// View Monthly Salaries (CA, Accountant, Admin, HR, Super Admin, Employee)
+router.get("/", authorizeRoles("ca", "accountant", "admin", "hr", "super admin", "employee"), getMonthlySalaries);
+router.get("/all", authorizeRoles("ca", "accountant", "admin", "hr", "super admin", "employee"), getMonthlySalaries);
+router.get("/:id", authorizeRoles("ca", "accountant", "admin", "hr", "super admin", "employee"), getMonthlySalaryById);
 
-// Get Single Monthly Salary
-router.get("/:id", getMonthlySalaryById);
-
-// Update Monthly Salary Draft
-router.put("/:id", updateMonthlySalary);
-
-// Workflow Actions: Approve, Pay, Cancel
-router.post("/:id/approve", approveMonthlySalary);
-router.post("/:id/pay", payMonthlySalary);
-router.put("/:id/pay", payMonthlySalary);
-router.post("/:id/cancel", cancelMonthlySalary);
+// Generate, Update, Approve, Pay, Cancel (CA, Accountant, Admin, HR, Super Admin)
+router.post("/generate", authorizeRoles("ca", "accountant", "admin", "hr", "super admin"), generateMonthlySalary);
+router.post("/process", authorizeRoles("ca", "accountant", "admin", "hr", "super admin"), generateMonthlySalary);
+router.put("/:id", authorizeRoles("ca", "accountant", "admin", "hr", "super admin"), updateMonthlySalary);
+router.post("/:id/approve", authorizeRoles("ca", "accountant", "admin", "hr", "super admin"), approveMonthlySalary);
+router.post("/:id/pay", authorizeRoles("ca", "accountant", "admin", "hr", "super admin"), payMonthlySalary);
+router.put("/:id/pay", authorizeRoles("ca", "accountant", "admin", "hr", "super admin"), payMonthlySalary);
+router.post("/:id/cancel", authorizeRoles("ca", "accountant", "admin", "hr", "super admin"), cancelMonthlySalary);
 
 module.exports = router;
