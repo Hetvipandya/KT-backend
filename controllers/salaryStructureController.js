@@ -1,6 +1,7 @@
 const mongoose = require("mongoose");
 const SalaryStructure = require("../models/SalaryStructure");
 const User = require("../models/User");
+const Employee = require("../models/Employee");
 
 // =====================================================
 // CREATE SALARY STRUCTURE
@@ -215,7 +216,7 @@ const getSalaryStructureById = async (req, res) => {
 
     let structure = null;
 
-    // 1. If searchId is provided, try direct findById first
+    // 1. Direct search by searchId in SalaryStructure
     if (searchId) {
       try {
         const q = SalaryStructure.findById(searchId);
@@ -309,6 +310,106 @@ const getSalaryStructureById = async (req, res) => {
           });
         }
       }
+    }
+
+    if (!structure && !searchId && (companyId || branchId)) {
+      let query = { isActive: true };
+      if (companyId) query.companyId = companyId;
+      if (branchId) query.branchId = branchId;
+      structure = await SalaryStructure.findOne(query);
+
+      if (!structure) {
+        delete query.isActive;
+        structure = await SalaryStructure.findOne(query);
+      }
+    }
+
+    // 2. If direct search did not find structure, try resolving candidate IDs from User & Employee
+    let targetUserDoc = null;
+    if (!structure && searchId && mongoose.connection && mongoose.connection.readyState === 1) {
+      let candidateIds = [searchId];
+      try {
+        if (typeof User.findById === "function") {
+          targetUserDoc = await User.findById(searchId);
+        }
+        if (typeof Employee.find === "function") {
+          const empDocs = await Employee.find({
+            $or: [
+              { _id: searchId },
+              { userId: searchId },
+              { userID: searchId },
+            ],
+          });
+          for (const emp of empDocs) {
+            if (emp._id) candidateIds.push(emp._id.toString());
+            if (emp.userId) candidateIds.push(emp.userId.toString());
+            if (emp.userID) candidateIds.push(emp.userID.toString());
+            if (!targetUserDoc && (emp.userId || emp.userID) && typeof User.findById === "function") {
+              try {
+                targetUserDoc = await User.findById(emp.userId || emp.userID);
+              } catch (e) {}
+            }
+          }
+        }
+      } catch (e) {}
+
+      candidateIds = [...new Set(candidateIds)];
+
+      if (candidateIds.length > 1) {
+        let query = {
+          $or: [
+            { _id: { $in: candidateIds } },
+            { userId: { $in: candidateIds } },
+            { employeeId: { $in: candidateIds } },
+          ],
+        };
+        if (companyId) query.companyId = companyId;
+        if (branchId) query.branchId = branchId;
+
+        structure = await SalaryStructure.findOne({ ...query, isActive: true });
+        if (!structure) {
+          structure = await SalaryStructure.findOne(query);
+        }
+      }
+    }
+
+    // 3. Fallback: if user exists in DB but has no custom salary structure yet
+    if (!structure && targetUserDoc) {
+      const defaultStructure = {
+        _id: targetUserDoc._id,
+        userId: targetUserDoc._id,
+        employeeId: targetUserDoc._id,
+        companyId: companyId || targetUserDoc.companyId || null,
+        branchId: branchId || targetUserDoc.branchId || null,
+        effectiveFrom: new Date(),
+        basicSalary: 0,
+        hra: 0,
+        conveyanceAllowance: 0,
+        medicalAllowance: 0,
+        specialAllowance: 0,
+        dearnessAllowance: 0,
+        otherAllowances: 0,
+        fixedBonus: 0,
+        grossSalary: 0,
+        pfDeduction: 0,
+        esicDeduction: 0,
+        professionalTax: 0,
+        tds: 0,
+        tdsPercentage: 0,
+        fixedDeduction: 0,
+        otherDeductions: 0,
+        totalDeduction: 0,
+        netSalary: 0,
+        employerContributions: { pf: 0, esic: 0, gratuity: 0, other: 0 },
+        isActive: true,
+        isDefaultFallback: true,
+      };
+
+      return res.status(200).json({
+        success: true,
+        data: defaultStructure,
+        message: "Default salary structure for user",
+      });
     }
 
     if (!structure) {
