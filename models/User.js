@@ -42,12 +42,6 @@ const userSchema =
         trim: true,
       },
 
-      profileImg: {
-        type: String,
-        default: null,
-        trim: true,
-      },
-
       dob: {
         type: String,
         default: null,
@@ -453,9 +447,8 @@ const transformUserObject = function (doc, ret) {
   delete ret.password;
   delete ret.passwordHash;
   delete ret.plainPassword;
-  const imgUrl = ret.profileImage || ret.profileImg || null;
+  const imgUrl = ret.profileImage || ret.profilePhoto || ret.avatar || null;
   ret.profileImage = imgUrl;
-  ret.profileImg = imgUrl;
   ret.profilePhoto = imgUrl;
   ret.upiId = ret.upiId || null;
   ret.upiID = ret.upiId || null;
@@ -498,6 +491,34 @@ const transformUserObject = function (doc, ret) {
     bankDetailsGiven: isBankGiven,
     isBankDetailsGiven: isBankGiven,
   };
+
+  const cObj = ret.companyId && typeof ret.companyId === 'object' ? ret.companyId : null;
+  const bObj = ret.branchId && typeof ret.branchId === 'object' ? ret.branchId : null;
+  const fObj = ret.financialYearId && typeof ret.financialYearId === 'object' ? ret.financialYearId : null;
+
+  if (cObj) {
+    ret.companyId = cObj._id || cObj.id;
+    ret.companyName = ret.companyName || cObj.companyName || cObj.name || null;
+  } else {
+    ret.companyName = ret.companyName || null;
+  }
+
+  if (bObj) {
+    ret.branchId = bObj._id || bObj.id;
+    ret.branchName = ret.branchName || bObj.branchName || bObj.name || null;
+  } else {
+    ret.branchName = ret.branchName || null;
+  }
+
+  if (fObj) {
+    ret.financialYearId = fObj._id || fObj.id;
+    ret.yearLabel = ret.yearLabel || ret.financialYearLabel || fObj.yearLabel || fObj.financialYearLabel || fObj.label || fObj.name || fObj.year || null;
+  } else {
+    ret.yearLabel = ret.yearLabel || ret.financialYearLabel || null;
+  }
+  ret.financialYearName = ret.yearLabel;
+  ret.financialYearLabel = ret.yearLabel;
+
   return ret;
 };
 
@@ -536,12 +557,6 @@ userSchema.pre(
       this.isBankDetailGiven = hasBankData;
       this.bankDetailGiven = hasBankData;
       this.bankDetailsGiven = hasBankData;
-
-      if (this.profileImage && !this.profileImg) {
-        this.profileImg = this.profileImage;
-      } else if (this.profileImg && !this.profileImage) {
-        this.profileImage = this.profileImg;
-      }
 
       if (this.isModified("password") && this.password) {
         if (!this.password.startsWith("$2a$") && !this.password.startsWith("$2b$")) {

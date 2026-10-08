@@ -251,6 +251,19 @@ const buildUserResponse = (user) => {
     user.bankName
   );
 
+  const cObj = user.companyId && typeof user.companyId === 'object' ? user.companyId : null;
+  const bObj = user.branchId && typeof user.branchId === 'object' ? user.branchId : null;
+  const fObj = user.financialYearId && typeof user.financialYearId === 'object' ? user.financialYearId : null;
+
+  const resolvedCompanyId = cObj ? (cObj._id || cObj.id) : (user.companyId || null);
+  const resolvedCompanyName = user.companyName || (cObj ? (cObj.companyName || cObj.name) : null);
+
+  const resolvedBranchId = bObj ? (bObj._id || bObj.id) : (user.branchId || null);
+  const resolvedBranchName = user.branchName || (bObj ? (bObj.branchName || bObj.name) : null);
+
+  const resolvedFinancialYearId = fObj ? (fObj._id || fObj.id) : (user.financialYearId || null);
+  const resolvedYearLabel = user.yearLabel || user.financialYearLabel || user.financialYearName || (fObj ? (fObj.yearLabel || fObj.financialYearLabel || fObj.label || fObj.name || fObj.year) : null);
+
   return {
     _id: user._id,
     name: user.name,
@@ -260,7 +273,6 @@ const buildUserResponse = (user) => {
     dob: user.dob,
     address: user.address,
     profileImage: profileImgUrl,
-    profileImg: profileImgUrl,
     profilePhoto: profileImgUrl,
     avatar: profileImgUrl,
     department: user.department,
@@ -316,9 +328,16 @@ const buildUserResponse = (user) => {
     mustChangePassword: user.mustChangePassword,
     isActive: user.isActive,
 
-    companyId: user.companyId,
-    branchId: user.branchId,
-    financialYearId: user.financialYearId,
+    companyId: resolvedCompanyId,
+    companyName: resolvedCompanyName,
+
+    branchId: resolvedBranchId,
+    branchName: resolvedBranchName,
+
+    financialYearId: resolvedFinancialYearId,
+    yearLabel: resolvedYearLabel,
+    financialYearName: resolvedYearLabel,
+    financialYearLabel: resolvedYearLabel,
 
     companyCreated: user.companyCreated,
 
@@ -596,10 +615,8 @@ const updateProfile = async (req, res) => {
         const uploadResult = await uploadToCloudinary(rawProfileImage, user._id || user.email);
         const finalUrl = uploadResult.secure_url || String(rawProfileImage).trim();
         user.profileImage = finalUrl;
-        user.profileImg = finalUrl;
       } else {
         user.profileImage = "";
-        user.profileImg = "";
       }
     }
 
@@ -721,7 +738,10 @@ const updateProfile = async (req, res) => {
 
 const getMyProfile = async (req, res) => {
   try {
-    const user = await User.findById(req.user._id);
+    const user = await User.findById(req.user._id)
+      .populate("companyId", "companyName name")
+      .populate("branchId", "branchName name")
+      .populate("financialYearId", "yearLabel financialYearLabel label name year");
 
     if (!user) {
       return res.status(404).json({
@@ -907,7 +927,6 @@ const registerUser = async (req, res) => {
       phoneNumber: normalizedPhoneNumber,
 
       profileImage: normalizedProfileImage,
-      profileImg: normalizedProfileImage,
 
       dob,
 
@@ -1138,7 +1157,6 @@ const registerUser = async (req, res) => {
         phoneNumber: user.phoneNumber,
 
         profileImage: user.profileImage || null,
-        profileImg: user.profileImage || null,
         profilePhoto: user.profileImage || null,
 
         bankAccount: user.bankAccountNumber || user.bankAccount || null,
@@ -1205,9 +1223,13 @@ const getAllUsers = async (req, res) => {
       filter.branchId = req.query.branchId;
     }
 
-    const users = await User.find(filter).sort({
-      createdAt: -1,
-    });
+    const users = await User.find(filter)
+      .populate("companyId", "companyName name")
+      .populate("branchId", "branchName name")
+      .populate("financialYearId", "yearLabel financialYearLabel label name year")
+      .sort({
+        createdAt: -1,
+      });
 
     return res.status(200).json({
       success: true,

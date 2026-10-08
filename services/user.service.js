@@ -32,29 +32,44 @@ const INVITE_TOKEN_EXPIRY_HOURS = parseInt(
  * @param {string} companyId
  * @returns {Object}
  */
-const toCompanyUserView = (user, companyId, branchMap = new Map()) => {
+const toCompanyUserView = (user, companyId, branchMap = new Map(), companyMap = new Map(), fyMap = new Map()) => {
   const access = (user.companyAccess || []).find(
-    (a) => a.companyId.toString() === companyId.toString()
+    (a) => a.companyId && a.companyId.toString() === companyId.toString()
   );
   const isOwner = user.companyCreated && user.companyId && user.companyId.toString() === companyId.toString();
 
-  const branchIdObj = (access && access.branchId) ? access.branchId : (user.branchId || null);
+  const cObj = user.companyId && typeof user.companyId === 'object' ? user.companyId : null;
+  const bObj = (access && access.branchId) ? access.branchId : (user.branchId || null);
+  const fObj = user.financialYearId && typeof user.financialYearId === 'object' ? user.financialYearId : null;
+
+  let compId = companyId || (cObj ? (cObj._id || cObj.id) : (user.companyId || null));
+  let companyName = user.companyName || (cObj ? (cObj.companyName || cObj.name) : null);
+  if (compId && !companyName && companyMap.has(compId.toString())) {
+    companyName = companyMap.get(compId.toString());
+  }
+
   let branchId = null;
   let branchName = null;
 
-  if (branchIdObj) {
-    if (typeof branchIdObj === 'object' && branchIdObj._id) {
-      branchId = branchIdObj._id.toString();
-      branchName = branchIdObj.branchName || null;
-    } else if (typeof branchIdObj === 'object' && branchIdObj.branchName) {
-      branchName = branchIdObj.branchName;
+  if (bObj) {
+    if (typeof bObj === 'object' && (bObj._id || bObj.id)) {
+      branchId = (bObj._id || bObj.id).toString();
+      branchName = bObj.branchName || bObj.name || null;
+    } else if (typeof bObj === 'object' && (bObj.branchName || bObj.name)) {
+      branchName = bObj.branchName || bObj.name;
     } else {
-      branchId = branchIdObj.toString();
+      branchId = bObj.toString();
     }
   }
 
   if (branchId && !branchName && branchMap.has(branchId.toString())) {
     branchName = branchMap.get(branchId.toString());
+  }
+
+  let fyId = fObj ? (fObj._id || fObj.id) : (user.financialYearId || null);
+  let yearLabel = user.yearLabel || user.financialYearLabel || user.financialYearName || (fObj ? (fObj.yearLabel || fObj.financialYearLabel || fObj.label || fObj.name || fObj.year) : null);
+  if (fyId && !yearLabel && fyMap.has(fyId.toString())) {
+    yearLabel = fyMap.get(fyId.toString());
   }
 
   return {
@@ -63,8 +78,14 @@ const toCompanyUserView = (user, companyId, branchMap = new Map()) => {
     email: user.email,
     phone: user.phoneNumber || null,
     phoneNumber: user.phoneNumber || null,
+    companyId: compId ? compId.toString() : null,
+    companyName: companyName || null,
     branchId: branchId || null,
     branchName: branchName || null,
+    financialYearId: fyId ? fyId.toString() : null,
+    yearLabel: yearLabel || null,
+    financialYearName: yearLabel || null,
+    financialYearLabel: yearLabel || null,
     role: access ? access.role : (isOwner ? 'Admin' : null),
     isActive: access ? access.isActive : (isOwner ? true : null),
     invitedAt: access ? access.invitedAt : null,

@@ -151,21 +151,39 @@ const listUsers = async (req, res, next) => {
 
     const total = await FinanceUser.countDocuments(financeFilter);
 
-    // Map branch names for users
+    // Map branch, company, and financial year names for users
+    const companyIds = new Set();
     const branchIds = new Set();
+    const fyIds = new Set();
+
+    if (companyId) companyIds.add(companyId.toString());
+
     usersWithFinance.forEach((u) => {
+      if (u.companyId) companyIds.add(u.companyId.toString());
       if (u.branchId) branchIds.add(u.branchId.toString());
+      if (u.financialYearId) fyIds.add(u.financialYearId.toString());
       (u.companyAccess || []).forEach((a) => {
+        if (a.companyId) companyIds.add(a.companyId.toString());
         if (a.branchId) branchIds.add(a.branchId.toString());
       });
     });
 
     const Branch = require('../models/Branch');
-    const branches = await Branch.find({ _id: { $in: Array.from(branchIds) } }).select('branchName').lean();
-    const branchMap = new Map(branches.map((b) => [b._id.toString(), b.branchName]));
+    const Company = require('../models/Company');
+    const FinancialYear = require('../models/FinancialYear');
+
+    const [branches, companies, financialYears] = await Promise.all([
+      Branch.find({ _id: { $in: Array.from(branchIds) } }).select('branchName name').lean(),
+      Company.find({ _id: { $in: Array.from(companyIds) } }).select('companyName name').lean(),
+      FinancialYear.find({ _id: { $in: Array.from(fyIds) } }).select('yearLabel financialYearLabel label name year').lean(),
+    ]);
+
+    const branchMap = new Map(branches.map((b) => [b._id.toString(), b.branchName || b.name]));
+    const companyMap = new Map(companies.map((c) => [c._id.toString(), c.companyName || c.name]));
+    const fyMap = new Map(financialYears.map((f) => [f._id.toString(), f.yearLabel || f.financialYearLabel || f.label || f.name || f.year]));
 
     const data = usersWithFinance.map((user) =>
-      userService.toCompanyUserView(user, companyId, branchMap)
+      userService.toCompanyUserView(user, companyId, branchMap, companyMap, fyMap)
     );
 
     return res.status(200).json({
@@ -198,12 +216,15 @@ const updateUser = async (req, res, next) => {
       });
     }
 
-    const { companyId, branchId, role, isActive, name, phone, phoneNumber } = parsed.data;
+    const { companyId, branchId, allBranches, allBranch, role, isActive, name, phone, phoneNumber } = parsed.data;
     const targetUserId = req.params.id;
 
-    if (branchId) {
+    const resolvedAllBranches = allBranches ?? allBranch ?? false;
+    const targetBranchId = resolvedAllBranches ? null : branchId;
+
+    if (targetBranchId) {
       const Branch = require('../models/Branch');
-      const branchDoc = await Branch.findOne({ _id: branchId, companyId });
+      const branchDoc = await Branch.findOne({ _id: targetBranchId, companyId });
       if (!branchDoc) {
         return res.status(400).json({
           success: false,
@@ -253,8 +274,8 @@ const updateUser = async (req, res, next) => {
       accessEntry.role = role;
       targetUser.role = role;
     }
-    if (branchId !== undefined) {
-      const finalBranchId = branchId ? branchId : null;
+    if (branchId !== undefined || resolvedAllBranches) {
+      const finalBranchId = targetBranchId ? targetBranchId : null;
       accessEntry.branchId = finalBranchId;
       financeUser.branchId = finalBranchId;
     }
