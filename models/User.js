@@ -263,7 +263,7 @@ const userSchema =
       // ================= ACCOUNT STATUS =================
       isActive: {
         type: Boolean,
-        default: true,
+        default: false,
       },
 
       // ================= JWT =================
@@ -510,6 +510,14 @@ userSchema.pre(
   "save",
   async function (next) {
     try {
+      if (this.isModified("isApproved")) {
+        if (this.isApproved) {
+          this.isActive = true;
+        } else {
+          this.isActive = false;
+        }
+      }
+
       if (this.termsAndConditions !== undefined || this.termsAccepted !== undefined) {
         const termsVal = Boolean(this.termsAndConditions || this.termsAccepted);
         this.termsAndConditions = termsVal;

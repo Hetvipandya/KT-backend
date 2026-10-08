@@ -994,15 +994,14 @@ const registerUser = async (req, res) => {
 
       role: normalizedRole,
 
-      // Employee, intern and team lead accounts
-      // require admin approval.
-      isApproved: false,
+      // Accounts requiring admin approval start as isApproved: false and isActive: false.
+      isApproved: !shouldRequireApproval(normalizedRole),
 
       isFirstLogin: false,
 
       mustChangePassword: true,
 
-      isActive: true,
+      isActive: !shouldRequireApproval(normalizedRole),
     });
 
     // --------------------------------------------------------
@@ -1376,6 +1375,7 @@ const approveEmployee = async (req, res) => {
     // --------------------------------------------------------
 
     user.isApproved = true;
+    user.isActive = true;
     user.status = "Active";
 
     if (user.email) {
@@ -1445,6 +1445,8 @@ const rejectEmployee = async (req, res) => {
     }
 
     user.isApproved = false;
+    user.isActive = false;
+    user.status = "Inactive";
 
     await user.save();
 
