@@ -147,7 +147,7 @@ const salaryStructureSchema = new mongoose.Schema(
     // 3. EMPLOYER CONTRIBUTIONS & GRATUITY
     employerContributions: {
       pf: { type: Number, default: 0 }, // Employer PF: (Basic + DA) * 12%
-      esic: { type: Number, default: 0 }, // Employer ESI: Gross * 3.25%
+      esic: { type: Number, default: 0 }, // Employer ESI: Gross * 0.75%
       gratuity: { type: Number, default: 0 }, // ((Basic + DA) * 15 * Years) / 26
       other: { type: Number, default: 0 },
     },
@@ -230,8 +230,8 @@ salaryStructureSchema.pre("save", async function () {
   const years = Number(this.yearsOfService || 1);
   const gratuityVal = Math.round((this.basicForPf * 15 * years) / 26);
 
-  // Employer ESI = Gross * 3.25%
-  const employerEsic = Math.round(this.grossSalary * 0.0325);
+  // Employer ESI = Gross *0.75%
+  const employerEsic = Math.round(this.grossSalary * 0.0075);
 
   this.employerContributions = {
     pf: employerPf,

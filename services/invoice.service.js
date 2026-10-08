@@ -196,7 +196,7 @@ const createInvoice = async (data, userId) => {
           companyId: data.companyId,
           type: 'INVOICE_CREATED',
           title: 'Invoice Created',
-          message: `Sales Invoice ${invoiceNumber} for ₹${data.grandTotal} has been created for ${customer.name}.`,
+          message: `Sales Invoice ${invoiceNumber} for Rs.${data.grandTotal} has been created for ${customer.name}.`,
           channel: 'PUSH',
           meta: { invoiceId: id(invoiceDoc._id), invoiceNumber }
         }).catch(() => {});

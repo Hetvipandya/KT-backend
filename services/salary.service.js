@@ -60,7 +60,7 @@ exports.create = async (d, u) => {
     companyId: d.companyId,
     type: 'SALARY_ACCROUED',
     title: 'Salary Slip Processed',
-    message: `Salary of ₹${d.netPayable} for period ending ${new Date(d.periodEnd).toLocaleDateString()} has been processed.`,
+    message: `Salary of Rs.${d.netPayable} for period ending ${new Date(d.periodEnd).toLocaleDateString()} has been processed.`,
     channel: 'PUSH',
     meta: { salaryId: x._id.toString() }
   }).catch(() => {});

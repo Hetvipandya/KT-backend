@@ -240,6 +240,16 @@ const buildUserResponse = (user) => {
   }
 
   const profileImgUrl = resolveProfileImage(user) || null;
+  const isBankGiven = Boolean(
+    user.isBankDetailGiven ||
+    user.bankDetailGiven ||
+    user.bankDetailsGiven ||
+    user.isBankDetailsGiven ||
+    user.bankAccountNumber ||
+    user.ifscCode ||
+    user.upiId ||
+    user.bankName
+  );
 
   return {
     _id: user._id,
@@ -271,6 +281,11 @@ const buildUserResponse = (user) => {
     upiID: user.upiId || user.upiID || user.upi || null,
     upi: user.upiId || user.upiID || user.upi || null,
 
+    isBankDetailGiven: isBankGiven,
+    bankDetailGiven: isBankGiven,
+    bankDetailsGiven: isBankGiven,
+    isBankDetailsGiven: isBankGiven,
+
     bankDetails: {
       bankName: user.bankName || (user.bankDetails && user.bankDetails.bankName) || null,
       bankAccountNumber: user.bankAccountNumber || user.bankAccount || null,
@@ -282,6 +297,10 @@ const buildUserResponse = (user) => {
       upi: user.upiId || user.upiID || user.upi || null,
       bankBranch: user.bankBranch || (user.bankDetails && user.bankDetails.bankBranch) || null,
       accountHolderName: user.accountHolderName || (user.bankDetails && user.bankDetails.accountHolderName) || null,
+      isBankDetailGiven: isBankGiven,
+      bankDetailGiven: isBankGiven,
+      bankDetailsGiven: isBankGiven,
+      isBankDetailsGiven: isBankGiven,
     },
 
     termsAndConditions: Boolean(user.termsAndConditions || user.termsAccepted || user.isTermsAccepted || user.termsAndConditionsAccepted),

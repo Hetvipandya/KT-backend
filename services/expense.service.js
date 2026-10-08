@@ -109,8 +109,8 @@ const create = async (data, userId) => {
     const currentBalance = await bankAccountService.getAccountBalance(creditCoaAccountId);
 
     if (Number(data.totalAmount || 0) > Number(currentBalance || 0)) {
-      const formattedBalance = `₹${Number(currentBalance || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-      const formattedExpense = `₹${Number(data.totalAmount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      const formattedBalance = `Rs.${Number(currentBalance || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      const formattedExpense = `Rs.${Number(data.totalAmount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
       throw fail(
         `Insufficient balance in ${targetAccountName}. Available balance is ${formattedBalance}, but expense total is ${formattedExpense}.`,
         400,

@@ -166,7 +166,7 @@ const createPayment = async (data, userId) => {
         companyId: data.companyId,
         type: 'PAYMENT_RECEIVED',
         title: 'Payment Received',
-        message: `Payment ${payment.paymentNumber} of ₹${payment.totalAmount} received from ${customer.name}.`,
+        message: `Payment ${payment.paymentNumber} of Rs.${payment.totalAmount} received from ${customer.name}.`,
         channel: 'PUSH',
         meta: { paymentId: id(payment._id), paymentNumber: payment.paymentNumber }
       }).catch(() => {});

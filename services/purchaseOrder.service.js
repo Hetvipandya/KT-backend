@@ -132,7 +132,7 @@ const createPurchaseOrder = async (data, userId) => {
           companyId: data.companyId,
           type: 'PURCHASE_ORDER_CREATED',
           title: 'Purchase Order Created',
-          message: `Purchase Order ${numbering.poNumber} for ₹${data.totalAmount} has been created${requiresApproval ? ' and requires approval' : ''}.`,
+          message: `Purchase Order ${numbering.poNumber} for Rs.${data.totalAmount} has been created${requiresApproval ? ' and requires approval' : ''}.`,
           channel: 'PUSH',
           meta: { poId: id(po._id), poNumber: numbering.poNumber }
         }).catch(() => {});
@@ -224,7 +224,7 @@ const approvePurchaseOrder = async (po, userId, reason = null) => {
       companyId: po.companyId,
       type: 'PURCHASE_ORDER_APPROVED',
       title: 'Purchase Order Approved',
-      message: `Purchase Order ${po.poNumber} for ₹${po.totalAmount} has been approved.`,
+      message: `Purchase Order ${po.poNumber} for Rs.${po.totalAmount} has been approved.`,
       channel: 'PUSH',
       meta: { poId: id(po._id), poNumber: po.poNumber }
     }).catch(() => {});
@@ -284,7 +284,7 @@ const rejectPurchaseOrder = async (po, userId, reason) => {
       companyId: po.companyId,
       type: 'PURCHASE_ORDER_REJECTED',
       title: 'Purchase Order Rejected',
-      message: `Purchase Order ${po.poNumber} for ₹${po.totalAmount} was rejected: ${reason}`,
+      message: `Purchase Order ${po.poNumber} for Rs.${po.totalAmount} was rejected: ${reason}`,
       channel: 'PUSH',
       meta: { poId: id(po._id), poNumber: po.poNumber, reason }
     }).catch(() => {});

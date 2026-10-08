@@ -142,6 +142,39 @@ const userSchema =
         },
       },
 
+      isBankDetailGiven: {
+        type: Boolean,
+        default: false,
+        get: function(v) {
+          if (v) return true;
+          const doc = this._doc || this;
+          return Boolean(doc.bankDetailGiven || doc.bankDetailsGiven || doc.bankAccountNumber || doc.ifscCode || doc.upiId || doc.bankName);
+        },
+        set: (val) => String(val) === "true" || val === true || val === 1 || String(val) === "1",
+      },
+
+      bankDetailGiven: {
+        type: Boolean,
+        default: false,
+        get: function(v) {
+          if (v) return true;
+          const doc = this._doc || this;
+          return Boolean(doc.isBankDetailGiven || doc.bankDetailsGiven || doc.bankAccountNumber || doc.ifscCode || doc.upiId || doc.bankName);
+        },
+        set: (val) => String(val) === "true" || val === true || val === 1 || String(val) === "1",
+      },
+
+      bankDetailsGiven: {
+        type: Boolean,
+        default: false,
+        get: function(v) {
+          if (v) return true;
+          const doc = this._doc || this;
+          return Boolean(doc.isBankDetailGiven || doc.bankDetailGiven || doc.bankAccountNumber || doc.ifscCode || doc.upiId || doc.bankName);
+        },
+        set: (val) => String(val) === "true" || val === true || val === 1 || String(val) === "1",
+      },
+
       termsAndConditions: {
         type: Boolean,
         default: false,
@@ -349,8 +382,35 @@ userSchema.virtual("termsAndConditionsAccepted").get(function () {
   this.termsAccepted = bVal;
 });
 
+// Virtual for bankDetails Given interchangeability
+userSchema.virtual("isBankDetailsGiven").get(function () {
+  return Boolean(
+    this.isBankDetailGiven ||
+    this.bankDetailGiven ||
+    this.bankDetailsGiven ||
+    this.bankAccountNumber ||
+    this.ifscCode ||
+    this.upiId ||
+    this.bankName
+  );
+}).set(function (val) {
+  const bVal = String(val) === "true" || val === true || val === 1 || String(val) === "1";
+  this.isBankDetailGiven = bVal;
+  this.bankDetailGiven = bVal;
+  this.bankDetailsGiven = bVal;
+});
+
 // Virtual for bankDetails object
 userSchema.virtual("bankDetails").get(function () {
+  const isBankGiven = Boolean(
+    this.isBankDetailGiven ||
+    this.bankDetailGiven ||
+    this.bankDetailsGiven ||
+    this.bankAccountNumber ||
+    this.ifscCode ||
+    this.upiId ||
+    this.bankName
+  );
   return {
     bankName: this.bankName || null,
     bankAccountNumber: this.bankAccountNumber || null,
@@ -362,6 +422,10 @@ userSchema.virtual("bankDetails").get(function () {
     upi: this.upiId || null,
     bankBranch: this.bankBranch || null,
     accountHolderName: this.accountHolderName || null,
+    isBankDetailGiven: isBankGiven,
+    bankDetailGiven: isBankGiven,
+    bankDetailsGiven: isBankGiven,
+    isBankDetailsGiven: isBankGiven,
   };
 }).set(function (details) {
   if (details && typeof details === "object") {
@@ -375,6 +439,13 @@ userSchema.virtual("bankDetails").get(function () {
     if (details.upi !== undefined && !this.upiId) this.upiId = details.upi;
     if (details.bankBranch !== undefined) this.bankBranch = details.bankBranch;
     if (details.accountHolderName !== undefined) this.accountHolderName = details.accountHolderName;
+    const bGiven = details.isBankDetailGiven ?? details.bankDetailGiven ?? details.bankDetailsGiven ?? details.isBankDetailsGiven;
+    if (bGiven !== undefined) {
+      const bBool = String(bGiven) === "true" || bGiven === true || bGiven === 1 || String(bGiven) === "1";
+      this.isBankDetailGiven = bBool;
+      this.bankDetailGiven = bBool;
+      this.bankDetailsGiven = bBool;
+    }
   }
 });
 
@@ -396,6 +467,21 @@ const transformUserObject = function (doc, ret) {
   ret.isTermsAccepted = isTerms;
   ret.termsAndConditionsAccepted = isTerms;
 
+  const isBankGiven = Boolean(
+    ret.isBankDetailGiven ||
+    ret.bankDetailGiven ||
+    ret.bankDetailsGiven ||
+    ret.isBankDetailsGiven ||
+    ret.bankAccountNumber ||
+    ret.ifscCode ||
+    ret.upiId ||
+    ret.bankName
+  );
+  ret.isBankDetailGiven = isBankGiven;
+  ret.bankDetailGiven = isBankGiven;
+  ret.bankDetailsGiven = isBankGiven;
+  ret.isBankDetailsGiven = isBankGiven;
+
   ret.bankDetails = {
     bankName: ret.bankName || null,
     bankAccountNumber: ret.bankAccountNumber || null,
@@ -407,6 +493,10 @@ const transformUserObject = function (doc, ret) {
     upi: ret.upiId || null,
     bankBranch: ret.bankBranch || null,
     accountHolderName: ret.accountHolderName || null,
+    isBankDetailGiven: isBankGiven,
+    bankDetailGiven: isBankGiven,
+    bankDetailsGiven: isBankGiven,
+    isBankDetailsGiven: isBankGiven,
   };
   return ret;
 };
@@ -425,6 +515,19 @@ userSchema.pre(
         this.termsAndConditions = termsVal;
         this.termsAccepted = termsVal;
       }
+
+      const hasBankData = Boolean(
+        this.isBankDetailGiven ||
+        this.bankDetailGiven ||
+        this.bankDetailsGiven ||
+        this.bankAccountNumber ||
+        this.ifscCode ||
+        this.upiId ||
+        this.bankName
+      );
+      this.isBankDetailGiven = hasBankData;
+      this.bankDetailGiven = hasBankData;
+      this.bankDetailsGiven = hasBankData;
 
       if (this.profileImage && !this.profileImg) {
         this.profileImg = this.profileImage;

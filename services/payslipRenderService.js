@@ -7,7 +7,7 @@ const monthNames = [
 
 const formatCurrency = (val) => {
   const num = Number(val) || 0;
-  return "₹ " + num.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return "Rs. " + num.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
 
 const numberToWords = (num) => {
@@ -336,7 +336,7 @@ const renderPayslipHtml = (payslip, employeeData = {}, companyData = {}) => {
       <div class="statutory-grid">
         <div><strong>Basic for PF (Basic+DA):</strong> ${formatCurrency(basicForPf)}</div>
         <div><strong>Employer PF (12%):</strong> ${formatCurrency(employerPf)}</div>
-        <div><strong>Employer ESI (3.25%):</strong> ${formatCurrency(employerEsic)}</div>
+        <div><strong>Employer ESI (0.75%):</strong> ${formatCurrency(employerEsic)}</div>
         ${gratuity > 0 ? `<div><strong>Gratuity Provision:</strong> ${formatCurrency(gratuity)}</div>` : ''}
       </div>
     </div>

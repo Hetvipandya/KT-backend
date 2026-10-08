@@ -138,7 +138,7 @@ const createTransfer = async (payload, userId) => {
     actionType: 'ACCOUNT_TRANSFER_CREATE',
     entityId: transferRecord._id.toString(),
     entityType: 'AccountTransfer',
-    description: `Inter-account transfer of ₹${amount} from ${fromAccount.accountName} to ${toAccount.accountName} (${transferType})`,
+    description: `Inter-account transfer of Rs.${amount} from ${fromAccount.accountName} to ${toAccount.accountName} (${transferType})`,
     metadata: {
       fromAccountId: fromAccount._id,
       toAccountId: toAccount._id,
@@ -241,7 +241,7 @@ const createFundPlus = async (payload, userId) => {
     actionType: 'FUND_PLUS_CREATE',
     entityId: transferRecord._id.toString(),
     entityType: 'AccountTransfer',
-    description: `Fund Plus of ₹${amount} added to ${toAccount.accountName} from ${contraCOA.name}`,
+    description: `Fund Plus of Rs.${amount} added to ${toAccount.accountName} from ${contraCOA.name}`,
     metadata: {
       toAccountId: toAccount._id,
       contraAccountId: contraCOA._id,
@@ -343,7 +343,7 @@ const createFundMinus = async (payload, userId) => {
     actionType: 'FUND_MINUS_CREATE',
     entityId: transferRecord._id.toString(),
     entityType: 'AccountTransfer',
-    description: `Fund Minus of ₹${amount} deducted from ${fromAccount.accountName} to ${contraCOA.name}`,
+    description: `Fund Minus of Rs.${amount} deducted from ${fromAccount.accountName} to ${contraCOA.name}`,
     metadata: {
       fromAccountId: fromAccount._id,
       contraAccountId: contraCOA._id,
@@ -438,7 +438,7 @@ const cancelTransfer = async (id, companyId, userId) => {
     actionType: 'ACCOUNT_TRANSFER_CANCEL',
     entityId: transfer._id.toString(),
     entityType: 'AccountTransfer',
-    description: `Cancelled ${transfer.transferType} transaction of ₹${transfer.amount}`,
+    description: `Cancelled ${transfer.transferType} transaction of Rs.${transfer.amount}`,
     metadata: {
       transferId: transfer._id,
       reversalJournalEntryId: reversal._id
