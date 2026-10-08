@@ -42,12 +42,6 @@ const userSchema =
         trim: true,
       },
 
-      profileImg: {
-        type: String,
-        default: null,
-        trim: true,
-      },
-
       dob: {
         type: String,
         default: null,
@@ -453,9 +447,8 @@ const transformUserObject = function (doc, ret) {
   delete ret.password;
   delete ret.passwordHash;
   delete ret.plainPassword;
-  const imgUrl = ret.profileImage || ret.profileImg || null;
+  const imgUrl = ret.profileImage || ret.profilePhoto || ret.avatar || null;
   ret.profileImage = imgUrl;
-  ret.profileImg = imgUrl;
   ret.profilePhoto = imgUrl;
   ret.upiId = ret.upiId || null;
   ret.upiID = ret.upiId || null;
@@ -564,12 +557,6 @@ userSchema.pre(
       this.isBankDetailGiven = hasBankData;
       this.bankDetailGiven = hasBankData;
       this.bankDetailsGiven = hasBankData;
-
-      if (this.profileImage && !this.profileImg) {
-        this.profileImg = this.profileImage;
-      } else if (this.profileImg && !this.profileImage) {
-        this.profileImage = this.profileImg;
-      }
 
       if (this.isModified("password") && this.password) {
         if (!this.password.startsWith("$2a$") && !this.password.startsWith("$2b$")) {

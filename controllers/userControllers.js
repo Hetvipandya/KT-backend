@@ -273,7 +273,6 @@ const buildUserResponse = (user) => {
     dob: user.dob,
     address: user.address,
     profileImage: profileImgUrl,
-    profileImg: profileImgUrl,
     profilePhoto: profileImgUrl,
     avatar: profileImgUrl,
     department: user.department,
@@ -616,10 +615,8 @@ const updateProfile = async (req, res) => {
         const uploadResult = await uploadToCloudinary(rawProfileImage, user._id || user.email);
         const finalUrl = uploadResult.secure_url || String(rawProfileImage).trim();
         user.profileImage = finalUrl;
-        user.profileImg = finalUrl;
       } else {
         user.profileImage = "";
-        user.profileImg = "";
       }
     }
 
@@ -930,7 +927,6 @@ const registerUser = async (req, res) => {
       phoneNumber: normalizedPhoneNumber,
 
       profileImage: normalizedProfileImage,
-      profileImg: normalizedProfileImage,
 
       dob,
 
@@ -1161,7 +1157,6 @@ const registerUser = async (req, res) => {
         phoneNumber: user.phoneNumber,
 
         profileImage: user.profileImage || null,
-        profileImg: user.profileImage || null,
         profilePhoto: user.profileImage || null,
 
         bankAccount: user.bankAccountNumber || user.bankAccount || null,
