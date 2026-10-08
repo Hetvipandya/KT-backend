@@ -14,7 +14,7 @@ const {
   getPayroll, 
   getPayslips,
   markSalaryPaid,
-  downloadPrintablePayslip,
+  downloadPrintablePayslip, 
   downloadPayslipPdf
 } = require(
   "../controllers/payrollController"

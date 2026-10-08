@@ -264,6 +264,10 @@ const buildUserResponse = (user) => {
     IFSC: user.ifscCode || user.IFSC || null,
     ifscCode: user.ifscCode || user.IFSC || null,
 
+    upiId: user.upiId || user.upiID || user.upi || null,
+    upiID: user.upiId || user.upiID || user.upi || null,
+    upi: user.upiId || user.upiID || user.upi || null,
+
     uniqueID: user.uniqueID,
     role: user.role,
 
@@ -447,6 +451,9 @@ const updateProfile = async (req, res) => {
       bloodGroup,
       bankAccountNumber,
       ifscCode,
+      upiId,
+      upiID,
+      upi,
     } = payload;
 
     const resolvedPhoneNumber = phoneNumber ?? phone ?? null;
@@ -560,12 +567,42 @@ const updateProfile = async (req, res) => {
     // BANK DETAILS
     // --------------------------------------------------------
 
-    if (bankAccountNumber !== undefined) {
-      user.bankAccountNumber = bankAccountNumber;
+    const resolvedBankAccount =
+      bankAccountNumber !== undefined
+        ? bankAccountNumber
+        : payload.bankAccount !== undefined
+        ? payload.bankAccount
+        : payload.accountNumber;
+
+    if (resolvedBankAccount !== undefined) {
+      user.bankAccountNumber = resolvedBankAccount;
     }
 
-    if (ifscCode !== undefined) {
-      user.ifscCode = ifscCode.trim().toUpperCase();
+    const resolvedIfscCode =
+      ifscCode !== undefined
+        ? ifscCode
+        : payload.IFSC !== undefined
+        ? payload.IFSC
+        : undefined;
+
+    if (resolvedIfscCode !== undefined) {
+      user.ifscCode =
+        typeof resolvedIfscCode === "string"
+          ? resolvedIfscCode.trim().toUpperCase()
+          : resolvedIfscCode;
+    }
+
+    const resolvedUpiId =
+      upiId !== undefined
+        ? upiId
+        : upiID !== undefined
+        ? upiID
+        : upi !== undefined
+        ? upi
+        : payload.upi_id;
+
+    if (resolvedUpiId !== undefined) {
+      user.upiId = resolvedUpiId;
     }
 
     await user.save();
@@ -659,6 +696,9 @@ const registerUser = async (req, res) => {
       bloodGroup,
       bankAccountNumber,
       ifscCode,
+      upiId,
+      upiID,
+      upi,
       role,
       profileImage,
       profileImg,
@@ -806,11 +846,22 @@ const registerUser = async (req, res) => {
       bloodGroup,
 
       bankAccountNumber:
-        bankAccountNumber || null,
+        bankAccountNumber || req.body.bankAccount || req.body.accountNumber || null,
 
       ifscCode: ifscCode
         ? ifscCode.trim().toUpperCase()
+        : req.body.IFSC
+        ? req.body.IFSC.trim().toUpperCase()
         : null,
+
+      upiId:
+        upiId !== undefined
+          ? upiId
+          : upiID !== undefined
+          ? upiID
+          : upi !== undefined
+          ? upi
+          : req.body.upi_id || null,
 
       // IMPORTANT:
       // Schema expects "password".
@@ -972,6 +1023,10 @@ const registerUser = async (req, res) => {
 
         IFSC: user.ifscCode || user.IFSC || null,
         ifscCode: user.ifscCode || user.IFSC || null,
+
+        upiId: user.upiId || user.upiID || user.upi || null,
+        upiID: user.upiId || user.upiID || user.upi || null,
+        upi: user.upiId || user.upiID || user.upi || null,
 
         role: user.role,
 
@@ -2035,6 +2090,7 @@ const deleteUser = async (req, res) => {
 // ============================================================
 
 module.exports = {
+  buildUserResponse,
   buildLoginLookupQuery,
   shouldRequireApproval,
   __test__applyPasswordUpdate: applyPasswordUpdate,

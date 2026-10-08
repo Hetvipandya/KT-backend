@@ -111,6 +111,19 @@ const userSchema =
         },
       },
 
+      upiId: {
+        type: String,
+        default: null,
+        trim: true,
+        set: (value) => {
+          if (value === undefined || value === null || value === "") {
+            return null;
+          }
+
+          return String(value).trim();
+        },
+      },
+
       password: {
         type: String,
         select: false,
@@ -276,6 +289,13 @@ const userSchema =
     }
   );
 
+// Virtual for upiID / upiId interchangeability
+userSchema.virtual("upiID").get(function () {
+  return this.upiId;
+}).set(function (val) {
+  this.upiId = val;
+});
+
 // Ensure sensitive password fields are never serialized in API responses
 userSchema.set("toJSON", {
   transform: function (doc, ret) {
@@ -286,6 +306,7 @@ userSchema.set("toJSON", {
     ret.profileImage = imgUrl;
     ret.profileImg = imgUrl;
     ret.profilePhoto = imgUrl;
+    ret.upiID = ret.upiId || null;
     return ret;
   },
 });
@@ -298,6 +319,7 @@ userSchema.set("toObject", {
     ret.profileImage = imgUrl;
     ret.profileImg = imgUrl;
     ret.profilePhoto = imgUrl;
+    ret.upiID = ret.upiId || null;
     return ret;
   },
 });

@@ -54,6 +54,41 @@ router.put(
   updateProfile
 );
 
+router.post(
+  "/profile", 
+  protect,
+  profileImageUpload,
+  updateProfile
+);
+
+router.put(
+  "/bank-details", 
+  protect,
+  profileImageUpload,
+  updateProfile
+);
+
+router.post(
+  "/bank-details", 
+  protect,
+  profileImageUpload,
+  updateProfile
+);
+
+router.put(
+  "/profile/bank-details", 
+  protect,
+  profileImageUpload,
+  updateProfile
+);
+
+router.post(
+  "/profile/bank-details", 
+  protect,
+  profileImageUpload,
+  updateProfile
+);
+
 router.get(
   "/profile", 
   protect,

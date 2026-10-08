@@ -12,7 +12,7 @@ const monthNames = [
 ];
 
 const getDaysInMonth = (month, year) => {
-  return new Date(year, month, 0).getDate();
+  return new Date(year, month, 0).getDate(); 
 };
 
 // =====================================================
@@ -350,7 +350,7 @@ const getMonthlySalaryById = async (req, res) => {
     }
 
     const salary = await MonthlySalary.findById(id)
-      .populate("employeeId userId", "name email uniqueID role designation department panNumber joiningDate dateOfJoining bankDetails")
+      .populate("employeeId userId", "name email uniqueID role designation department panNumber joiningDate dateOfJoining bankAccountNumber ifscCode upiId bankDetails")
       .populate("approvedBy", "name email")
       .populate("paidBy", "name email");
 

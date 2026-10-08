@@ -220,7 +220,7 @@ const monthlySalarySchema = new mongoose.Schema(
     },
 
     otherDeductions: {
-      type: Number,
+      type: Number, 
       default: 0,
     },
 
