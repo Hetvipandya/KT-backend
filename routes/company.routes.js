@@ -1,5 +1,5 @@
 const express = require('express');
-const { createCompany, getCompanyDetails, updateCompany, uploadLogo } = require('../controllers/company.controller');
+const { createCompany, getCompanies, getCompanyDetails, updateCompany, uploadLogo } = require('../controllers/company.controller');
 const authenticate = require('../middleware/authenticate');
 const checkCompanyAccess = require('../middleware/companyAccess');
 const validateRequest = require('../middleware/validateRequest');
@@ -73,6 +73,20 @@ router.use(authenticate);
  *         description: GSTIN or PAN already exists
  */
 router.post('/', validateRequest(createCompanySchema), createCompany);
+
+/**
+ * @openapi
+ * /api/company:
+ *   get:
+ *     summary: Get companies available to the authenticated user
+ *     description: Fetches companies the authenticated user owns or has active access to.
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Companies retrieved successfully
+ */
+router.get('/', getCompanies);
 
 /**
  * @openapi

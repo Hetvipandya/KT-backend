@@ -9,7 +9,7 @@ const { extractPanFromGstin } = require('../utils/gst.utils');
  * Create a new company profile and link to creator
  */
 const createCompany = async (req, res, next) => {
-  const session = await Company.startSession();
+  const session = await Company.startSession(); 
   let transactionStarted = false;
 
   try {
@@ -284,6 +284,35 @@ const getCompanyDetails = async (req, res, next) => {
 };
 
 /**
+ * GET /api/company
+ * Retrieve companies the authenticated user can access
+ */
+const getCompanies = async (req, res, next) => {
+  try {
+    const companyIds = [
+      req.user.companyId,
+      ...(req.user.companyAccess || [])
+        .filter((access) => access.isActive)
+        .map((access) => access.companyId)
+    ].filter(Boolean);
+
+    const companies = await Company.find({
+      $or: [
+        { _id: { $in: companyIds } },
+        { createdBy: req.user._id }
+      ]
+    }).sort({ name: 1 });
+
+    return res.status(200).json({
+      success: true,
+      data: companies
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
  * PUT /api/company/:id
  * Update company profile fields
  */
@@ -367,6 +396,7 @@ const uploadLogo = async (req, res, next) => {
 
 module.exports = {
   createCompany,
+  getCompanies,
   getCompanyDetails,
   updateCompany,
   uploadLogo
