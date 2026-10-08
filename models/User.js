@@ -84,6 +84,24 @@ const userSchema =
         trim: true,
       },
 
+      bankName: {
+        type: String,
+        default: null,
+        trim: true,
+      },
+
+      bankBranch: {
+        type: String,
+        default: null,
+        trim: true,
+      },
+
+      accountHolderName: {
+        type: String,
+        default: null,
+        trim: true,
+      },
+
       bankAccountNumber: {
         type: String,
         default: null,
@@ -122,6 +140,18 @@ const userSchema =
 
           return String(value).trim();
         },
+      },
+
+      termsAndConditions: {
+        type: Boolean,
+        default: false,
+        set: (val) => String(val) === "true" || val === true || val === 1 || String(val) === "1",
+      },
+
+      termsAccepted: {
+        type: Boolean,
+        default: false,
+        set: (val) => String(val) === "true" || val === true || val === 1 || String(val) === "1",
       },
 
       password: {
@@ -289,46 +319,113 @@ const userSchema =
     }
   );
 
-// Virtual for upiID / upiId interchangeability
+// Virtual for upiID / upi / upiId interchangeability
 userSchema.virtual("upiID").get(function () {
   return this.upiId;
 }).set(function (val) {
   this.upiId = val;
 });
 
+userSchema.virtual("upi").get(function () {
+  return this.upiId;
+}).set(function (val) {
+  this.upiId = val;
+});
+
+// Virtual for terms acceptance interchangeability
+userSchema.virtual("isTermsAccepted").get(function () {
+  return Boolean(this.termsAndConditions || this.termsAccepted);
+}).set(function (val) {
+  const bVal = String(val) === "true" || val === true || val === 1 || String(val) === "1";
+  this.termsAndConditions = bVal;
+  this.termsAccepted = bVal;
+});
+
+userSchema.virtual("termsAndConditionsAccepted").get(function () {
+  return Boolean(this.termsAndConditions || this.termsAccepted);
+}).set(function (val) {
+  const bVal = String(val) === "true" || val === true || val === 1 || String(val) === "1";
+  this.termsAndConditions = bVal;
+  this.termsAccepted = bVal;
+});
+
+// Virtual for bankDetails object
+userSchema.virtual("bankDetails").get(function () {
+  return {
+    bankName: this.bankName || null,
+    bankAccountNumber: this.bankAccountNumber || null,
+    accountNumber: this.bankAccountNumber || null,
+    ifscCode: this.ifscCode || null,
+    IFSC: this.ifscCode || null,
+    upiId: this.upiId || null,
+    upiID: this.upiId || null,
+    upi: this.upiId || null,
+    bankBranch: this.bankBranch || null,
+    accountHolderName: this.accountHolderName || null,
+  };
+}).set(function (details) {
+  if (details && typeof details === "object") {
+    if (details.bankName !== undefined) this.bankName = details.bankName;
+    if (details.bankAccountNumber !== undefined) this.bankAccountNumber = details.bankAccountNumber;
+    if (details.accountNumber !== undefined && !this.bankAccountNumber) this.bankAccountNumber = details.accountNumber;
+    if (details.ifscCode !== undefined) this.ifscCode = details.ifscCode;
+    if (details.IFSC !== undefined && !this.ifscCode) this.ifscCode = details.IFSC;
+    if (details.upiId !== undefined) this.upiId = details.upiId;
+    if (details.upiID !== undefined && !this.upiId) this.upiId = details.upiID;
+    if (details.upi !== undefined && !this.upiId) this.upiId = details.upi;
+    if (details.bankBranch !== undefined) this.bankBranch = details.bankBranch;
+    if (details.accountHolderName !== undefined) this.accountHolderName = details.accountHolderName;
+  }
+});
+
+const transformUserObject = function (doc, ret) {
+  delete ret.password;
+  delete ret.passwordHash;
+  delete ret.plainPassword;
+  const imgUrl = ret.profileImage || ret.profileImg || null;
+  ret.profileImage = imgUrl;
+  ret.profileImg = imgUrl;
+  ret.profilePhoto = imgUrl;
+  ret.upiId = ret.upiId || null;
+  ret.upiID = ret.upiId || null;
+  ret.upi = ret.upiId || null;
+
+  const isTerms = Boolean(ret.termsAndConditions || ret.termsAccepted || ret.isTermsAccepted || ret.termsAndConditionsAccepted);
+  ret.termsAndConditions = isTerms;
+  ret.termsAccepted = isTerms;
+  ret.isTermsAccepted = isTerms;
+  ret.termsAndConditionsAccepted = isTerms;
+
+  ret.bankDetails = {
+    bankName: ret.bankName || null,
+    bankAccountNumber: ret.bankAccountNumber || null,
+    accountNumber: ret.bankAccountNumber || null,
+    ifscCode: ret.ifscCode || null,
+    IFSC: ret.ifscCode || null,
+    upiId: ret.upiId || null,
+    upiID: ret.upiId || null,
+    upi: ret.upiId || null,
+    bankBranch: ret.bankBranch || null,
+    accountHolderName: ret.accountHolderName || null,
+  };
+  return ret;
+};
+
 // Ensure sensitive password fields are never serialized in API responses
-userSchema.set("toJSON", {
-  transform: function (doc, ret) {
-    delete ret.password;
-    delete ret.passwordHash;
-    delete ret.plainPassword;
-    const imgUrl = ret.profileImage || ret.profileImg || null;
-    ret.profileImage = imgUrl;
-    ret.profileImg = imgUrl;
-    ret.profilePhoto = imgUrl;
-    ret.upiID = ret.upiId || null;
-    return ret;
-  },
-});
-userSchema.set("toObject", {
-  transform: function (doc, ret) {
-    delete ret.password;
-    delete ret.passwordHash;
-    delete ret.plainPassword;
-    const imgUrl = ret.profileImage || ret.profileImg || null;
-    ret.profileImage = imgUrl;
-    ret.profileImg = imgUrl;
-    ret.profilePhoto = imgUrl;
-    ret.upiID = ret.upiId || null;
-    return ret;
-  },
-});
+userSchema.set("toJSON", { transform: transformUserObject });
+userSchema.set("toObject", { transform: transformUserObject });
 
 // ================= PRE SAVE =================
 userSchema.pre(
   "save",
   async function (next) {
     try {
+      if (this.termsAndConditions !== undefined || this.termsAccepted !== undefined) {
+        const termsVal = Boolean(this.termsAndConditions || this.termsAccepted);
+        this.termsAndConditions = termsVal;
+        this.termsAccepted = termsVal;
+      }
+
       if (this.profileImage && !this.profileImg) {
         this.profileImg = this.profileImage;
       } else if (this.profileImg && !this.profileImage) {

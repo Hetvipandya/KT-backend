@@ -258,6 +258,9 @@ const buildUserResponse = (user) => {
     gender: user.gender,
     bloodGroup: user.bloodGroup,
 
+    bankName: user.bankName || (user.bankDetails && user.bankDetails.bankName) || null,
+    bankBranch: user.bankBranch || (user.bankDetails && user.bankDetails.bankBranch) || null,
+    accountHolderName: user.accountHolderName || (user.bankDetails && user.bankDetails.accountHolderName) || null,
     bankAccount: user.bankAccountNumber || user.bankAccount || null,
     bankAccountNumber: user.bankAccountNumber || user.bankAccount || null,
 
@@ -267,6 +270,24 @@ const buildUserResponse = (user) => {
     upiId: user.upiId || user.upiID || user.upi || null,
     upiID: user.upiId || user.upiID || user.upi || null,
     upi: user.upiId || user.upiID || user.upi || null,
+
+    bankDetails: {
+      bankName: user.bankName || (user.bankDetails && user.bankDetails.bankName) || null,
+      bankAccountNumber: user.bankAccountNumber || user.bankAccount || null,
+      accountNumber: user.bankAccountNumber || user.bankAccount || null,
+      ifscCode: user.ifscCode || user.IFSC || null,
+      IFSC: user.ifscCode || user.IFSC || null,
+      upiId: user.upiId || user.upiID || user.upi || null,
+      upiID: user.upiId || user.upiID || user.upi || null,
+      upi: user.upiId || user.upiID || user.upi || null,
+      bankBranch: user.bankBranch || (user.bankDetails && user.bankDetails.bankBranch) || null,
+      accountHolderName: user.accountHolderName || (user.bankDetails && user.bankDetails.accountHolderName) || null,
+    },
+
+    termsAndConditions: Boolean(user.termsAndConditions || user.termsAccepted || user.isTermsAccepted || user.termsAndConditionsAccepted),
+    termsAccepted: Boolean(user.termsAndConditions || user.termsAccepted || user.isTermsAccepted || user.termsAndConditionsAccepted),
+    isTermsAccepted: Boolean(user.termsAndConditions || user.termsAccepted || user.isTermsAccepted || user.termsAndConditionsAccepted),
+    termsAndConditionsAccepted: Boolean(user.termsAndConditions || user.termsAccepted || user.isTermsAccepted || user.termsAndConditionsAccepted),
 
     uniqueID: user.uniqueID,
     role: user.role,
@@ -564,15 +585,36 @@ const updateProfile = async (req, res) => {
     }
 
     // --------------------------------------------------------
-    // BANK DETAILS
+    // BANK DETAILS & TERMS AND CONDITIONS
     // --------------------------------------------------------
+
+    const bankDetailsObj = payload.bankDetails && typeof payload.bankDetails === "object" ? payload.bankDetails : {};
+
+    const resolvedBankName = payload.bankName ?? bankDetailsObj.bankName;
+    if (resolvedBankName !== undefined) {
+      user.bankName = resolvedBankName;
+    }
+
+    const resolvedBankBranch = payload.bankBranch ?? bankDetailsObj.bankBranch;
+    if (resolvedBankBranch !== undefined) {
+      user.bankBranch = resolvedBankBranch;
+    }
+
+    const resolvedAccountHolderName = payload.accountHolderName ?? bankDetailsObj.accountHolderName;
+    if (resolvedAccountHolderName !== undefined) {
+      user.accountHolderName = resolvedAccountHolderName;
+    }
 
     const resolvedBankAccount =
       bankAccountNumber !== undefined
         ? bankAccountNumber
         : payload.bankAccount !== undefined
         ? payload.bankAccount
-        : payload.accountNumber;
+        : payload.accountNumber !== undefined
+        ? payload.accountNumber
+        : bankDetailsObj.bankAccountNumber !== undefined
+        ? bankDetailsObj.bankAccountNumber
+        : bankDetailsObj.accountNumber;
 
     if (resolvedBankAccount !== undefined) {
       user.bankAccountNumber = resolvedBankAccount;
@@ -583,7 +625,9 @@ const updateProfile = async (req, res) => {
         ? ifscCode
         : payload.IFSC !== undefined
         ? payload.IFSC
-        : undefined;
+        : bankDetailsObj.ifscCode !== undefined
+        ? bankDetailsObj.ifscCode
+        : bankDetailsObj.IFSC;
 
     if (resolvedIfscCode !== undefined) {
       user.ifscCode =
@@ -599,10 +643,29 @@ const updateProfile = async (req, res) => {
         ? upiID
         : upi !== undefined
         ? upi
-        : payload.upi_id;
+        : payload.upi_id !== undefined
+        ? payload.upi_id
+        : bankDetailsObj.upiId !== undefined
+        ? bankDetailsObj.upiId
+        : bankDetailsObj.upiID !== undefined
+        ? bankDetailsObj.upiID
+        : bankDetailsObj.upi;
 
     if (resolvedUpiId !== undefined) {
       user.upiId = resolvedUpiId;
+    }
+
+    const rawTerms =
+      payload.termsAndConditions ??
+      payload.termsAccepted ??
+      payload.isTermsAccepted ??
+      payload.termsAndConditionsAccepted ??
+      payload.terms;
+
+    if (rawTerms !== undefined) {
+      const termsBool = String(rawTerms) === "true" || rawTerms === true || rawTerms === 1 || String(rawTerms) === "1";
+      user.termsAndConditions = termsBool;
+      user.termsAccepted = termsBool;
     }
 
     await user.save();
@@ -845,13 +908,21 @@ const registerUser = async (req, res) => {
 
       bloodGroup,
 
+      bankName: req.body.bankName || req.body.bankDetails?.bankName || null,
+      bankBranch: req.body.bankBranch || req.body.bankDetails?.bankBranch || null,
+      accountHolderName: req.body.accountHolderName || req.body.bankDetails?.accountHolderName || null,
+
       bankAccountNumber:
-        bankAccountNumber || req.body.bankAccount || req.body.accountNumber || null,
+        bankAccountNumber || req.body.bankAccount || req.body.accountNumber || req.body.bankDetails?.bankAccountNumber || req.body.bankDetails?.accountNumber || null,
 
       ifscCode: ifscCode
         ? ifscCode.trim().toUpperCase()
         : req.body.IFSC
         ? req.body.IFSC.trim().toUpperCase()
+        : req.body.bankDetails?.ifscCode
+        ? req.body.bankDetails.ifscCode.trim().toUpperCase()
+        : req.body.bankDetails?.IFSC
+        ? req.body.bankDetails.IFSC.trim().toUpperCase()
         : null,
 
       upiId:
@@ -861,7 +932,41 @@ const registerUser = async (req, res) => {
           ? upiID
           : upi !== undefined
           ? upi
-          : req.body.upi_id || null,
+          : req.body.upi_id !== undefined
+          ? req.body.upi_id
+          : req.body.bankDetails?.upiId !== undefined
+          ? req.body.bankDetails.upiId
+          : req.body.bankDetails?.upiID !== undefined
+          ? req.body.bankDetails.upiID
+          : req.body.bankDetails?.upi !== undefined
+          ? req.body.bankDetails.upi
+          : null,
+
+      termsAndConditions:
+        req.body.termsAndConditions !== undefined
+          ? String(req.body.termsAndConditions) === "true" || req.body.termsAndConditions === true || req.body.termsAndConditions === 1
+          : req.body.termsAccepted !== undefined
+          ? String(req.body.termsAccepted) === "true" || req.body.termsAccepted === true || req.body.termsAccepted === 1
+          : req.body.isTermsAccepted !== undefined
+          ? String(req.body.isTermsAccepted) === "true" || req.body.isTermsAccepted === true || req.body.isTermsAccepted === 1
+          : req.body.termsAndConditionsAccepted !== undefined
+          ? String(req.body.termsAndConditionsAccepted) === "true" || req.body.termsAndConditionsAccepted === true || req.body.termsAndConditionsAccepted === 1
+          : req.body.terms !== undefined
+          ? String(req.body.terms) === "true" || req.body.terms === true || req.body.terms === 1
+          : false,
+
+      termsAccepted:
+        req.body.termsAndConditions !== undefined
+          ? String(req.body.termsAndConditions) === "true" || req.body.termsAndConditions === true || req.body.termsAndConditions === 1
+          : req.body.termsAccepted !== undefined
+          ? String(req.body.termsAccepted) === "true" || req.body.termsAccepted === true || req.body.termsAccepted === 1
+          : req.body.isTermsAccepted !== undefined
+          ? String(req.body.isTermsAccepted) === "true" || req.body.isTermsAccepted === true || req.body.isTermsAccepted === 1
+          : req.body.termsAndConditionsAccepted !== undefined
+          ? String(req.body.termsAndConditionsAccepted) === "true" || req.body.termsAndConditionsAccepted === true || req.body.termsAndConditionsAccepted === 1
+          : req.body.terms !== undefined
+          ? String(req.body.terms) === "true" || req.body.terms === true || req.body.terms === 1
+          : false,
 
       // IMPORTANT:
       // Schema expects "password".
