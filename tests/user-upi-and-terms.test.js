@@ -2,11 +2,11 @@ const mongoose = require("mongoose");
 const User = require("../models/User");
 const { buildUserResponse } = require("../controllers/userControllers");
 
-describe("User Model & Endpoints - UPI ID, Bank Details, and Terms & Conditions", () => {
-  it("stores bankDetails (bankName, bankAccountNumber, ifscCode, upiId), isBankDetailGiven, and termsAndConditions boolean field", () => {
+describe("User Model & Endpoints - UPI ID and Bank Details", () => {
+  it("stores bankDetails (bankName, bankAccountNumber, ifscCode, upiId) and isBankDetailGiven boolean field", () => {
     const user = new User({
-      name: "UPI Terms Test User",
-      email: "test-terms-upi1@example.com",
+      name: "UPI Test User",
+      email: "test-upi1@example.com",
       password: "password123!",
       phoneNumber: "9876543210",
       bankName: "HDFC Bank",
@@ -14,7 +14,6 @@ describe("User Model & Endpoints - UPI ID, Bank Details, and Terms & Conditions"
       ifscCode: "HDFC0001234",
       upiId: "testuser@hdfcbank",
       isBankDetailGiven: true,
-      termsAndConditions: true,
     });
 
     expect(user.upiId).toBe("testuser@hdfcbank");
@@ -24,9 +23,6 @@ describe("User Model & Endpoints - UPI ID, Bank Details, and Terms & Conditions"
     expect(user.bankDetailGiven).toBe(true);
     expect(user.bankDetailsGiven).toBe(true);
     expect(user.isBankDetailsGiven).toBe(true);
-    expect(user.termsAndConditions).toBe(true);
-    expect(user.isTermsAccepted).toBe(true);
-    expect(user.termsAndConditionsAccepted).toBe(true);
   });
 
   it("defaults isBankDetailGiven to false when no bank info is provided", () => {
@@ -40,31 +36,25 @@ describe("User Model & Endpoints - UPI ID, Bank Details, and Terms & Conditions"
     expect(user.isBankDetailsGiven).toBe(false);
   });
 
-  it("converts string 'true' or number 1 for termsAndConditions and bankDetailGiven into boolean true", () => {
+  it("converts string 'true' or number 1 for bankDetailGiven into boolean true", () => {
     const user1 = new User({
-      name: "Terms String User",
+      name: "Bank String User",
       email: "test1@example.com",
       bankDetailGiven: "true",
-      termsAndConditions: "true",
     });
     expect(user1.bankDetailGiven).toBe(true);
     expect(user1.isBankDetailGiven).toBe(true);
-    expect(user1.termsAndConditions).toBe(true);
-    expect(user1.isTermsAccepted).toBe(true);
 
     const user2 = new User({
-      name: "Terms Number User",
+      name: "Bank Number User",
       email: "test2@example.com",
       isBankDetailGiven: 1,
-      termsAndConditions: 1,
     });
     expect(user2.isBankDetailGiven).toBe(true);
     expect(user2.bankDetailGiven).toBe(true);
-    expect(user2.termsAndConditions).toBe(true);
-    expect(user2.isTermsAccepted).toBe(true);
   });
 
-  it("includes bankDetails object, upiId, upiID, upi, isBankDetailGiven, and termsAndConditions in buildUserResponse", () => {
+  it("includes bankDetails object, upiId, upiID, upi, and isBankDetailGiven in buildUserResponse", () => {
     const user = new User({
       _id: new mongoose.Types.ObjectId(),
       name: "Response Test User",
@@ -75,7 +65,6 @@ describe("User Model & Endpoints - UPI ID, Bank Details, and Terms & Conditions"
       ifscCode: "ICIC0005678",
       upiId: "resuser@icici",
       isBankDetailGiven: true,
-      termsAndConditions: true,
     });
 
     const response = buildUserResponse(user);
@@ -99,14 +88,9 @@ describe("User Model & Endpoints - UPI ID, Bank Details, and Terms & Conditions"
     expect(response.bankDetails.upiId).toBe("resuser@icici");
     expect(response.bankDetails.isBankDetailGiven).toBe(true);
     expect(response.bankDetails.bankDetailGiven).toBe(true);
-
-    expect(response.termsAndConditions).toBe(true);
-    expect(response.termsAccepted).toBe(true);
-    expect(response.isTermsAccepted).toBe(true);
-    expect(response.termsAndConditionsAccepted).toBe(true);
   });
 
-  it("serializes bankDetails, isBankDetailGiven, and termsAndConditions in toJSON and toObject transforms", () => {
+  it("serializes bankDetails and isBankDetailGiven in toJSON and toObject transforms", () => {
     const user = new User({
       name: "Transform Test User",
       email: "transform@example.com",
@@ -117,7 +101,6 @@ describe("User Model & Endpoints - UPI ID, Bank Details, and Terms & Conditions"
       ifscCode: "SBIN0001234",
       upiId: "transform@sbi",
       isBankDetailGiven: true,
-      termsAndConditions: true,
     });
 
     const json = user.toJSON();
@@ -126,9 +109,6 @@ describe("User Model & Endpoints - UPI ID, Bank Details, and Terms & Conditions"
     expect(json.upi).toBe("transform@sbi");
     expect(json.isBankDetailGiven).toBe(true);
     expect(json.bankDetailGiven).toBe(true);
-    expect(json.termsAndConditions).toBe(true);
-    expect(json.termsAccepted).toBe(true);
-    expect(json.isTermsAccepted).toBe(true);
     expect(json.bankDetails).toBeDefined();
     expect(json.bankDetails.bankName).toBe("State Bank of India");
     expect(json.bankDetails.bankAccountNumber).toBe("112233445566");
@@ -140,7 +120,6 @@ describe("User Model & Endpoints - UPI ID, Bank Details, and Terms & Conditions"
     const obj = user.toObject();
     expect(obj.upiId).toBe("transform@sbi");
     expect(obj.isBankDetailGiven).toBe(true);
-    expect(obj.termsAndConditions).toBe(true);
     expect(obj.bankDetails.bankName).toBe("State Bank of India");
   });
 });

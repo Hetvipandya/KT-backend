@@ -303,10 +303,6 @@ const buildUserResponse = (user) => {
       isBankDetailsGiven: isBankGiven,
     },
 
-    termsAndConditions: Boolean(user.termsAndConditions || user.termsAccepted || user.isTermsAccepted || user.termsAndConditionsAccepted),
-    termsAccepted: Boolean(user.termsAndConditions || user.termsAccepted || user.isTermsAccepted || user.termsAndConditionsAccepted),
-    isTermsAccepted: Boolean(user.termsAndConditions || user.termsAccepted || user.isTermsAccepted || user.termsAndConditionsAccepted),
-    termsAndConditionsAccepted: Boolean(user.termsAndConditions || user.termsAccepted || user.isTermsAccepted || user.termsAndConditionsAccepted),
 
     uniqueID: user.uniqueID,
     role: user.role,
@@ -674,18 +670,6 @@ const updateProfile = async (req, res) => {
       user.upiId = resolvedUpiId;
     }
 
-    const rawTerms =
-      payload.termsAndConditions ??
-      payload.termsAccepted ??
-      payload.isTermsAccepted ??
-      payload.termsAndConditionsAccepted ??
-      payload.terms;
-
-    if (rawTerms !== undefined) {
-      const termsBool = String(rawTerms) === "true" || rawTerms === true || rawTerms === 1 || String(rawTerms) === "1";
-      user.termsAndConditions = termsBool;
-      user.termsAccepted = termsBool;
-    }
 
     await user.save();
 
@@ -961,31 +945,6 @@ const registerUser = async (req, res) => {
           ? req.body.bankDetails.upi
           : null,
 
-      termsAndConditions:
-        req.body.termsAndConditions !== undefined
-          ? String(req.body.termsAndConditions) === "true" || req.body.termsAndConditions === true || req.body.termsAndConditions === 1
-          : req.body.termsAccepted !== undefined
-          ? String(req.body.termsAccepted) === "true" || req.body.termsAccepted === true || req.body.termsAccepted === 1
-          : req.body.isTermsAccepted !== undefined
-          ? String(req.body.isTermsAccepted) === "true" || req.body.isTermsAccepted === true || req.body.isTermsAccepted === 1
-          : req.body.termsAndConditionsAccepted !== undefined
-          ? String(req.body.termsAndConditionsAccepted) === "true" || req.body.termsAndConditionsAccepted === true || req.body.termsAndConditionsAccepted === 1
-          : req.body.terms !== undefined
-          ? String(req.body.terms) === "true" || req.body.terms === true || req.body.terms === 1
-          : false,
-
-      termsAccepted:
-        req.body.termsAndConditions !== undefined
-          ? String(req.body.termsAndConditions) === "true" || req.body.termsAndConditions === true || req.body.termsAndConditions === 1
-          : req.body.termsAccepted !== undefined
-          ? String(req.body.termsAccepted) === "true" || req.body.termsAccepted === true || req.body.termsAccepted === 1
-          : req.body.isTermsAccepted !== undefined
-          ? String(req.body.isTermsAccepted) === "true" || req.body.isTermsAccepted === true || req.body.isTermsAccepted === 1
-          : req.body.termsAndConditionsAccepted !== undefined
-          ? String(req.body.termsAndConditionsAccepted) === "true" || req.body.termsAndConditionsAccepted === true || req.body.termsAndConditionsAccepted === 1
-          : req.body.terms !== undefined
-          ? String(req.body.terms) === "true" || req.body.terms === true || req.body.terms === 1
-          : false,
 
       // IMPORTANT:
       // Schema expects "password".
