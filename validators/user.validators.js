@@ -2,6 +2,12 @@ const { z } = require('zod');
 
 const objectIdRegex = /^[0-9a-fA-F]{24}$/;
 
+const booleanCoerce = z.union([
+  z.boolean(),
+  z.string().transform((val) => val === 'true' || val === '1'),
+  z.number().transform((val) => val === 1),
+]);
+
 const inviteUserSchema = z.object({
   companyId: z
     .string({ required_error: 'companyId is required' })
@@ -11,6 +17,8 @@ const inviteUserSchema = z.object({
     .regex(objectIdRegex, 'Invalid branchId format')
     .nullable()
     .optional(),
+  allBranches: booleanCoerce.optional(),
+  allBranch: booleanCoerce.optional(),
   name: z
     .string({ required_error: 'name is required' })
     .trim()
@@ -26,8 +34,8 @@ const inviteUserSchema = z.object({
     .string({ required_error: 'role is required' })
     .trim()
     .min(1, 'role cannot be empty'),
-  sendTemporaryPassword: z.boolean().optional().default(false)
-}).strict();
+  sendTemporaryPassword: booleanCoerce.optional().default(false)
+}).passthrough();
 
 const updateUserSchema = z.object({
   companyId: z
@@ -38,12 +46,14 @@ const updateUserSchema = z.object({
     .regex(objectIdRegex, 'Invalid branchId format')
     .nullable()
     .optional(),
+  allBranches: booleanCoerce.optional(),
+  allBranch: booleanCoerce.optional(),
   role: z.string().trim().min(1).optional(),
-  isActive: z.boolean().optional(),
+  isActive: booleanCoerce.optional(),
   name: z.string().trim().min(1).optional(),
   phone: z.string().trim().optional().or(z.literal('')),
   phoneNumber: z.string().trim().optional().or(z.literal(''))
-}).strict();
+}).passthrough();
 
 module.exports = {
   inviteUserSchema,

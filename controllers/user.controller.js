@@ -198,12 +198,15 @@ const updateUser = async (req, res, next) => {
       });
     }
 
-    const { companyId, branchId, role, isActive, name, phone, phoneNumber } = parsed.data;
+    const { companyId, branchId, allBranches, allBranch, role, isActive, name, phone, phoneNumber } = parsed.data;
     const targetUserId = req.params.id;
 
-    if (branchId) {
+    const resolvedAllBranches = allBranches ?? allBranch ?? false;
+    const targetBranchId = resolvedAllBranches ? null : branchId;
+
+    if (targetBranchId) {
       const Branch = require('../models/Branch');
-      const branchDoc = await Branch.findOne({ _id: branchId, companyId });
+      const branchDoc = await Branch.findOne({ _id: targetBranchId, companyId });
       if (!branchDoc) {
         return res.status(400).json({
           success: false,
@@ -253,8 +256,8 @@ const updateUser = async (req, res, next) => {
       accessEntry.role = role;
       targetUser.role = role;
     }
-    if (branchId !== undefined) {
-      const finalBranchId = branchId ? branchId : null;
+    if (branchId !== undefined || resolvedAllBranches) {
+      const finalBranchId = targetBranchId ? targetBranchId : null;
       accessEntry.branchId = finalBranchId;
       financeUser.branchId = finalBranchId;
     }
