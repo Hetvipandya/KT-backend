@@ -175,6 +175,17 @@ const userSchema =
         set: (val) => String(val) === "true" || val === true || val === 1 || String(val) === "1",
       },
 
+      termsAndConditions: {
+        type: Boolean,
+        default: false,
+        set: (val) => String(val) === "true" || val === true || val === 1 || String(val) === "1",
+      },
+
+      termsAccepted: {
+        type: Boolean,
+        default: false,
+        set: (val) => String(val) === "true" || val === true || val === 1 || String(val) === "1",
+      },
 
       password: {
         type: String,
@@ -354,6 +365,23 @@ userSchema.virtual("upi").get(function () {
   this.upiId = val;
 });
 
+// Virtual for terms acceptance interchangeability
+userSchema.virtual("isTermsAccepted").get(function () {
+  return Boolean(this.termsAndConditions || this.termsAccepted);
+}).set(function (val) {
+  const bVal = String(val) === "true" || val === true || val === 1 || String(val) === "1";
+  this.termsAndConditions = bVal;
+  this.termsAccepted = bVal;
+});
+
+userSchema.virtual("termsAndConditionsAccepted").get(function () {
+  return Boolean(this.termsAndConditions || this.termsAccepted);
+}).set(function (val) {
+  const bVal = String(val) === "true" || val === true || val === 1 || String(val) === "1";
+  this.termsAndConditions = bVal;
+  this.termsAccepted = bVal;
+});
+
 // Virtual for bankDetails Given interchangeability
 userSchema.virtual("isBankDetailsGiven").get(function () {
   return Boolean(
@@ -433,6 +461,12 @@ const transformUserObject = function (doc, ret) {
   ret.upiID = ret.upiId || null;
   ret.upi = ret.upiId || null;
 
+  const isTerms = Boolean(ret.termsAndConditions || ret.termsAccepted || ret.isTermsAccepted || ret.termsAndConditionsAccepted);
+  ret.termsAndConditions = isTerms;
+  ret.termsAccepted = isTerms;
+  ret.isTermsAccepted = isTerms;
+  ret.termsAndConditionsAccepted = isTerms;
+
   const isBankGiven = Boolean(
     ret.isBankDetailGiven ||
     ret.bankDetailGiven ||
@@ -476,6 +510,12 @@ userSchema.pre(
   "save",
   async function (next) {
     try {
+      if (this.termsAndConditions !== undefined || this.termsAccepted !== undefined) {
+        const termsVal = Boolean(this.termsAndConditions || this.termsAccepted);
+        this.termsAndConditions = termsVal;
+        this.termsAccepted = termsVal;
+      }
+
       const hasBankData = Boolean(
         this.isBankDetailGiven ||
         this.bankDetailGiven ||
