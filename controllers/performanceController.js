@@ -342,6 +342,54 @@ exports.getPerformanceById = async (req, res) => {
 };
 
 // =============================
+// Get Performance by Employee ID (ONLY HR & ADMIN)
+// =============================
+exports.getPerformanceByEmployeeId = async (req, res) => {
+  try {
+    // Restrict access: Only HR and Admin can view performance feedback
+    const userRole = (req.user?.role || "").toLowerCase().replace(/[_\s]+/g, "");
+    if (userRole !== "admin" && userRole !== "hr") {
+      return res.status(403).json({
+        success: false,
+        message: "Access restricted. Only HR and Admin can view performance feedback.",
+      });
+    }
+
+    const { employeeId } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(employeeId)) {
+      return res.status(400).json({
+        success: false,
+        message: "A valid employee ID is required.",
+      });
+    }
+
+    const performances = await EmployeePerformance.find({ employeeID: employeeId })
+      .populate(
+        "employeeID",
+        "name email department firstName lastName"
+      )
+      .populate(
+        "submittedBy",
+        "name email role"
+      )
+      .sort({ createdAt: -1 });
+
+    return res.status(200).json({
+      success: true,
+      count: performances.length,
+      data: performances,
+    });
+  } catch (err) {
+    console.error("Error fetching employee performances:", err);
+
+    return res.status(500).json({
+      success: false,
+      message: err.message,
+    });
+  }
+};
+
+// =============================
 // Update Performance
 // =============================
 exports.updatePerformance = async (req, res) => {

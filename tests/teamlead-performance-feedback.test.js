@@ -128,6 +128,38 @@ describe('Team Lead Employee Feedback & Restricted Performance Access', () => {
     expect(res.body.data[0].feedback).toBe('Great teamwork');
   });
 
+  it('allows HR to get performance feedback by employee ID', async () => {
+    const mockQuery = {
+      populate: jest.fn().mockReturnThis(),
+      sort: jest.fn().mockResolvedValue([
+        {
+          _id: new mongoose.Types.ObjectId(),
+          employeeID: employeeId,
+          employeeName: 'John Doe',
+          feedback: 'Great teamwork',
+          performancePercentage: 85,
+        },
+      ]),
+    };
+    jest.spyOn(EmployeePerformance, 'find').mockReturnValue(mockQuery);
+
+    app = express();
+    app.use(express.json());
+    app.use((req, res, next) => {
+      req.user = hrUser;
+      next();
+    });
+    app.use('/api/performance', performanceRoutes);
+
+    const res = await request(app).get(`/api/performance/employee/${employeeId}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.count).toBe(1);
+    expect(res.body.data[0].feedback).toBe('Great teamwork');
+    expect(EmployeePerformance.find).toHaveBeenCalledWith({ employeeID: employeeId.toString() });
+  });
+
   it('blocks non-HR/non-Admin users from viewing performance feedback (HTTP 403)', async () => {
     app = express();
     app.use(express.json());
