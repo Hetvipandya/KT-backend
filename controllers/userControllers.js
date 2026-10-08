@@ -1355,19 +1355,6 @@ const approveEmployee = async (req, res) => {
           );
         }
       } catch (_) {}
-
-      // Sync companyId and branchId on MonthlySalary if existing
-      try {
-        if (MonthlySalary && (companyId || branchId)) {
-          const syncSalary = {};
-          if (companyId) syncSalary.companyId = companyId;
-          if (branchId) syncSalary.branchId = branchId;
-          await MonthlySalary.updateMany(
-            { $or: [{ userId: user._id }, { employeeId: user._id }] },
-            { $set: syncSalary }
-          );
-        }
-      } catch (_) {}
     }
 
     // --------------------------------------------------------

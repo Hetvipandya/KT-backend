@@ -214,9 +214,9 @@ const generateMonthlySalary = async (req, res) => {
           year: yearNum,
         },
         {
-          companyId: companyId || user.companyId || activeStructure.companyId || null,
-          branchId: branchId || user.branchId || activeStructure.branchId || null,
-          financialYearId: financialYearId || activeStructure.financialYearId || null,
+          companyId: (companyId && mongoose.Types.ObjectId.isValid(companyId)) ? companyId : null,
+          branchId: (branchId && mongoose.Types.ObjectId.isValid(branchId)) ? branchId : null,
+          financialYearId: (financialYearId && mongoose.Types.ObjectId.isValid(financialYearId)) ? financialYearId : null,
           employeeId: user._id,
           userId: user._id,
           month: monthNum,
@@ -592,9 +592,9 @@ const resolveSalaryRecord = async (identifier, options = {}) => {
       const salaryMonthStr = `${monthNames[targetMonth - 1] || ""} ${targetYear}`.trim();
 
       const newSalaryData = {
-        companyId: resolvedUser.companyId || (activeStructure ? activeStructure.companyId : null) || null,
-        branchId: resolvedUser.branchId || (activeStructure ? activeStructure.branchId : null) || null,
-        financialYearId: activeStructure ? activeStructure.financialYearId : null,
+        companyId: (options.companyId && mongoose.Types.ObjectId.isValid(options.companyId)) ? options.companyId : null,
+        branchId: (options.branchId && mongoose.Types.ObjectId.isValid(options.branchId)) ? options.branchId : null,
+        financialYearId: (options.financialYearId && mongoose.Types.ObjectId.isValid(options.financialYearId)) ? options.financialYearId : null,
         employeeId: resolvedUser._id,
         userId: resolvedUser._id,
         month: targetMonth,
@@ -873,6 +873,8 @@ const approveMonthlySalary = async (req, res) => {
     const salary = await resolveSalaryRecord(targetSalaryId, {
       month: month || req.query?.month,
       year: year || req.query?.year,
+      companyId: (companyId && mongoose.Types.ObjectId.isValid(companyId)) ? companyId : null,
+      branchId: (branchId && mongoose.Types.ObjectId.isValid(branchId)) ? branchId : null,
       preferUnpaid: true,
     });
 
@@ -977,7 +979,7 @@ const payMonthlySalary = async (req, res) => {
     const targetSalaryId =
       (req.params && (req.params.id || req.params.salaryId || req.params.employeeId)) ||
       (req.body && (req.body.id || req.body.salaryId || req.body.employeeId || req.body.userId));
-    const { paymentMode = "BANK_TRANSFER", paidAt, remarks, month, year } = req.body || {};
+    const { paymentMode = "BANK_TRANSFER", paidAt, remarks, month, year, companyId, branchId } = req.body || {};
 
     if (!targetSalaryId) {
       return res.status(400).json({
@@ -989,6 +991,8 @@ const payMonthlySalary = async (req, res) => {
     const salary = await resolveSalaryRecord(targetSalaryId, {
       month: month || req.query?.month,
       year: year || req.query?.year,
+      companyId: (companyId && mongoose.Types.ObjectId.isValid(companyId)) ? companyId : null,
+      branchId: (branchId && mongoose.Types.ObjectId.isValid(branchId)) ? branchId : null,
       preferUnpaid: true,
     });
 
@@ -997,6 +1001,13 @@ const payMonthlySalary = async (req, res) => {
         success: false,
         message: "Monthly salary record not found",
       });
+    }
+
+    if (companyId && mongoose.Types.ObjectId.isValid(companyId)) {
+      salary.companyId = companyId;
+    }
+    if (branchId && mongoose.Types.ObjectId.isValid(branchId)) {
+      salary.branchId = branchId;
     }
 
     salary.status = "Paid";

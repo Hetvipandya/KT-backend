@@ -305,5 +305,44 @@ describe("Salary Pay API - Support for employeeId in addition to MongoDB Salary 
     expect(res.body.success).toBe(true);
     expect(newlyCreatedSalary.status).toBe("Paid");
     expect(newlyCreatedSalary.paymentMode).toBe("CASH");
+    expect(MonthlySalary.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        companyId: null,
+        branchId: null,
+      })
+    );
+  });
+
+  it("9. When paying salary with explicit companyId and branchId in body, they are saved", async () => {
+    jest.spyOn(MonthlySalary, "findById").mockImplementation((id) => {
+      if (id.toString() === salaryId.toString()) {
+        return {
+          populate: jest.fn().mockReturnThis(),
+          then: (resolve) => resolve(mockSalaryDoc),
+        };
+      }
+      return Promise.resolve(null);
+    });
+
+    jest.spyOn(User, "findById").mockResolvedValue(mockUser);
+    jest.spyOn(MonthlySalary, "findOne").mockImplementation(() => ({
+      sort: jest.fn().mockResolvedValue(mockSalaryDoc),
+    }));
+
+    const explicitCompanyId = new mongoose.Types.ObjectId();
+    const explicitBranchId = new mongoose.Types.ObjectId();
+
+    const res = await request(app)
+      .put(`/api/salaries/${testUserId}/pay`)
+      .send({
+        paymentMode: "BANK_TRANSFER",
+        companyId: explicitCompanyId.toString(),
+        branchId: explicitBranchId.toString(),
+      });
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(mockSalaryDoc.companyId.toString()).toBe(explicitCompanyId.toString());
+    expect(mockSalaryDoc.branchId.toString()).toBe(explicitBranchId.toString());
   });
 });
