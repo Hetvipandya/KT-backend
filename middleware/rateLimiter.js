@@ -1,7 +1,9 @@
-const rateLimit = require('express-rate-limit');
-const env = require('../config/env');
+// const rateLimit = require('express-rate-limit');
+// const env = require('../config/env');
 
 // Configurable Rate limiter for authentication endpoints: 10 requests per 15 minutes per IP by default
+// Rate limiter code commented out as requested
+/*
 const authLimiter = rateLimit({
   windowMs: process.env.RATE_LIMIT_WINDOW_MS
     ? Number(process.env.RATE_LIMIT_WINDOW_MS)
@@ -10,7 +12,7 @@ const authLimiter = rateLimit({
     ? Number(process.env.RATE_LIMIT_MAX)
     : (process.env.NODE_ENV === 'test' ? 1000 : (env.RATE_LIMIT_MAX || 10)),
   statusCode: 429,
-  message: {
+  message: { 
     success: false,
     message: 'Too many authentication attempts. Please try again after 15 minutes.'
   },
@@ -18,6 +20,12 @@ const authLimiter = rateLimit({
   legacyHeaders: false,
   skipSuccessfulRequests: false
 });
+*/
+
+// Disabled Rate Limiter (Passthrough Middleware)
+const authLimiter = (req, res, next) => {
+  next();
+};
 
 module.exports = {
   authLimiter
