@@ -85,6 +85,14 @@ exports.syncEmployeeToUser = async ({ employee, role, userData = {} }) => {
     user?.profileImg ||
     "";
 
+  const uniqueIDVal =
+    safeUserData.uniqueID ||
+    safeUserData.employeeID ||
+    employee?.employeeID ||
+    employee?.employeeCode ||
+    user?.uniqueID ||
+    null;
+
   const payload = {
     name,
     email: safeUserData.email || employee.email || "",
@@ -107,6 +115,10 @@ exports.syncEmployeeToUser = async ({ employee, role, userData = {} }) => {
     isFirstLogin: userData.isFirstLogin ?? false,
     isActive: userData.isActive ?? true,
   };
+
+  if (uniqueIDVal) {
+    payload.uniqueID = uniqueIDVal;
+  }
 
   if (!user) {
     const generatedPassword = Math.random().toString(36).slice(-8);

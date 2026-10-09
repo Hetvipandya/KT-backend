@@ -359,6 +359,13 @@ userSchema.virtual("upi").get(function () {
   this.upiId = val;
 });
 
+// Virtual for employeeID interchangeability
+userSchema.virtual("employeeID").get(function () {
+  return this.uniqueID;
+}).set(function (val) {
+  this.uniqueID = val;
+});
+
 // Virtual for terms acceptance interchangeability
 userSchema.virtual("isTermsAccepted").get(function () {
   return Boolean(this.termsAndConditions || this.termsAccepted);
@@ -453,6 +460,10 @@ const transformUserObject = function (doc, ret) {
   ret.upiId = ret.upiId || null;
   ret.upiID = ret.upiId || null;
   ret.upi = ret.upiId || null;
+
+  const empId = ret.uniqueID || ret.employeeID || null;
+  ret.uniqueID = empId;
+  ret.employeeID = empId;
 
   const isTerms = Boolean(ret.termsAndConditions || ret.termsAccepted || ret.isTermsAccepted || ret.termsAndConditionsAccepted);
   ret.termsAndConditions = isTerms;

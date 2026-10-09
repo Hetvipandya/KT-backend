@@ -320,7 +320,8 @@ const buildUserResponse = (user) => {
     isTermsAccepted: Boolean(user.termsAndConditions || user.termsAccepted || user.isTermsAccepted || user.termsAndConditionsAccepted),
     termsAndConditionsAccepted: Boolean(user.termsAndConditions || user.termsAccepted || user.isTermsAccepted || user.termsAndConditionsAccepted),
 
-    uniqueID: user.uniqueID,
+    uniqueID: user.uniqueID || user.employeeID || null,
+    employeeID: user.uniqueID || user.employeeID || null,
     role: user.role,
 
     isApproved: user.isApproved,
@@ -379,6 +380,11 @@ const createEmployeeForUser = async (user) => {
   });
 
   if (employee) {
+    const empId = employee.employeeID || employee.employeeCode;
+    if (empId && !user.uniqueID) {
+      user.uniqueID = empId;
+      await user.save();
+    }
     return employee;
   }
 
@@ -420,6 +426,11 @@ const createEmployeeForUser = async (user) => {
     isTeamLead: role === "team lead",
   });
 
+  if (!user.uniqueID) {
+    user.uniqueID = employeeID;
+    await user.save();
+  }
+
   return employee;
 };
 
@@ -438,6 +449,18 @@ const syncUserToEmployee = async (user) => {
 
   if (!employee) {
     return null;
+  }
+
+  let userModified = false;
+  const empId = employee.employeeID || employee.employeeCode;
+  if (empId && !user.uniqueID) {
+    user.uniqueID = empId;
+    userModified = true;
+  }
+
+  if (user.uniqueID && !employee.employeeID) {
+    employee.employeeID = user.uniqueID;
+    employee.employeeCode = user.uniqueID;
   }
 
   employee.firstName = user.name || employee.firstName;
@@ -469,6 +492,9 @@ const syncUserToEmployee = async (user) => {
   employee.isTeamLead = normalizeRole(user.role) === "team lead";
 
   await employee.save();
+  if (userModified) {
+    await user.save();
+  }
 
   return employee;
 };
