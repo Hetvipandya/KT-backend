@@ -87,7 +87,135 @@ const getPurchaseDocument = async (value) => {
   if (!purchase) throw fail('Purchase not found', 404, 'PURCHASE_NOT_FOUND');
   return purchase;
 };
-const updatePurchase = async (purchase, changes, userId) => { if (['PAID', 'CANCELLED', 'PARTIALLY_PAID'].includes(purchase.status)) throw fail('Purchase cannot be edited after payment or cancellation', 409, 'PURCHASE_NOT_EDITABLE'); const data = { ...purchase.toObject(), ...changes, companyId: id(purchase.companyId), financialYearId: id(purchase.financialYearId), supplierId: id(purchase.supplierId), purchaseOrderId: purchase.purchaseOrderId ? id(purchase.purchaseOrderId) : null, billNumber: purchase.billNumber }; validateTotals(data); const supplier = await validateRefs(data); if (purchase.journalEntryId) { const reversed = await journal.reverseJournalEntry(purchase.journalEntryId, userId); purchase.reversalJournalEntryId = reversed.reversal._id; } Object.assign(purchase, changes, { billDate: new Date(data.billDate), dueDate: data.dueDate ? new Date(data.dueDate) : null, balanceDue: data.grandTotal, updatedBy: userId }); const entry = await postJournal(purchase, supplier, userId); purchase.journalEntryId = entry._id; await purchase.save(); return { id: id(purchase._id), status: purchase.status, grandTotal: purchase.grandTotal, balanceDue: purchase.balanceDue, updatedAt: purchase.updatedAt }; };
-const createReturn = async (purchase, data, userId) => { if (purchase.status === 'CANCELLED') throw fail('Cancelled purchase cannot be returned', 409, 'PURCHASE_CANCELLED'); const prior = await PurchaseReturn.find({ purchaseId: purchase._id }).lean(); const returned = new Map(); prior.flatMap((r) => r.lineItems).forEach((line) => returned.set(id(line.purchaseLineItemId), (returned.get(id(line.purchaseLineItemId)) || 0) + line.quantity)); const requested = (data.lineItems || purchase.lineItems.map((line) => ({ purchaseLineItemId: id(line._id), quantity: line.quantity - (returned.get(id(line._id)) || 0) }))).filter((item) => item.quantity > EPSILON); if (!requested.length) throw fail('There is no remaining quantity to return', 400, 'NOTHING_TO_RETURN'); const lines = requested.map((item) => { const original = purchase.lineItems.id(item.purchaseLineItemId); if (!original || item.quantity + (returned.get(item.purchaseLineItemId) || 0) - original.quantity > EPSILON) throw fail('Return quantity exceeds purchased quantity', 400, 'RETURN_QUANTITY_EXCEEDED'); const ratio = item.quantity / original.quantity; return { purchaseLineItemId: original._id, productId: original.productId, quantity: item.quantity, amount: original.amount * ratio, taxAmount: original.taxAmount * ratio, totalAmount: original.totalAmount * ratio }; }); const total = lines.reduce((sum, line) => sum + line.totalAmount, 0); if (total - purchase.balanceDue > EPSILON) throw fail('Return amount cannot exceed outstanding purchase balance', 400, 'RETURN_EXCEEDS_BALANCE'); const supplier = await Supplier.findById(purchase.supplierId); const purchaseAccount = await ChartOfAccount.findOne({ companyId: purchase.companyId, code: '5110', isActive: true, isGroup: false }); const payable = supplier.payableAccountId ? await ChartOfAccount.findById(supplier.payableAccountId) : null; const gst = lines.some((line) => line.taxAmount) ? await ChartOfAccount.findOne({ companyId: purchase.companyId, code: '1410', isActive: true, isGroup: false }) : null; if (!supplier || !payable || !purchaseAccount || (lines.some((line) => line.taxAmount) && !gst)) throw fail('Required COA account is unavailable for purchase return', 500, 'PURCHASE_RETURN_JOURNAL_FAILED'); const entry = await journal.createJournalEntry({ companyId: purchase.companyId, financialYearId: purchase.financialYearId, entryDate: new Date(data.returnDate), reference: `RET-${purchase.billNumber}`, narration: `Purchase return for ${purchase.billNumber}`, lines: [{ accountId: payable._id, debit: total, credit: 0, remarks: 'Reduce supplier payable' }, { accountId: purchaseAccount._id, debit: 0, credit: lines.reduce((sum, line) => sum + line.amount, 0), remarks: 'Reverse purchase' }, ...(gst ? [{ accountId: gst._id, debit: 0, credit: lines.reduce((sum, line) => sum + line.taxAmount, 0), remarks: 'Reverse input GST' }] : [])] }, userId); const record = await PurchaseReturn.create({ companyId: purchase.companyId, branchId: data.branchId || purchase.branchId || null, purchaseId: purchase._id, returnDate: new Date(data.returnDate), reason: data.reason, warehouseId: data.warehouseId || null, lineItems: lines, totalAmount: total, journalEntryId: entry._id, createdBy: userId }); purchase.balanceDue = Math.max(0, purchase.balanceDue - total); if (!purchase.balanceDue) purchase.status = 'PAID'; purchase.updatedBy = userId; await purchase.save(); // TODO: Module 18 stock-out and Module 24 Debit Note wiring.
-  return { purchaseId: id(purchase._id), returnId: id(record._id), returnDate: record.returnDate, note: 'Stock-out and Debit Note integration remain pending Modules 18 and 24.' }; };
+const updatePurchase = async (purchase, changes, userId) => {
+  if (['PAID', 'CANCELLED', 'PARTIALLY_PAID'].includes(purchase.status)) throw fail('Purchase cannot be edited after payment or cancellation', 409, 'PURCHASE_NOT_EDITABLE');
+  const purchaseObj = typeof purchase.toObject === 'function' ? purchase.toObject() : purchase;
+  const purchaseId = id(purchase._id || purchase.id);
+  const companyId = id(purchase.companyId);
+  const financialYearId = id(purchase.financialYearId);
+  const supplierId = id(purchase.supplierId);
+
+  const data = {
+    ...purchaseObj,
+    ...changes,
+    companyId,
+    financialYearId,
+    supplierId,
+    purchaseOrderId: purchase.purchaseOrderId ? id(purchase.purchaseOrderId) : null,
+    billNumber: purchase.billNumber
+  };
+  validateTotals(data);
+  const supplier = await validateRefs(data);
+  let reversalId = null;
+  if (purchase.journalEntryId) {
+    const reversed = await journal.reverseJournalEntry(purchase.journalEntryId, userId);
+    reversalId = reversed.reversal._id;
+  }
+  const entry = await postJournal(data, supplier, userId);
+
+  const purchaseDoc = typeof purchase.save === 'function' ? purchase : await Purchase.findById(purchaseId);
+  if (!purchaseDoc) throw fail('Purchase not found', 404, 'PURCHASE_NOT_FOUND');
+  if (reversalId) purchaseDoc.reversalJournalEntryId = reversalId;
+  Object.assign(purchaseDoc, changes, {
+    billDate: new Date(data.billDate),
+    dueDate: data.dueDate ? new Date(data.dueDate) : null,
+    balanceDue: data.grandTotal,
+    updatedBy: userId,
+    journalEntryId: entry._id
+  });
+  await purchaseDoc.save();
+  return { id: id(purchaseDoc._id), status: purchaseDoc.status, grandTotal: purchaseDoc.grandTotal, balanceDue: purchaseDoc.balanceDue, updatedAt: purchaseDoc.updatedAt };
+};
+
+const createReturn = async (purchase, data, userId) => {
+  if (purchase.status === 'CANCELLED') throw fail('Cancelled purchase cannot be returned', 409, 'PURCHASE_CANCELLED');
+  const purchaseId = id(purchase._id || purchase.id);
+  const companyId = id(purchase.companyId);
+  const financialYearId = id(purchase.financialYearId);
+  const supplierId = id(purchase.supplierId);
+
+  const prior = await PurchaseReturn.find({ purchaseId }).lean();
+  const returned = new Map();
+  prior.flatMap((r) => r.lineItems).forEach((line) => returned.set(id(line.purchaseLineItemId), (returned.get(id(line.purchaseLineItemId)) || 0) + line.quantity));
+  
+  const lineItemsList = purchase.lineItems || [];
+  const requested = (data.lineItems || lineItemsList.map((line) => ({
+    purchaseLineItemId: id(line._id || line.id),
+    quantity: line.quantity - (returned.get(id(line._id || line.id)) || 0)
+  }))).filter((item) => item.quantity > EPSILON);
+
+  if (!requested.length) throw fail('There is no remaining quantity to return', 400, 'NOTHING_TO_RETURN');
+  
+  const lines = requested.map((item) => {
+    const original = lineItemsList.find((line) => id(line._id || line.id) === id(item.purchaseLineItemId)) ||
+                     (typeof lineItemsList.id === 'function' ? lineItemsList.id(item.purchaseLineItemId) : null);
+    if (!original || item.quantity + (returned.get(id(item.purchaseLineItemId)) || 0) - original.quantity > EPSILON) throw fail('Return quantity exceeds purchased quantity', 400, 'RETURN_QUANTITY_EXCEEDED');
+    const ratio = item.quantity / original.quantity;
+    return {
+      purchaseLineItemId: original._id || original.id,
+      productId: id(original.productId?._id || original.productId),
+      quantity: item.quantity,
+      amount: original.amount * ratio,
+      taxAmount: original.taxAmount * ratio,
+      totalAmount: original.totalAmount * ratio
+    };
+  });
+
+  const total = lines.reduce((sum, line) => sum + line.totalAmount, 0);
+  if (total - purchase.balanceDue > EPSILON) throw fail('Return amount cannot exceed outstanding purchase balance', 400, 'RETURN_EXCEEDS_BALANCE');
+  
+  const supplier = await Supplier.findById(supplierId);
+  const purchaseAccount = await ChartOfAccount.findOne({ companyId, code: '5110', isActive: true, isGroup: false });
+  const payable = supplier?.payableAccountId ? await ChartOfAccount.findById(supplier.payableAccountId) : null;
+  const gst = lines.some((line) => line.taxAmount) ? await ChartOfAccount.findOne({ companyId, code: '1410', isActive: true, isGroup: false }) : null;
+  if (!supplier || !payable || !purchaseAccount || (lines.some((line) => line.taxAmount) && !gst)) throw fail('Required COA account is unavailable for purchase return', 500, 'PURCHASE_RETURN_JOURNAL_FAILED');
+  
+  const entry = await journal.createJournalEntry({
+    companyId,
+    financialYearId,
+    entryDate: new Date(data.returnDate),
+    reference: `RET-${purchase.billNumber}`,
+    narration: `Purchase return for ${purchase.billNumber}`,
+    lines: [
+      { accountId: payable._id, debit: total, credit: 0, remarks: 'Reduce supplier payable' },
+      { accountId: purchaseAccount._id, debit: 0, credit: lines.reduce((sum, line) => sum + line.amount, 0), remarks: 'Reverse purchase' },
+      ...(gst ? [{ accountId: gst._id, debit: 0, credit: lines.reduce((sum, line) => sum + line.taxAmount, 0), remarks: 'Reverse input GST' }] : [])
+    ]
+  }, userId);
+
+  const record = await PurchaseReturn.create({
+    companyId,
+    branchId: data.branchId || id(purchase.branchId) || null,
+    purchaseId,
+    returnDate: new Date(data.returnDate),
+    reason: data.reason,
+    warehouseId: data.warehouseId || null,
+    lineItems: lines,
+    totalAmount: total,
+    journalEntryId: entry._id,
+    createdBy: userId
+  });
+
+  const newBalanceDue = Math.max(0, purchase.balanceDue - total);
+
+  if (typeof purchase.save === 'function') {
+    purchase.balanceDue = newBalanceDue;
+    if (!newBalanceDue) purchase.status = 'PAID';
+    purchase.updatedBy = userId;
+    await purchase.save();
+  } else {
+    await Purchase.findByIdAndUpdate(purchaseId, {
+      balanceDue: newBalanceDue,
+      ...( !newBalanceDue ? { status: 'PAID' } : {} ),
+      updatedBy: userId
+    });
+  }
+
+  return {
+    purchaseId,
+    returnId: id(record._id),
+    returnDate: record.returnDate,
+    note: 'Stock-out and Debit Note integration remain pending Modules 18 and 24.'
+  };
+};
 module.exports = { createPurchase, listPurchases, getPurchaseDocument, updatePurchase, createReturn, shape };

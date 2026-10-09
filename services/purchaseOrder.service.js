@@ -189,27 +189,31 @@ const approvePurchaseOrder = async (po, userId, reason = null) => {
     throw fail('Only pending purchase orders can be approved', 400, 'PURCHASE_ORDER_NOT_APPROVABLE');
   }
 
-  po.status = 'APPROVED';
-  po.approvalRequired = true;
-  po.autoApproved = false;
-  po.approvedBy = userId;
-  po.approvedAt = new Date();
-  po.rejectedBy = null;
-  po.rejectedAt = null;
-  po.rejectionReason = null;
-  po.updatedBy = userId;
-  await po.save();
+  const poId = id(po._id || po.id);
+  const poDoc = typeof po.save === 'function' ? po : await PurchaseOrder.findById(poId);
+  if (!poDoc) throw fail('Purchase order not found', 404, 'PURCHASE_ORDER_NOT_FOUND');
+
+  poDoc.status = 'APPROVED';
+  poDoc.approvalRequired = true;
+  poDoc.autoApproved = false;
+  poDoc.approvedBy = userId;
+  poDoc.approvedAt = new Date();
+  poDoc.rejectedBy = null;
+  poDoc.rejectedAt = null;
+  poDoc.rejectionReason = null;
+  poDoc.updatedBy = userId;
+  await poDoc.save();
 
   // Record audit event and send notification
   try {
     const { recordAuditEvent } = require('./auditLog.service');
     if (recordAuditEvent) {
       await recordAuditEvent({
-        companyId: po.companyId,
+        companyId: id(po.companyId),
         userId,
         module: 'PURCHASE_ORDER',
         actionType: 'APPROVE',
-        entityId: po._id,
+        entityId: poDoc._id,
         entityType: 'PurchaseOrder',
         description: `Purchase order ${po.poNumber} approved`,
         metadata: { reason: reason || null }
@@ -221,22 +225,22 @@ const approvePurchaseOrder = async (po, userId, reason = null) => {
     const { createNotification } = require('./notification.service');
     createNotification({
       userId: po.createdBy,
-      companyId: po.companyId,
+      companyId: id(po.companyId),
       type: 'PURCHASE_ORDER_APPROVED',
       title: 'Purchase Order Approved',
       message: `Purchase Order ${po.poNumber} for Rs.${po.totalAmount} has been approved.`,
       channel: 'PUSH',
-      meta: { poId: id(po._id), poNumber: po.poNumber }
+      meta: { poId, poNumber: po.poNumber }
     }).catch(() => {});
   } catch (notifErr) {}
 
   return {
-    id: id(po._id),
-    status: po.status,
-    approvalRequired: po.approvalRequired,
-    autoApproved: po.autoApproved,
-    approvedBy: id(po.approvedBy),
-    approvedAt: po.approvedAt,
+    id: poId,
+    status: poDoc.status,
+    approvalRequired: poDoc.approvalRequired,
+    autoApproved: poDoc.autoApproved,
+    approvedBy: id(poDoc.approvedBy),
+    approvedAt: poDoc.approvedAt,
     message: 'Purchase order approved successfully.'
   };
 };
@@ -249,16 +253,20 @@ const rejectPurchaseOrder = async (po, userId, reason) => {
     throw fail('Only pending purchase orders can be rejected', 400, 'PURCHASE_ORDER_NOT_REJECTABLE');
   }
 
-  po.status = 'REJECTED';
-  po.approvalRequired = true;
-  po.autoApproved = false;
-  po.rejectedBy = userId;
-  po.rejectedAt = new Date();
-  po.rejectionReason = reason;
-  po.approvedBy = null;
-  po.approvedAt = null;
-  po.updatedBy = userId;
-  await po.save();
+  const poId = id(po._id || po.id);
+  const poDoc = typeof po.save === 'function' ? po : await PurchaseOrder.findById(poId);
+  if (!poDoc) throw fail('Purchase order not found', 404, 'PURCHASE_ORDER_NOT_FOUND');
+
+  poDoc.status = 'REJECTED';
+  poDoc.approvalRequired = true;
+  poDoc.autoApproved = false;
+  poDoc.rejectedBy = userId;
+  poDoc.rejectedAt = new Date();
+  poDoc.rejectionReason = reason;
+  poDoc.approvedBy = null;
+  poDoc.approvedAt = null;
+  poDoc.updatedBy = userId;
+  await poDoc.save();
 
   // Record audit event and send notification
   try {
