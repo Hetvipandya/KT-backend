@@ -1413,10 +1413,16 @@ const approveEmployee = async (req, res) => {
     user.isActive = true;
     user.status = "Active";
 
+    const plainPassword =
+      (req.body && (req.body.password || req.body.plainPassword || req.body.tempPassword || req.body.temporaryPassword)) ||
+      crypto.randomBytes(6).toString("base64").replace(/[^a-zA-Z0-9]/g, "").slice(0, 8);
+
+    user.password = plainPassword;
+
     if (user.email) {
       sendTemporaryPasswordEmail(
         user.email,
-        "Temporary Password Sent During Creation",
+        plainPassword,
         (companyDoc && (companyDoc.companyName || companyDoc.name)) || "Kevalon Technology",
       ).catch((emailError) => {
         console.error("Approved user password email error:", emailError.message);
