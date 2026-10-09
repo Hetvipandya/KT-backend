@@ -351,57 +351,86 @@ exports.getPerformanceById = async (req, res) => {
 };
 
 // =============================
-// Get Performance by Employee ID (HR, ADMIN & TEAM LEAD)
+// Get Performance by Employee ID (HR, ADMIN, TEAM LEAD, EMPLOYEE, INTERN)
 // =============================
 exports.getPerformanceByEmployeeId = async (req, res) => {
   try {
-    // Restrict access: Only HR, Admin, and Team Lead can view performance feedback
-    const userRole = (req.user?.role || "").toLowerCase().replace(/[_\s]+/g, "");
-    if (
-      userRole !== "admin" &&
-      userRole !== "hr" &&
-      userRole !== "teamlead" &&
-      userRole !== "teamleader"
-    ) {
-      return res.status(403).json({
-        success: false,
-        message: "Access restricted. Only HR, Admin, and Team Lead can view performance feedback.",
-      });
+    const rawEmployeeId =
+      (req.params && (req.params.employeeId || req.params.userId || req.params.id)) ||
+      (req.query && (req.query.employeeId || req.query.userId || req.query.id || req.query.employeeID));
+
+    const loggedInUser = req.user || {};
+    const userRole = (loggedInUser.role || "").toLowerCase().replace(/[_\s]+/g, "");
+    const isManagement = ["admin", "hr", "teamlead", "teamleader"].includes(userRole);
+
+    let targetSearchId = rawEmployeeId;
+    if (!targetSearchId) {
+      targetSearchId = loggedInUser.employeeID || loggedInUser.employeeId || loggedInUser._id || loggedInUser.id;
     }
 
-    const { employeeId } = req.params;
-    if (!employeeId) {
+    if (!targetSearchId) {
       return res.status(400).json({
         success: false,
         message: "Employee ID is required.",
       });
     }
 
-    const isValidObjId = mongoose.Types.ObjectId.isValid(employeeId);
+    // Role check: Non-management users can only view their own performance data
+    if (!isManagement) {
+      const ownIds = [
+        loggedInUser._id ? loggedInUser._id.toString() : null,
+        loggedInUser.id ? loggedInUser.id.toString() : null,
+        loggedInUser.employeeID ? loggedInUser.employeeID.toString() : null,
+        loggedInUser.employeeId ? loggedInUser.employeeId.toString() : null,
+        loggedInUser.uniqueID ? loggedInUser.uniqueID.toString() : null,
+        loggedInUser.email ? loggedInUser.email.toLowerCase() : null,
+      ].filter(Boolean);
+
+      const requestedStr = targetSearchId.toString().toLowerCase();
+      const isSelfAccess = ownIds.some((id) => id.toLowerCase() === requestedStr);
+
+      if (!isSelfAccess) {
+        return res.status(403).json({
+          success: false,
+          message: "Access restricted. Only HR, Admin, Team Lead, or the respective Employee can view performance feedback.",
+        });
+      }
+    }
+
+    const isValidObjId = mongoose.Types.ObjectId.isValid(targetSearchId);
     const targetEmployeeIds = [];
 
     if (isValidObjId) {
-      targetEmployeeIds.push(employeeId.toString());
+      targetEmployeeIds.push(targetSearchId.toString());
     }
 
-    // Only perform secondary model resolution if DB connection is active
+    // Secondary model resolution when DB connection is active
     if (mongoose.connection && mongoose.connection.readyState === 1) {
       try {
         const empOrCond = [
-          ...(isValidObjId ? [{ _id: employeeId }] : []),
-          { employeeID: employeeId },
-          { employeeCode: employeeId },
-          { email: employeeId },
+          ...(isValidObjId ? [{ _id: targetSearchId }] : []),
+          { employeeID: targetSearchId },
+          { employeeCode: targetSearchId },
+          { email: targetSearchId },
+          ...(isValidObjId ? [{ userId: targetSearchId }, { userID: targetSearchId }] : []),
         ];
-        const empData = await Employee.findOne({ $or: empOrCond }).select("_id");
-        if (empData && !targetEmployeeIds.includes(empData._id.toString())) {
-          targetEmployeeIds.push(empData._id.toString());
+        const empData = await Employee.findOne({ $or: empOrCond }).select("_id userId userID");
+        if (empData) {
+          if (!targetEmployeeIds.includes(empData._id.toString())) {
+            targetEmployeeIds.push(empData._id.toString());
+          }
+          if (empData.userId && !targetEmployeeIds.includes(empData.userId.toString())) {
+            targetEmployeeIds.push(empData.userId.toString());
+          }
+          if (empData.userID && !targetEmployeeIds.includes(empData.userID.toString())) {
+            targetEmployeeIds.push(empData.userID.toString());
+          }
         }
 
         const userOrCond = [
-          ...(isValidObjId ? [{ _id: employeeId }] : []),
-          { uniqueID: employeeId },
-          { email: employeeId },
+          ...(isValidObjId ? [{ _id: targetSearchId }] : []),
+          { uniqueID: targetSearchId },
+          { email: targetSearchId },
         ];
         const userData = await User.findOne({ $or: userOrCond }).select("_id");
         if (userData && !targetEmployeeIds.includes(userData._id.toString())) {
@@ -414,7 +443,7 @@ exports.getPerformanceByEmployeeId = async (req, res) => {
 
     const query = targetEmployeeIds.length > 1
       ? { employeeID: { $in: targetEmployeeIds } }
-      : { employeeID: targetEmployeeIds[0] || employeeId };
+      : { employeeID: targetEmployeeIds[0] || targetSearchId };
 
     const performances = await EmployeePerformance.find(query)
       .populate(
@@ -427,10 +456,13 @@ exports.getPerformanceByEmployeeId = async (req, res) => {
       )
       .sort({ createdAt: -1 });
 
+    const latestPerformance = performances && performances.length > 0 ? performances[0] : null;
+
     return res.status(200).json({
       success: true,
       count: performances ? performances.length : 0,
       data: performances || [],
+      performance: latestPerformance,
     });
   } catch (err) {
     console.error("Error fetching employee performances:", err);

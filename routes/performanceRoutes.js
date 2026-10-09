@@ -25,7 +25,15 @@ router.put("/update/:id", authorizeRoles("team lead", "admin", "hr"), updatePerf
 // ONLY HR and Admin can view performance records and feedback
 router.get("/all", authorizeRoles("admin", "hr"), getAllPerformance);
 router.get("/dropdown", authorizeRoles("admin", "hr", "team lead"), getPerformanceDropdown);
-router.get("/employee/:employeeId", authorizeRoles("admin", "hr", "team lead"), getPerformanceByEmployeeId);
+
+// Get performance by Employee ID / User ID / Self (Management can view any, Employees can view self)
+router.get("/employee/:employeeId", getPerformanceByEmployeeId);
+router.get("/user/:userId", getPerformanceByEmployeeId);
+router.get("/employee", getPerformanceByEmployeeId);
+router.get("/user", getPerformanceByEmployeeId);
+router.get("/my-performance", getPerformanceByEmployeeId);
+router.get("/get-by-employee", getPerformanceByEmployeeId);
+
 router.get("/:id", authorizeRoles("admin", "hr"), getPerformanceById);
 router.delete("/delete/:id", authorizeRoles("admin", "hr"), deletePerformance);
 
