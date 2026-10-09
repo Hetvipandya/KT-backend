@@ -295,7 +295,7 @@ exports.getAllPerformance = async (req, res) => {
 };
 
 // =============================
-// Get Single Performance (ONLY HR & ADMIN)
+// Get Performance by Employee ID (ONLY HR & ADMIN)
 // =============================
 exports.getPerformanceById = async (req, res) => {
   try {
@@ -308,9 +308,17 @@ exports.getPerformanceById = async (req, res) => {
       });
     }
 
-    const performance = await EmployeePerformance.findById(
-      req.params.id
-    )
+    const employeeId = req.params.id;
+    if (!mongoose.Types.ObjectId.isValid(employeeId)) {
+      return res.status(400).json({
+        success: false,
+        message: "A valid Employee ID is required.",
+      });
+    }
+
+    const performance = await EmployeePerformance.findOne({
+      employeeID: employeeId,
+    })
       .populate(
         "employeeID",
         "name email department firstName lastName"
@@ -318,7 +326,8 @@ exports.getPerformanceById = async (req, res) => {
       .populate(
         "submittedBy",
         "name email role"
-      );
+      )
+      .sort({ createdAt: -1 });
 
     if (!performance) {
       return res.status(404).json({
