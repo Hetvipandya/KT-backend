@@ -169,6 +169,19 @@ const login = async (req, res, next) => {
         message: "Invalid email or password",
       });
     }
+    if (user.isApproved === false || (user.isActive === false && user.isApproved === false)) {
+      return res.status(403).json({
+        success: false,
+        message: "Admin Approval Pending",
+      });
+    }
+
+    if (user.isActive === false) {
+      return res.status(403).json({
+        success: false,
+        message: "Your account is inactive",
+      });
+    }
 
     // Check lock status
     if (user.isLocked) {

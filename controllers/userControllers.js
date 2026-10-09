@@ -1544,18 +1544,7 @@ const loginUser = async (req, res) => {
     }
 
     // --------------------------------------------------------
-    // ACCOUNT STATUS
-    // --------------------------------------------------------
-
-    if (!user.isActive) {
-      return res.status(403).json({
-        success: false,
-        message: "Your account is inactive",
-      });
-    }
-
-    // --------------------------------------------------------
-    // APPROVAL
+    // ACCOUNT STATUS & APPROVAL
     // --------------------------------------------------------
 
     const role = normalizeRole(user.role);
@@ -1563,7 +1552,21 @@ const loginUser = async (req, res) => {
     if (shouldRequireApproval(role) && !user.isApproved) {
       return res.status(403).json({
         success: false,
-        message: "Admin approval pending",
+        message: "Admin Approval Pending",
+      });
+    }
+
+    if (!user.isApproved || (!user.isActive && !user.isApproved)) {
+      return res.status(403).json({
+        success: false,
+        message: "Admin Approval Pending",
+      });
+    }
+
+    if (!user.isActive) {
+      return res.status(403).json({
+        success: false,
+        message: "Your account is inactive",
       });
     }
 
