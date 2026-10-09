@@ -101,6 +101,10 @@ router.post(
   "/payslip/generate",
   generatePayslip
 );
+router.get(
+  "/payslip/generate",
+  generatePayslip
+);
 
 router.get(
   "/payslips",

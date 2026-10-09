@@ -358,8 +358,25 @@ const resolveSalaryRecord = async (identifier, options = {}) => {
   // 1. Try finding directly by MonthlySalary._id if it's a valid ObjectId
   if (isValidObjectId && isDbConnectedOrMocked(MonthlySalary.findById)) {
     try {
-      const directSalary = await MonthlySalary.findById(rawId);
-      if (directSalary) {
+      const queryOrDoc = MonthlySalary.findById(rawId);
+      let directSalary = queryOrDoc;
+      if (queryOrDoc && typeof queryOrDoc.populate === "function" && typeof queryOrDoc.exec === "function") {
+        try {
+          directSalary = await queryOrDoc.populate("employeeId userId", "name email uniqueID role designation department");
+        } catch (_) {
+          directSalary = await queryOrDoc;
+        }
+      } else if (queryOrDoc && typeof queryOrDoc.populate === "function" && !queryOrDoc._id && !queryOrDoc.employeeId) {
+        try {
+          directSalary = await queryOrDoc.populate("employeeId userId", "name email uniqueID role designation department");
+        } catch (_) {
+          directSalary = await queryOrDoc;
+        }
+      } else if (queryOrDoc && typeof queryOrDoc.then === "function") {
+        directSalary = await queryOrDoc;
+      }
+
+      if (directSalary && (directSalary._id || directSalary.employeeId || directSalary.userId || directSalary.month)) {
         if ((!month || isNaN(month) || directSalary.month === month) &&
             (!year || isNaN(year) || directSalary.year === year)) {
           return directSalary;
