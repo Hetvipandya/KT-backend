@@ -26,15 +26,35 @@ router.put("/update/:id", authorizeRoles("team lead", "admin", "hr"), updatePerf
 router.get("/all", authorizeRoles("admin", "hr"), getAllPerformance);
 router.get("/dropdown", authorizeRoles("admin", "hr", "team lead"), getPerformanceDropdown);
 
+// Root route: /api/performance (supports ?employeeId=..., ?id=..., ?userId=...)
+router.get("/", (req, res, next) => {
+  const hasEmployeeParam =
+    (req.query && (req.query.employeeId || req.query.employeeID || req.query.userId || req.query.id));
+  const userRole = (req.user?.role || "").toLowerCase().replace(/[_\s]+/g, "");
+  const isManagement = ["admin", "hr", "teamlead", "teamleader"].includes(userRole);
+
+  if (hasEmployeeParam || !isManagement) {
+    return getPerformanceByEmployeeId(req, res, next);
+  }
+  return getAllPerformance(req, res, next);
+});
+
 // Get performance by Employee ID / User ID / Self (Management can view any, Employees can view self)
 router.get("/employee/:employeeId", getPerformanceByEmployeeId);
-router.get("/user/:userId", getPerformanceByEmployeeId);
 router.get("/employee", getPerformanceByEmployeeId);
+router.get("/user/:userId", getPerformanceByEmployeeId);
 router.get("/user", getPerformanceByEmployeeId);
 router.get("/my-performance", getPerformanceByEmployeeId);
 router.get("/get-by-employee", getPerformanceByEmployeeId);
+router.get("/get-by-employee/:employeeId", getPerformanceByEmployeeId);
+router.get("/get-by-employee-id", getPerformanceByEmployeeId);
+router.get("/get-by-employee-id/:employeeId", getPerformanceByEmployeeId);
+router.get("/by-employee", getPerformanceByEmployeeId);
+router.get("/by-employee/:employeeId", getPerformanceByEmployeeId);
+router.get("/employee-id", getPerformanceByEmployeeId);
+router.get("/employee-id/:employeeId", getPerformanceByEmployeeId);
 
-router.get("/:id", authorizeRoles("admin", "hr"), getPerformanceById);
+router.get("/:id", authorizeRoles("admin", "hr", "team lead"), getPerformanceById);
 router.delete("/delete/:id", authorizeRoles("admin", "hr"), deletePerformance);
 
 module.exports = router;
