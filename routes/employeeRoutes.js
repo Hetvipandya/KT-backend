@@ -11,7 +11,7 @@ const {
   removeTeamLead,
 
   addEmployee,
-  editEmployee,
+  editEmployee, 
   updateEmployee,
   updateEmployeeLifecycle,
   deleteEmployee,

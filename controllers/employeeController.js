@@ -689,7 +689,7 @@ exports.getEmployeeDocuments = async (req, res) => {
     res.status(500).json({
       success: false,
       message: error.message,
-    });
+    }); 
   }
 };
 
@@ -762,6 +762,8 @@ exports.addEmployee = async (req, res) => {
       employeeRole = "team lead";
     } else if (rawRole === "intern") {
       employeeRole = "intern";
+    } else if (rawRole === "hr") {
+      employeeRole = "hr";
     }
 
     // ✅ PROFILE IMAGE (Cloudinary)
@@ -804,33 +806,36 @@ exports.addEmployee = async (req, res) => {
 
     // ✅ SYNC TO USER (Employee thi User create/update)
     let syncedUser = null;
-    if (employeeRole === "employee" || employeeRole === "team lead" || employeeRole === "intern") {
+    if (
+      employeeRole === "employee" ||
+      employeeRole === "team lead" ||
+      employeeRole === "intern" ||
+      employeeRole === "hr"
+    ) {
       syncedUser = await syncEmployeeToUser({
-  employee: employee,
-  role: employeeRole,
-  userData: {
-    name: `${firstName} ${lastName}`.trim(),
-    email,
-    phoneNumber: resolvedPhoneNumber,
-    profileImage: finalProfileImgUrl || employee.profileImage || "",
-    profileImg: finalProfileImgUrl || employee.profileImg || "",
-    address:
-      req.body.currentAddress ||
-      req.body.permanentAddress ||
-      req.body.address ||
-      "",
-    department: req.body.department,
-    designation: req.body.designation || employee.designation,
-    gender: req.body.gender || employee.gender,
-    bloodGroup: req.body.bloodGroup,
-    role: employeeRole,
-    isApproved: true,
-    isFirstLogin: false,
-
-    // IMPORTANT
-    uniqueID: employee.employeeID,
-  },
-});
+        employee,
+        role: employeeRole,
+        userData: {
+          name: `${firstName} ${lastName}`.trim(),
+          email,
+          phoneNumber: resolvedPhoneNumber,
+          profileImage: finalProfileImgUrl || employee.profileImage || "",
+          profileImg: finalProfileImgUrl || employee.profileImg || "",
+          address:
+            req.body.currentAddress ||
+            req.body.permanentAddress ||
+            req.body.address ||
+            "",
+          department: req.body.department,
+          designation: req.body.designation || employee.designation,
+          gender: req.body.gender || employee.gender,
+          bloodGroup: req.body.bloodGroup,
+          role: employeeRole,
+          isApproved: true,
+          isFirstLogin: false,
+          uniqueID: employee.employeeID,
+        },
+      });
     }
 
     // ✅ Employee ma userID update karo (syncEmployeeToUser internally kare che, pan confirm mate)
