@@ -230,6 +230,8 @@ app.use('/api/salary-slips', salarySlipRoutes);
 app.use('/api/document', ktDocumentRoutes);
 app.use('/api/project', ktProjectManagementRoutes);
 app.use('/api/dailyUpdate', ktDailyReportRoutes);
+app.use('/api/dailyReport', ktDailyReportRoutes);
+app.use('/api/daily-report', ktDailyReportRoutes);
 app.use('/api/teamLead', ktTeamLeadRoutes);
 app.use('/api/followup', ktProjectFollowUpRoutes);
 app.use('/api/projectAnalytics', ktProjectAnalyticsRoutes);

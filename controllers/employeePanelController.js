@@ -1086,7 +1086,27 @@ exports.submitBatchDailyReport = async (req, res) => {
         remarks,
       } = item;
 
-      if (!projectId || !todaysWork || !hoursWorked) {
+      const parseHoursWorked = (val) => {
+        if (val === undefined || val === null || val === "") return null;
+        if (typeof val === "number") {
+          return isNaN(val) ? null : Math.round(val * 100) / 100;
+        }
+        if (typeof val === "string") {
+          const trimmed = val.trim().replace(",", ".");
+          if (trimmed.includes(":")) {
+            const parts = trimmed.split(":");
+            const h = parseFloat(parts[0]) || 0;
+            const m = parseFloat(parts[1]) || 0;
+            return parseFloat(h + "." + (m < 10 ? "0" + m : m));
+          }
+          const num = parseFloat(trimmed);
+          return isNaN(num) ? null : Math.round(num * 100) / 100;
+        }
+        return null;
+      };
+
+      const parsedHours = parseHoursWorked(hoursWorked);
+      if (!projectId || !todaysWork || parsedHours === null || isNaN(parsedHours)) {
         continue;
       }
 
@@ -1097,7 +1117,7 @@ exports.submitBatchDailyReport = async (req, res) => {
         pendingWork: pendingWork || "",
         tomorrowPlan: tomorrowPlan || "",
         issuesFaced: issuesFaced || "",
-        hoursWorked: Number(hoursWorked),
+        hoursWorked: parsedHours,
         taskReferences: taskReferences || [],
         remarks: remarks || "",
       });

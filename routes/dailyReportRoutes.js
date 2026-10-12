@@ -9,6 +9,7 @@ const {
   getAllDailyReports, 
   getSingleDailyReport, 
   updateReportStatus,  
+  updateDailyReport,
   addComment,
   deleteDailyReport,
 } = require(
@@ -87,23 +88,42 @@ router.post(
   "/create",
   createDailyReport
 );
+router.post(
+  "/",
+  createDailyReport
+);
 
 // Get all reports
 router.get(
   "/list",
   getAllDailyReports 
 ); 
-
-// Get single report
 router.get(
-  "/:id",
-  getSingleDailyReport
-);
+  "/",
+  getAllDailyReports 
+); 
 
 // Update report status
 router.put(
   "/status/:id",
   updateReportStatus
+);
+
+// Update daily report details
+router.put(
+  "/update/:id",
+  updateDailyReport
+);
+
+router.put(
+  "/:id",
+  updateDailyReport
+);
+
+// Get single report
+router.get(
+  "/:id",
+  getSingleDailyReport
 );
 
 // Add comment
@@ -115,6 +135,11 @@ router.post(
 // Delete report
 router.delete(
   "/delete/:id",
+  deleteDailyReport
+);
+
+router.delete(
+  "/:id",
   deleteDailyReport
 );
 

@@ -1,6 +1,30 @@
 const mongoose = require("mongoose");
 const DailyReport = require("../models/DailyReport");
 const DailyReportComment = require("../models/DailyReportComment");
+require("../models/User");
+try { require("../models/projectModel"); } catch (e) {}
+try { require("../models/taskModel"); } catch (e) {}
+
+const parseHoursWorked = (val) => {
+  if (val === undefined || val === null || val === "") return null;
+  if (typeof val === "number") {
+    return isNaN(val) ? null : Math.round(val * 100) / 100;
+  }
+  if (typeof val === "string") {
+    const trimmed = val.trim().replace(",", ".");
+    if (trimmed.includes(":")) {
+      const parts = trimmed.split(":");
+      const h = parseFloat(parts[0]) || 0;
+      const m = parseFloat(parts[1]) || 0;
+      return parseFloat(h + "." + (m < 10 ? "0" + m : m));
+    }
+    const num = parseFloat(trimmed);
+    return isNaN(num) ? null : Math.round(num * 100) / 100;
+  }
+  return null;
+};
+
+exports.parseHoursWorked = parseHoursWorked;
 
 // ==========================
 // CREATE DAILY REPORT / COMMENT
@@ -94,11 +118,14 @@ exports.createDailyReport =
         });
       }
 
+      const parsedHours = parseHoursWorked(hoursWorked);
+
       if (
         !employeeId ||
         !projectId ||
         !todaysWork ||
-        !hoursWorked
+        parsedHours === null ||
+        isNaN(parsedHours)
       ) {
         return res.status(400).json({
           success: false,
@@ -115,7 +142,7 @@ exports.createDailyReport =
           pendingWork,
           tomorrowPlan,
           issuesFaced,
-          hoursWorked,
+          hoursWorked: parsedHours,
           taskReferences:
             taskReferences || [],
           remarks,
@@ -511,3 +538,85 @@ exports.deleteDailyReport =
       });
     }
   };
+
+// ==========================
+// UPDATE DAILY REPORT
+// ==========================
+exports.updateDailyReport = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!id || !mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid daily report id",
+      });
+    }
+
+    const report = await DailyReport.findById(id);
+
+    if (!report) {
+      return res.status(404).json({
+        success: false,
+        message: "Daily report not found",
+      });
+    }
+
+    const {
+      todaysWork,
+      pendingWork,
+      tomorrowPlan,
+      issuesFaced,
+      hoursWorked,
+      taskReferences,
+      remarks,
+      status,
+      projectId,
+      reportDate,
+    } = req.body;
+
+    if (todaysWork !== undefined) report.todaysWork = todaysWork;
+    if (pendingWork !== undefined) report.pendingWork = pendingWork;
+    if (tomorrowPlan !== undefined) report.tomorrowPlan = tomorrowPlan;
+    if (issuesFaced !== undefined) report.issuesFaced = issuesFaced;
+    if (remarks !== undefined) report.remarks = remarks;
+    if (status !== undefined) report.status = status;
+    if (projectId !== undefined) report.projectId = projectId;
+    if (taskReferences !== undefined) report.taskReferences = taskReferences;
+    if (reportDate !== undefined) report.reportDate = reportDate;
+
+    if (hoursWorked !== undefined && hoursWorked !== null && hoursWorked !== "") {
+      const parsed = parseHoursWorked(hoursWorked);
+      if (parsed === null || isNaN(parsed)) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid hoursWorked value",
+        });
+      }
+      report.hoursWorked = parsed;
+    }
+
+    await report.save();
+
+    const populated = await DailyReport.findById(id)
+      .populate("employeeId")
+      .populate("projectId")
+      .populate({
+        path: "taskReferences",
+        model: "Task",
+        select: "taskTitle status progress projectId",
+      });
+
+    return res.status(200).json({
+      success: true,
+      message: "Daily report updated successfully",
+      data: populated || report,
+      report: populated || report,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
