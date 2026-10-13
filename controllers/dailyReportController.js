@@ -356,9 +356,11 @@ exports.getAllDailyReports = async (req, res) => {
   }
 };
 
+
 exports.getTeamLeadDailyReports = async (req, res) => {
   try {
     const teamLeadId = req.user?._id?.toString();
+
     if (!teamLeadId) {
       return res.status(401).json({
         success: false,
@@ -366,23 +368,101 @@ exports.getTeamLeadDailyReports = async (req, res) => {
       });
     }
 
+    // Get employees assigned to this team lead
     const teamMembers = await getTeamMemberIdsForLead(teamLeadId);
+
+    const memberIds = [
+      ...new Set(
+        (teamMembers?.allIds || []).map((id) => String(id))
+      ),
+    ];
+
+    // Find the team lead's employee document
     const teamLeadEmployee = await Employee.findOne({
-      $or: [{ userID: teamLeadId }, { userId: teamLeadId }],
+      $or: [
+        { userID: teamLeadId },
+        { userId: teamLeadId },
+        ...(mongoose.Types.ObjectId.isValid(teamLeadId)
+          ? [{ _id: teamLeadId }]
+          : []),
+      ],
     })
-      .select("_id")
+      .select("_id userID userId")
       .lean();
-    const teamLeadIdentityIds = new Set([
+
+    // Exclude team lead identities
+    const excludedIds = new Set([
       teamLeadId,
-      ...(teamLeadEmployee ? [teamLeadEmployee._id.toString()] : []),
+      ...(teamLeadEmployee
+        ? [
+            String(teamLeadEmployee._id),
+            ...(teamLeadEmployee.userID
+              ? [String(teamLeadEmployee.userID)]
+              : []),
+            ...(teamLeadEmployee.userId
+              ? [String(teamLeadEmployee.userId)]
+              : []),
+          ]
+        : []),
     ]);
-    const assignedEmployeeIds = teamMembers.allIds
-      .filter((id) => !teamLeadIdentityIds.has(id))
-      .filter((id) => mongoose.Types.ObjectId.isValid(id))
-      .map((id) => new mongoose.Types.ObjectId(id));
+
+    const validMemberIds = memberIds.filter(
+      (id) =>
+        !excludedIds.has(id) &&
+        mongoose.Types.ObjectId.isValid(id)
+    );
+
+    // Resolve member IDs to actual Employee documents
+    const employees = await Employee.find({
+      $or: [
+        {
+          _id: {
+            $in: validMemberIds.map(
+              (id) => new mongoose.Types.ObjectId(id)
+            ),
+          },
+        },
+        { userID: { $in: memberIds.filter(
+          (id) => !excludedIds.has(id)
+        ) } },
+        { userId: { $in: memberIds.filter(
+          (id) => !excludedIds.has(id)
+        ) } },
+      ],
+    })
+      .select("_id userID userId name email")
+      .lean();
+
+    // DailyReport.employeeId should normally reference Employee._id
+    const employeeIds = [
+      ...new Set(
+        employees
+          .filter((emp) => !excludedIds.has(String(emp._id)))
+          .map((emp) => String(emp._id))
+      ),
+    ];
+
+    console.log("Team Lead:", teamLeadId);
+    console.log("Team Member IDs:", memberIds);
+    console.log("Resolved Employees:", employees);
+    console.log("Employee IDs for Reports:", employeeIds);
+
+    if (employeeIds.length === 0) {
+      return res.status(200).json({
+        success: true,
+        count: 0,
+        message:
+          "No matching Employee records found for this team lead.",
+        data: [],
+      });
+    }
 
     const reports = await DailyReport.find({
-      employeeId: { $in: assignedEmployeeIds },
+      employeeId: {
+        $in: employeeIds.map(
+          (id) => new mongoose.Types.ObjectId(id)
+        ),
+      },
     })
       .populate({
         path: "employeeId",
@@ -397,7 +477,8 @@ exports.getTeamLeadDailyReports = async (req, res) => {
         model: "Task",
         select: "taskTitle status progress projectId",
       })
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1 })
+      .lean();
 
     return res.status(200).json({
       success: true,
@@ -405,6 +486,8 @@ exports.getTeamLeadDailyReports = async (req, res) => {
       data: reports,
     });
   } catch (error) {
+    console.error("Team Lead Daily Reports Error:", error);
+
     return res.status(500).json({
       success: false,
       message: error.message,
