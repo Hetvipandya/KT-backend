@@ -926,18 +926,34 @@ exports.updateProject = async (req, res) => {
       priority,
       progress,
       status,
-      teamLeadUser: teamLeadUser || null,
-      teamLeadEmployee: teamLeadEmployee || null,
-      employees: Array.isArray(employees) ? employees : [],
-      interns: Array.isArray(interns) ? interns : [],
     };
+
+    // Only update teamLeadUser if explicitly sent in request body
+    if ("teamLeadUser" in req.body) {
+      updateData.teamLeadUser = teamLeadUser || null;
+    }
+
+    // Only update teamLeadEmployee if explicitly sent in request body
+    if ("teamLeadEmployee" in req.body) {
+      updateData.teamLeadEmployee = teamLeadEmployee || null;
+    }
+
+    // Only update employees if explicitly sent in request body
+    if ("employees" in req.body) {
+      updateData.employees = Array.isArray(employees) ? employees : [];
+    }
+
+    // Only update interns if explicitly sent in request body
+    if ("interns" in req.body) {
+      updateData.interns = Array.isArray(interns) ? interns : [];
+    }
 
     // Files only update if frontend sends them
     if (Array.isArray(files)) {
       updateData.files = files;
     }
 
-    // Remove undefined values
+    // Remove undefined values (for basic fields like projectName, priority etc.)
     Object.keys(updateData).forEach((key) => {
       if (updateData[key] === undefined) {
         delete updateData[key];
