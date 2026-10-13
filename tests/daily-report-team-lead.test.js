@@ -48,18 +48,21 @@ describe("getTeamLeadDailyReports", () => {
       {
         name: "Team Lead",
         email: "lead@example.com",
+        phoneNumber: "9000000001",
         password: "StrongPassword123",
         role: "team lead",
       },
       {
         name: "Assigned Employee",
         email: "assigned@example.com",
+        phoneNumber: "9000000002",
         password: "StrongPassword123",
         role: "employee",
       },
       {
         name: "Unassigned Employee",
         email: "unassigned@example.com",
+        phoneNumber: "9000000003",
         password: "StrongPassword123",
         role: "employee",
       },
@@ -83,6 +86,18 @@ describe("getTeamLeadDailyReports", () => {
         hoursWorked: 7,
       },
       {
+        employeeId: employee._id,
+        projectId,
+        todaysWork: "Assigned employee report using employee ID",
+        hoursWorked: 6,
+      },
+      {
+        employeeId: teamLead._id,
+        projectId,
+        todaysWork: "Team lead's own report",
+        hoursWorked: 8,
+      },
+      {
         employeeId: unassignedEmployee._id,
         projectId,
         todaysWork: "Unassigned employee report",
@@ -100,7 +115,12 @@ describe("getTeamLeadDailyReports", () => {
 
     expect(res.statusCode).toBe(200);
     expect(res.body.success).toBe(true);
-    expect(res.body.count).toBe(1);
-    expect(res.body.data[0].todaysWork).toBe("Assigned employee report");
+    expect(res.body.count).toBe(2);
+    expect(res.body.data.map((report) => report.todaysWork)).toEqual(
+      expect.arrayContaining([
+        "Assigned employee report",
+        "Assigned employee report using employee ID",
+      ])
+    );
   });
 });

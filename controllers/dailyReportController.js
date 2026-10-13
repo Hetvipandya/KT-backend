@@ -1,6 +1,7 @@
 const mongoose = require("mongoose");
 const DailyReport = require("../models/DailyReport");
 const DailyReportComment = require("../models/DailyReportComment");
+const Employee = require("../models/Employee");
 require("../models/User");
 try { require("../models/projectModel"); } catch (e) {} 
 try { require("../models/taskModel"); } catch (e) {}
@@ -366,13 +367,22 @@ exports.getTeamLeadDailyReports = async (req, res) => {
     }
 
     const teamMembers = await getTeamMemberIdsForLead(teamLeadId);
-    const employeeUserIds = teamMembers.userIds
-      .filter((id) => id !== teamLeadId)
+    const teamLeadEmployee = await Employee.findOne({
+      $or: [{ userID: teamLeadId }, { userId: teamLeadId }],
+    })
+      .select("_id")
+      .lean();
+    const teamLeadIdentityIds = new Set([
+      teamLeadId,
+      ...(teamLeadEmployee ? [teamLeadEmployee._id.toString()] : []),
+    ]);
+    const assignedEmployeeIds = teamMembers.allIds
+      .filter((id) => !teamLeadIdentityIds.has(id))
       .filter((id) => mongoose.Types.ObjectId.isValid(id))
       .map((id) => new mongoose.Types.ObjectId(id));
 
     const reports = await DailyReport.find({
-      employeeId: { $in: employeeUserIds },
+      employeeId: { $in: assignedEmployeeIds },
     })
       .populate({
         path: "employeeId",
