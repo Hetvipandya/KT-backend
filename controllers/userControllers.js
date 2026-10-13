@@ -121,13 +121,20 @@ const shouldRequireApproval = (role) => {
 };
  
 const buildResetPasswordUrl = (req, token) => {
-  // Always point to the FRONTEND reset-password page, not the backend API
-  const frontendBase =
-    process.env.FRONTEND_URL ||
-    process.env.CLIENT_URL ||
-    "http://localhost:3000";
+  // The backend serves its own HTML reset-password page at GET /api/users/reset-password
+  // This makes the flow fully self-contained — no frontend URL needed.
+  // Works for web, mobile apps, and any client.
 
-  return `${frontendBase.replace(/\/+$/, "")}/reset-password?token=${encodeURIComponent(token)}`;
+  // Build the backend base URL from the incoming request
+  const host = req.get("host");
+  const protocol = req.headers["x-forwarded-proto"] || req.protocol || "https";
+
+  // Use BACKEND_URL env if set (recommended for production on Render)
+  const backendBase =
+    process.env.BACKEND_URL ||
+    `${protocol}://${host}`;
+
+  return `${backendBase.replace(/\/+$/, "")}/api/users/reset-password?token=${encodeURIComponent(token)}`;
 };
 
 // ============================================================
@@ -2041,79 +2048,233 @@ const logoutUser = async (req, res) => {
 
 const renderResetPasswordPage = (req, res) => {
   const { token, email } = req.query;
+
+  // Validate token presence
+  if (!token) {
+    return res.status(400).send(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Reset Password - Kevalon Technology</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <style>
+          body { font-family: 'Segoe UI', sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; background: #f0f4ff; }
+          .card { background: white; padding: 32px; border-radius: 16px; box-shadow: 0 10px 40px rgba(0,0,0,0.12); max-width: 420px; width: 100%; text-align: center; box-sizing: border-box; }
+          h2 { color: #dc2626; } p { color: #64748b; }
+        </style>
+      </head>
+      <body>
+        <div class="card">
+          <h2>❌ Invalid Link</h2>
+          <p>This reset password link is missing a token. Please request a new password reset from the app.</p>
+        </div>
+      </body>
+      </html>
+    `);
+  }
+
   return res.send(`
     <!DOCTYPE html>
-    <html>
+    <html lang="en">
     <head>
       <title>Reset Password - Kevalon Technology</title>
+      <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
       <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; background-color: #f8fafc; }
-        .card { background: white; padding: 32px; border-radius: 12px; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.1); width: 100%; max-width: 420px; box-sizing: border-box; }
-        h2 { color: #1e3a8a; margin-top: 0; margin-bottom: 8px; text-align: center; }
-        p.sub { color: #64748b; font-size: 14px; text-align: center; margin-bottom: 24px; }
-        .form-group { margin-bottom: 16px; text-align: left; }
-        label { display: block; font-size: 13px; font-weight: 600; color: #334155; margin-bottom: 6px; }
-        input { width: 100%; padding: 10px 14px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 14px; box-sizing: border-box; outline: none; }
-        input:focus { border-color: #2563eb; ring: 2px solid #93c5fd; }
-        button { width: 100%; padding: 12px; background: #2563eb; color: white; border: none; border-radius: 6px; font-weight: 600; font-size: 15px; cursor: pointer; margin-top: 8px; }
-        button:hover { background: #1d4ed8; }
-        .message { margin-top: 16px; font-size: 14px; text-align: center; }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+          font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          min-height: 100vh;
+          background: linear-gradient(135deg, #e0e7ff 0%, #f0f9ff 100%);
+          padding: 16px;
+        }
+        .card {
+          background: white;
+          padding: 36px 32px;
+          border-radius: 16px;
+          box-shadow: 0 20px 60px rgba(0, 0, 0, 0.12);
+          width: 100%;
+          max-width: 440px;
+        }
+        .logo {
+          text-align: center;
+          margin-bottom: 20px;
+          font-size: 22px;
+          font-weight: 700;
+          color: #1e3a8a;
+          letter-spacing: -0.5px;
+        }
+        h2 {
+          color: #1e3a8a;
+          text-align: center;
+          font-size: 22px;
+          font-weight: 700;
+          margin-bottom: 6px;
+        }
+        p.sub {
+          color: #64748b;
+          font-size: 14px;
+          text-align: center;
+          margin-bottom: 28px;
+        }
+        .form-group {
+          margin-bottom: 18px;
+          text-align: left;
+        }
+        label {
+          display: block;
+          font-size: 13px;
+          font-weight: 600;
+          color: #334155;
+          margin-bottom: 6px;
+        }
+        input[type="email"],
+        input[type="password"],
+        input[type="text"] {
+          width: 100%;
+          padding: 11px 14px;
+          border: 1.5px solid #e2e8f0;
+          border-radius: 8px;
+          font-size: 14px;
+          outline: none;
+          transition: border-color 0.2s;
+          color: #1e293b;
+          background: #f8fafc;
+        }
+        input:focus {
+          border-color: #3b82f6;
+          background: white;
+        }
+        button[type="submit"] {
+          width: 100%;
+          padding: 13px;
+          background: linear-gradient(135deg, #3b82f6, #2563eb);
+          color: white;
+          border: none;
+          border-radius: 8px;
+          font-weight: 700;
+          font-size: 15px;
+          cursor: pointer;
+          margin-top: 8px;
+          transition: opacity 0.2s, transform 0.1s;
+        }
+        button[type="submit"]:hover:not(:disabled) { opacity: 0.92; transform: translateY(-1px); }
+        button[type="submit"]:disabled { opacity: 0.65; cursor: not-allowed; }
+        .message {
+          margin-top: 16px;
+          font-size: 14px;
+          text-align: center;
+          padding: 10px;
+          border-radius: 8px;
+          display: none;
+        }
+        .message.error { background: #fef2f2; color: #dc2626; display: block; }
+        .message.success { background: #f0fdf4; color: #16a34a; display: block; }
+        .success-state {
+          text-align: center;
+          padding: 20px 0;
+          display: none;
+        }
+        .success-state .icon { font-size: 52px; margin-bottom: 16px; }
+        .success-state h3 { color: #16a34a; font-size: 20px; margin-bottom: 8px; }
+        .success-state p { color: #64748b; font-size: 14px; }
       </style>
     </head>
     <body>
       <div class="card">
+        <div class="logo">🔐 Kevalon Technology</div>
         <h2>Reset Password</h2>
         <p class="sub">Enter your new password below</p>
+
         <form id="resetForm">
           <input type="hidden" id="token" value="${token || ''}">
+
           <div class="form-group">
             <label>Email Address</label>
-            <input type="email" id="email" value="${email || ''}" placeholder="Enter your email" required />
+            <input type="email" id="email" value="${email ? decodeURIComponent(email) : ''}" placeholder="Enter your email" required />
           </div>
+
           <div class="form-group">
             <label>New Password</label>
             <input type="password" id="newPassword" placeholder="Minimum 6 characters" required minlength="6" />
           </div>
+
           <div class="form-group">
             <label>Confirm New Password</label>
             <input type="password" id="confirmPassword" placeholder="Confirm your password" required minlength="6" />
           </div>
-          <button type="submit">Update Password</button>
+
+          <button type="submit" id="submitBtn">Update Password</button>
           <div id="msg" class="message"></div>
         </form>
+
+        <div class="success-state" id="successState">
+          <div class="icon">✅</div>
+          <h3>Password Reset Successfully!</h3>
+          <p>Your password has been updated. You can now log in to the app with your new password.</p>
+        </div>
       </div>
+
       <script>
-        document.getElementById('resetForm').addEventListener('submit', async (e) => {
+        document.getElementById('resetForm').addEventListener('submit', async function(e) {
           e.preventDefault();
+
           const token = document.getElementById('token').value;
-          const email = document.getElementById('email').value;
+          const email = document.getElementById('email').value.trim();
           const newPassword = document.getElementById('newPassword').value;
           const confirmPassword = document.getElementById('confirmPassword').value;
           const msg = document.getElementById('msg');
+          const btn = document.getElementById('submitBtn');
+
+          // Clear previous message
+          msg.className = 'message';
+          msg.innerText = '';
+
+          // Validate passwords match
           if (newPassword !== confirmPassword) {
-            msg.style.color = '#dc2626';
-            msg.innerText = 'Passwords do not match!';
+            msg.className = 'message error';
+            msg.innerText = '❌ Passwords do not match!';
             return;
           }
+
+          if (newPassword.length < 6) {
+            msg.className = 'message error';
+            msg.innerText = '❌ Password must be at least 6 characters.';
+            return;
+          }
+
+          btn.disabled = true;
+          btn.innerText = 'Updating...';
+
           try {
-            const res = await fetch('/api/users/reset-password', {
+            // Use absolute URL based on current page's backend host
+            const apiBase = window.location.origin;
+            const response = await fetch(apiBase + '/api/users/reset-password', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ email, token, newPassword })
+              body: JSON.stringify({ email, token, newPassword, confirmPassword })
             });
-            const data = await res.json();
+
+            const data = await response.json();
+
             if (data.success) {
-              msg.style.color = '#16a34a';
-              msg.innerText = 'Password reset successfully! You can now login.';
-              document.getElementById('resetForm').reset();
+              // Show success state, hide form
+              document.getElementById('resetForm').style.display = 'none';
+              document.getElementById('successState').style.display = 'block';
             } else {
-              msg.style.color = '#dc2626';
-              msg.innerText = data.message || 'Failed to reset password.';
+              msg.className = 'message error';
+              msg.innerText = '❌ ' + (data.message || 'Failed to reset password. Please try again.');
+              btn.disabled = false;
+              btn.innerText = 'Update Password';
             }
           } catch (err) {
-            msg.style.color = '#dc2626';
-            msg.innerText = 'Network error. Please try again.';
+            msg.className = 'message error';
+            msg.innerText = '❌ Network error. Please check your connection and try again.';
+            btn.disabled = false;
+            btn.innerText = 'Update Password';
           }
         });
       </script>
