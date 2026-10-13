@@ -28,7 +28,7 @@ const authLimiter = (req, res, next) => {
   }
   return activeLimiter(req, res, next);
 };
-
+  
 module.exports = {
   authLimiter
 };

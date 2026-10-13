@@ -142,7 +142,7 @@ const userSchema =
         get: function(v) {
           if (v) return true;
           const doc = this._doc || this;
-          return Boolean(doc.bankDetailGiven || doc.bankDetailsGiven || doc.bankAccountNumber || doc.ifscCode || doc.upiId || doc.bankName);
+          return Boolean(doc.bankDetailGiven ||  doc.bankAccountNumber || doc.ifscCode || doc.upiId || doc.bankName);
         },
         set: (val) => String(val) === "true" || val === true || val === 1 || String(val) === "1",
       },
@@ -272,41 +272,6 @@ const userSchema =
         default: false,
       },
 
-      forgotPasswordOTP: {
-        type: String,
-        default: null,
-      },
-
-      otpExpireTime: {
-        type: Date,
-        default: null,
-      },
-
-      // ================= PASSWORD RESET TOKEN =================
-      passwordResetTokenHash: {
-        type: String,
-        default: null,
-        select: false,
-      },
-
-      resetPasswordToken: {
-        type: String,
-        default: null,
-        select: false,
-      },
-
-      passwordResetExpires: {
-        type: Date,
-        default: null,
-        select: false,
-      },
-
-      resetPasswordExpires: {
-        type: Date,
-        default: null,
-        select: false,
-      },
-
       // ================= DEVICE TRACKING =================
       deviceId: {
         type: String,
@@ -344,7 +309,7 @@ const userSchema =
     {
       timestamps: true,
     }
-  );
+  ); 
 
 // Virtual for upiID / upi / upiId interchangeability
 userSchema.virtual("upiID").get(function () {
@@ -388,7 +353,6 @@ userSchema.virtual("isBankDetailsGiven").get(function () {
   return Boolean(
     this.isBankDetailGiven ||
     this.bankDetailGiven ||
-    this.bankDetailsGiven ||
     this.bankAccountNumber ||
     this.ifscCode ||
     this.upiId ||
@@ -398,7 +362,6 @@ userSchema.virtual("isBankDetailsGiven").get(function () {
   const bVal = String(val) === "true" || val === true || val === 1 || String(val) === "1";
   this.isBankDetailGiven = bVal;
   this.bankDetailGiven = bVal;
-  this.bankDetailsGiven = bVal;
 });
 
 // Virtual for bankDetails object
@@ -406,7 +369,6 @@ userSchema.virtual("bankDetails").get(function () {
   const isBankGiven = Boolean(
     this.isBankDetailGiven ||
     this.bankDetailGiven ||
-    this.bankDetailsGiven ||
     this.bankAccountNumber ||
     this.ifscCode ||
     this.upiId ||
@@ -425,7 +387,6 @@ userSchema.virtual("bankDetails").get(function () {
     accountHolderName: this.accountHolderName || null,
     isBankDetailGiven: isBankGiven,
     bankDetailGiven: isBankGiven,
-    bankDetailsGiven: isBankGiven,
     isBankDetailsGiven: isBankGiven,
   };
 }).set(function (details) {
@@ -445,7 +406,6 @@ userSchema.virtual("bankDetails").get(function () {
       const bBool = String(bGiven) === "true" || bGiven === true || bGiven === 1 || String(bGiven) === "1";
       this.isBankDetailGiven = bBool;
       this.bankDetailGiven = bBool;
-      this.bankDetailsGiven = bBool;
     }
   }
 });
@@ -474,7 +434,6 @@ const transformUserObject = function (doc, ret) {
   const isBankGiven = Boolean(
     ret.isBankDetailGiven ||
     ret.bankDetailGiven ||
-    ret.bankDetailsGiven ||
     ret.isBankDetailsGiven ||
     ret.bankAccountNumber ||
     ret.ifscCode ||
@@ -483,7 +442,6 @@ const transformUserObject = function (doc, ret) {
   );
   ret.isBankDetailGiven = isBankGiven;
   ret.bankDetailGiven = isBankGiven;
-  ret.bankDetailsGiven = isBankGiven;
   ret.isBankDetailsGiven = isBankGiven;
 
   ret.bankDetails = {
@@ -499,7 +457,6 @@ const transformUserObject = function (doc, ret) {
     accountHolderName: ret.accountHolderName || null,
     isBankDetailGiven: isBankGiven,
     bankDetailGiven: isBankGiven,
-    bankDetailsGiven: isBankGiven,
     isBankDetailsGiven: isBankGiven,
   };
 
@@ -559,7 +516,6 @@ userSchema.pre(
       const hasBankData = Boolean(
         this.isBankDetailGiven ||
         this.bankDetailGiven ||
-        this.bankDetailsGiven ||
         this.bankAccountNumber ||
         this.ifscCode ||
         this.upiId ||
@@ -567,7 +523,6 @@ userSchema.pre(
       );
       this.isBankDetailGiven = hasBankData;
       this.bankDetailGiven = hasBankData;
-      this.bankDetailsGiven = hasBankData;
 
       if (this.isModified("password") && this.password) {
         if (!this.password.startsWith("$2a$") && !this.password.startsWith("$2b$")) {
@@ -691,4 +646,4 @@ module.exports =
   mongoose.model(
     "User",
     userSchema
-  );
+  );
