@@ -2,7 +2,7 @@ const mongoose = require("mongoose");
 const DailyReport = require("../models/DailyReport");
 const DailyReportComment = require("../models/DailyReportComment");
 require("../models/User");
-try { require("../models/projectModel"); } catch (e) {}
+try { require("../models/projectModel"); } catch (e) {} 
 try { require("../models/taskModel"); } catch (e) {}
 
 const parseHoursWorked = (val) => {
@@ -355,6 +355,53 @@ exports.getAllDailyReports = async (req, res) => {
   }
 };
 
+exports.getTeamLeadDailyReports = async (req, res) => {
+  try {
+    const teamLeadId = req.user?._id?.toString();
+    if (!teamLeadId) {
+      return res.status(401).json({
+        success: false,
+        message: "Not authenticated",
+      });
+    }
+
+    const teamMembers = await getTeamMemberIdsForLead(teamLeadId);
+    const employeeUserIds = teamMembers.userIds
+      .filter((id) => id !== teamLeadId)
+      .filter((id) => mongoose.Types.ObjectId.isValid(id))
+      .map((id) => new mongoose.Types.ObjectId(id));
+
+    const reports = await DailyReport.find({
+      employeeId: { $in: employeeUserIds },
+    })
+      .populate({
+        path: "employeeId",
+        select: "name role email firstName lastName",
+      })
+      .populate({
+        path: "projectId",
+        select: "projectName",
+      })
+      .populate({
+        path: "taskReferences",
+        model: "Task",
+        select: "taskTitle status progress projectId",
+      })
+      .sort({ createdAt: -1 });
+
+    return res.status(200).json({
+      success: true,
+      count: reports.length,
+      data: reports,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
 // ==========================
 // GET SINGLE DAILY REPORT
 // ==========================
@@ -619,4 +666,4 @@ exports.updateDailyReport = async (req, res) => {
       message: error.message,
     });
   }
-};
+};

@@ -6,7 +6,8 @@ const router =
 
 const {
   createDailyReport,
-  getAllDailyReports, 
+  getAllDailyReports,  
+  getTeamLeadDailyReports,
   getSingleDailyReport, 
   updateReportStatus,  
   updateDailyReport,
@@ -15,6 +16,9 @@ const {
 } = require(
   "../controllers/dailyReportController"
 );
+
+const { protect } = require("../middleware/authMiddleware");
+const { authorizeRoles } = require("../middleware/roleMiddleware");
 
 const jwt = require("jsonwebtoken");
 const User = require("../models/User");
@@ -102,6 +106,13 @@ router.get(
   "/",
   getAllDailyReports 
 ); 
+
+router.get(
+  "/team-lead/reports",
+  protect,
+  authorizeRoles("team lead"),
+  getTeamLeadDailyReports
+);
 
 // Update report status
 router.put(

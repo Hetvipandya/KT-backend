@@ -82,7 +82,7 @@ const maskEmail = (email) => {
   if (!name || !domain) return email;
   const maskedName = name[0] + "***";
   return `${maskedName}@${domain}`;
-};
+}; 
 
 const ensureFinanceUser = async (user, role) => {
   const existingFinanceUser = await FinanceUser.findOne({ userId: user._id });
