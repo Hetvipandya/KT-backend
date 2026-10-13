@@ -5,6 +5,7 @@ const {
   refreshToken,
   logout,
   me,
+  getMyTeamLead,
   forgotPassword,
   resetPassword,
   changePassword,
@@ -51,6 +52,9 @@ router.post('/logout', authenticate, validateRequest(logoutSchema), logout);
 
 // 5. Get current logged-in user profile
 router.get('/me', authenticate, me);
+
+// 5.1 Get the logged-in user's team lead
+router.get('/team-lead', authenticate, getMyTeamLead);
 
 // 6. Request password-reset link
 router.post('/forgot-password', authLimiter, validateRequest(forgotPasswordSchema), forgotPassword);

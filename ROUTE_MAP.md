@@ -14,12 +14,13 @@
 | Method | Endpoint | Source | Description |
 | :--- | :--- | :--- | :--- |
 | `POST` | `/api/auth/register` | FIN | Register company owner |
-| `POST` | `/api/auth/login` | FIN | Login with credentials / 2FA check |
+| `POST` | `/api/auth/login` | FIN | Login with credentials / 2FA check; response includes the user's team lead |
 | `POST` | `/api/auth/refresh` | FIN | Refresh JWT access token |
 | `POST` | `/api/auth/logout` | FIN | Logout and revoke refresh session |
 | `POST` | `/api/auth/forgot-password` | FIN | Request password reset email |
 | `POST` | `/api/auth/reset-password` | FIN | Complete password reset |
 | `GET` | `/api/auth/me` | FIN | Current user profile |
+| `GET` | `/api/auth/team-lead` | FIN | Get the authenticated user's team lead |
 | `POST` | `/api/users/register` | KT | Register KT user / employee |
 | `POST` | `/api/users/login` | KT | Login KT user |
 | `GET` | `/api/users/profile` | KT | Get KT profile |

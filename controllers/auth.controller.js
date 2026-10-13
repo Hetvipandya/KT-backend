@@ -14,6 +14,7 @@ const {
 const { buildResetPasswordEmailContent } = require("../services/email.templates");
 const { sendOtp, verifyOtp } = require("../services/otp.service");
 const { buildUserOnboardingResponse } = require("../utils/onboarding");
+const { getTeamLeadForUser } = require("../utils/teamLeadLookup");
 const auditLogService = require("../services/auditLog.service");
 const env = require("../config/env");
 const crypto = require("crypto");
@@ -56,6 +57,22 @@ const logAuthEvent = (user, actionType, description, req) => {
           `Failed to record audit log for ${actionType}: ${err.message}`,
         );
       });
+  }
+};
+
+/**
+ * GET /api/auth/team-lead
+ */
+const getMyTeamLead = async (req, res, next) => {
+  try {
+    const teamLead = await getTeamLeadForUser(req.user._id);
+
+    return res.status(200).json({
+      success: true,
+      data: { teamLead },
+    });
+  } catch (error) {
+    next(error);
   }
 };
 
@@ -263,6 +280,7 @@ const login = async (req, res, next) => {
       reconcileUserOrphanedReferences,
     } = require("../services/reconcile.service");
     const reconciledUser = await reconcileUserOrphanedReferences(user);
+    const teamLead = await getTeamLeadForUser(reconciledUser._id);
 
     // Establish session (persists refresh token + loginAttempts reset in 1 DB save)
     const tokens = await createSession(
@@ -288,6 +306,7 @@ const login = async (req, res, next) => {
           accessToken: tokens.accessToken,
           refreshToken: tokens.refreshToken,
           ...(await buildUserOnboardingResponse(reconciledUser)),
+          teamLead,
         },
       });
     }
@@ -298,6 +317,7 @@ const login = async (req, res, next) => {
         accessToken: tokens.accessToken,
         refreshToken: tokens.refreshToken,
         ...(await buildUserOnboardingResponse(reconciledUser)),
+        teamLead,
       },
     });
   } catch (error) {
@@ -686,6 +706,7 @@ const verifyOtpController = async (req, res, next) => {
 
     if (purpose === "login") {
       // Complete login, issue tokens
+      const teamLead = await getTeamLeadForUser(user._id);
       const tokens = await createSession(
         user,
         req.ip,
@@ -708,6 +729,7 @@ const verifyOtpController = async (req, res, next) => {
           accessToken: tokens.accessToken,
           refreshToken: tokens.refreshToken,
           ...(await buildUserOnboardingResponse(latestUser)),
+          teamLead,
         },
       });
     } else if (purpose === "2fa_setup") {
@@ -1684,6 +1706,7 @@ module.exports = {
   refreshToken,
   logout,
   me,
+  getMyTeamLead,
   forgotPassword,
   resetPassword,
   changePassword,
