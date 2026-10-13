@@ -359,110 +359,136 @@ exports.getAllDailyReports = async (req, res) => {
 
 exports.getTeamLeadDailyReports = async (req, res) => {
   try {
-    const teamLeadId = req.user?._id?.toString();
+    // 1. Get logged-in Team Lead from token
+    const loggedInUserId = String(
+      req.user?._id || req.user?.id || req.user?.userId || ""
+    );
 
-    if (!teamLeadId) {
+    if (!loggedInUserId) {
       return res.status(401).json({
         success: false,
-        message: "Not authenticated",
+        message: "Team Lead token is missing or invalid",
       });
     }
 
-    // Get employees assigned to this team lead
-    const teamMembers = await getTeamMemberIdsForLead(teamLeadId);
-
-    const memberIds = [
-      ...new Set(
-        (teamMembers?.allIds || []).map((id) => String(id))
-      ),
+    // 2. Find Team Lead's Employee record
+    const leadConditions = [
+      { userID: loggedInUserId },
+      { userId: loggedInUserId },
     ];
 
-    // Find the team lead's employee document
-    const teamLeadEmployee = await Employee.findOne({
-      $or: [
-        { userID: teamLeadId },
-        { userId: teamLeadId },
-        ...(mongoose.Types.ObjectId.isValid(teamLeadId)
-          ? [{ _id: teamLeadId }]
-          : []),
-      ],
+    if (mongoose.Types.ObjectId.isValid(loggedInUserId)) {
+      leadConditions.push({ _id: loggedInUserId });
+    }
+
+    const leadEmployee = await Employee.findOne({
+      $or: leadConditions,
     })
       .select("_id userID userId")
       .lean();
 
-    // Exclude team lead identities
-    const excludedIds = new Set([
-      teamLeadId,
-      ...(teamLeadEmployee
-        ? [
-            String(teamLeadEmployee._id),
-            ...(teamLeadEmployee.userID
-              ? [String(teamLeadEmployee.userID)]
-              : []),
-            ...(teamLeadEmployee.userId
-              ? [String(teamLeadEmployee.userId)]
-              : []),
-          ]
-        : []),
-    ]);
-
-    const validMemberIds = memberIds.filter(
-      (id) =>
-        !excludedIds.has(id) &&
-        mongoose.Types.ObjectId.isValid(id)
+    // 3. Get employees assigned to this Team Lead
+    const teamMembers = await getTeamMemberIdsForLead(
+      loggedInUserId
     );
 
-    // Resolve member IDs to actual Employee documents
-    const employees = await Employee.find({
-      $or: [
-        {
-          _id: {
-            $in: validMemberIds.map(
-              (id) => new mongoose.Types.ObjectId(id)
-            ),
-          },
-        },
-        { userID: { $in: memberIds.filter(
-          (id) => !excludedIds.has(id)
-        ) } },
-        { userId: { $in: memberIds.filter(
-          (id) => !excludedIds.has(id)
-        ) } },
-      ],
-    })
-      .select("_id userID userId name email")
-      .lean();
-
-    // DailyReport.employeeId should normally reference Employee._id
-    const employeeIds = [
+    const rawMemberIds = [
       ...new Set(
-        employees
-          .filter((emp) => !excludedIds.has(String(emp._id)))
-          .map((emp) => String(emp._id))
+        (teamMembers?.allIds || []).map(String)
       ),
     ];
 
-    console.log("Team Lead:", teamLeadId);
-    console.log("Team Member IDs:", memberIds);
-    console.log("Resolved Employees:", employees);
-    console.log("Employee IDs for Reports:", employeeIds);
+    // Exclude Team Lead itself
+    const excludedIds = new Set([loggedInUserId]);
 
-    if (employeeIds.length === 0) {
+    if (leadEmployee) {
+      excludedIds.add(String(leadEmployee._id));
+
+      if (leadEmployee.userID) {
+        excludedIds.add(String(leadEmployee.userID));
+      }
+
+      if (leadEmployee.userId) {
+        excludedIds.add(String(leadEmployee.userId));
+      }
+    }
+
+    const memberIds = rawMemberIds.filter(
+      (id) => id && !excludedIds.has(id)
+    );
+
+    // 4. Resolve both Employee._id and user IDs
+    const validObjectIds = memberIds
+      .filter((id) => mongoose.Types.ObjectId.isValid(id))
+      .map((id) => new mongoose.Types.ObjectId(id));
+
+    const employeeConditions = [];
+
+    if (validObjectIds.length) {
+      employeeConditions.push({
+        _id: { $in: validObjectIds },
+      });
+    }
+
+    if (memberIds.length) {
+      employeeConditions.push(
+        { userID: { $in: memberIds } },
+        { userId: { $in: memberIds } }
+      );
+    }
+
+    const employees = employeeConditions.length
+      ? await Employee.find({
+          $or: employeeConditions,
+        })
+          .select("_id userID userId")
+          .lean()
+      : [];
+
+    // Combine IDs from the assignment helper and resolved records
+    const reportEmployeeIds = new Set();
+
+    for (const employee of employees) {
+      const id = String(employee._id);
+
+      if (!excludedIds.has(id)) {
+        reportEmployeeIds.add(id);
+      }
+    }
+
+    // If assigned IDs are actual Employee ObjectIds, retain them too.
+    for (const id of memberIds) {
+      if (
+        mongoose.Types.ObjectId.isValid(id) &&
+        !excludedIds.has(id)
+      ) {
+        reportEmployeeIds.add(id);
+      }
+    }
+
+    const reportIds = [...reportEmployeeIds].map(
+      (id) => new mongoose.Types.ObjectId(id)
+    );
+
+    console.log("Logged-in TL:", loggedInUserId);
+    console.log("TL Employee:", leadEmployee?._id);
+    console.log("Assigned IDs:", rawMemberIds);
+    console.log("Resolved Employees:", employees.length);
+    console.log("Report Employee IDs:", reportIds.map(String));
+
+    if (!reportIds.length) {
       return res.status(200).json({
         success: true,
         count: 0,
         message:
-          "No matching Employee records found for this team lead.",
+          "No assigned employee IDs resolved. Check the Team Lead assignment mapping.",
         data: [],
       });
     }
 
+    // 5. Fetch daily reports for assigned employees
     const reports = await DailyReport.find({
-      employeeId: {
-        $in: employeeIds.map(
-          (id) => new mongoose.Types.ObjectId(id)
-        ),
-      },
+      employeeId: { $in: reportIds },
     })
       .populate({
         path: "employeeId",
@@ -486,7 +512,7 @@ exports.getTeamLeadDailyReports = async (req, res) => {
       data: reports,
     });
   } catch (error) {
-    console.error("Team Lead Daily Reports Error:", error);
+    console.error("Team Lead Daily Reports:", error);
 
     return res.status(500).json({
       success: false,
