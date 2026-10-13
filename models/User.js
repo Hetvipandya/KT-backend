@@ -305,6 +305,37 @@ const userSchema =
           },
         },
       ],
+
+      // ================= PASSWORD RESET TOKEN =================
+      passwordResetTokenHash: {
+        type: String,
+        default: null,
+        select: false,
+      },
+
+      resetPasswordToken: {
+        type: String,
+        default: null,
+        select: false,
+      },
+
+      passwordResetExpires: {
+        type: Date,
+        default: null,
+        select: false,
+      },
+
+      resetPasswordExpires: {
+        type: Date,
+        default: null,
+        select: false,
+      },
+
+      // ================= LAST LOGIN =================
+      lastLoginAt: {
+        type: Date,
+        default: null,
+      },
     },
     {
       timestamps: true,

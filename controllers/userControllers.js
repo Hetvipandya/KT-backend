@@ -121,19 +121,13 @@ const shouldRequireApproval = (role) => {
 };
  
 const buildResetPasswordUrl = (req, token) => {
-  const host = req.get("host");
-
-  if (host) {
-    const protocol = host.includes("localhost") ? req.protocol : "https";
-    return `${protocol}://${host}/api/users/reset-password?token=${encodeURIComponent(token)}`;
-  }
-
-  const fallbackBase =
-    process.env.CLIENT_URL ||
+  // Always point to the FRONTEND reset-password page, not the backend API
+  const frontendBase =
     process.env.FRONTEND_URL ||
-    "http://localhost:5000";
+    process.env.CLIENT_URL ||
+    "http://localhost:3000";
 
-  return `${fallbackBase.replace(/\/+$/, "")}/api/users/reset-password?token=${encodeURIComponent(token)}`;
+  return `${frontendBase.replace(/\/+$/, "")}/reset-password?token=${encodeURIComponent(token)}`;
 };
 
 // ============================================================
