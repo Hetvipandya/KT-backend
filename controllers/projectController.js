@@ -571,47 +571,32 @@ exports.getAllProjects = async (req, res) => {
         employeeRecords[index] || legacyUsersById.get(String(id)) || null
       );
       
-      // If teamLeadUser is null but we have employees or interns, try to find team lead
+      // If teamLeadUser is null but teamLeadEmployee is set, resolve user from employee
+      if (!projectObj.teamLeadUser && projectObj.teamLeadEmployee) {
+        const empId = projectObj.teamLeadEmployee._id || projectObj.teamLeadEmployee;
+        const employee = await Employee.findById(empId).select("userID firstName lastName");
+        if (employee && employee.userID) {
+          const user = await User.findById(employee.userID).select("name email");
+          if (user) {
+            projectObj.teamLeadUser = user;
+          }
+        }
+      }
+
+      // If no TL stored in DB, try to resolve from employees with isTeamLead flag (legacy fallback only)
       if (!projectObj.teamLeadUser && !projectObj.teamLeadEmployee) {
-        // Try to find team lead from employees with isTeamLead flag
         if (projectObj.employees && projectObj.employees.length > 0) {
           for (const emp of projectObj.employees) {
             if (!emp) continue;
-            const employee = await Employee.findById(emp._id || emp);
+            const employee = await Employee.findById(emp._id || emp).select("userID isTeamLead firstName lastName email");
             if (employee && employee.isTeamLead) {
               projectObj.teamLeadEmployee = employee;
-              // Also get the user associated with this employee
               if (employee.userID) {
                 const user = await User.findById(employee.userID).select("name email");
-                if (user) {
-                  projectObj.teamLeadUser = user;
-                }
+                if (user) projectObj.teamLeadUser = user;
               }
               break;
             }
-          }
-        }
-        
-        // If still no team lead, try to find from interns
-        if (!projectObj.teamLeadUser && !projectObj.teamLeadEmployee) {
-          if (projectObj.interns && projectObj.interns.length > 0) {
-            for (const intern of projectObj.interns) {
-              const user = await User.findById(intern._id || intern);
-              if (user && user.role && user.role.toLowerCase().includes("team lead")) {
-                projectObj.teamLeadUser = user;
-                break;
-              }
-            }
-          }
-        }
-
-        // Fallback: Try to find any user with team lead role in the system
-        if (!projectObj.teamLeadUser && !projectObj.teamLeadEmployee) {
-          const anyLeadUser = await User.findOne({ 
-            role: { $regex: /team\s*lead/i } 
-          }).select("name email");
-          if (anyLeadUser) {
-            projectObj.teamLeadUser = anyLeadUser;
           }
         }
       }
@@ -968,7 +953,7 @@ exports.updateProject = async (req, res) => {
       }
     )
       .populate("teamLeadUser", "name email")
-      .populate("teamLeadEmployee", "name email")
+      .populate("teamLeadEmployee", "firstName lastName email employeeID")
       .populate("employees", "name firstName middleName lastName email employeeID userID")
       .populate("interns", "name email");
 

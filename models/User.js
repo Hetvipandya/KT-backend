@@ -460,6 +460,7 @@ const transformUserObject = function (doc, ret) {
     isBankDetailsGiven: isBankGiven,
   };
 
+  
   const cObj = ret.companyId && typeof ret.companyId === 'object' ? ret.companyId : null;
   const bObj = ret.branchId && typeof ret.branchId === 'object' ? ret.branchId : null;
   const fObj = ret.financialYearId && typeof ret.financialYearId === 'object' ? ret.financialYearId : null;
