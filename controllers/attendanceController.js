@@ -4733,3 +4733,29 @@ exports.clearPendingGeofenceTimer = clearPendingGeofenceTimer;
 exports.clearAllGeofenceTimers = clearAllGeofenceTimers;
 exports.pendingGeofenceCheckouts = pendingGeofenceCheckouts;
 exports.isBreakStartActive = isBreakStartActive;
+
+/**
+ * Returns current office geofence configuration (coordinates, radius, timings)
+ */
+exports.getGeofenceConfig = async (req, res) => {
+  try {
+    return res.status(200).json({
+      success: true,
+      data: {
+        name: OFFICE_LOCATION.name,
+        latitude: OFFICE_LOCATION.latitude,
+        longitude: OFFICE_LOCATION.longitude,
+        radiusMeters: OFFICE_LOCATION.radiusMeters,
+        autoCheckoutDelaySeconds: GEOFENCE_AUTO_CHECKOUT_DELAY_SECONDS,
+        fetchIntervalSeconds: LOCATION_FETCH_INTERVAL_SECONDS,
+      },
+      message: "Office geofence configuration fetched successfully",
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+

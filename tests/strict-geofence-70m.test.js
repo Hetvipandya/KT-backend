@@ -50,7 +50,7 @@ const getCoordsAtDistanceNorth = (meters) => {
 beforeAll(async () => {
   mongoServer = await MongoMemoryServer.create();
   await mongoose.connect(mongoServer.getUri());
-});
+}, 60000);
 
 afterAll(async () => {
   await mongoose.disconnect();
@@ -657,4 +657,20 @@ describe("Strict 20-Meter Office Geofencing Attendance System - 10 Core Scenario
     expect(outside21.isInside).toBe(false);
     expect(outside21.distance).toBe(21);
   });
+
+  /**
+   * Test getGeofenceConfig returns exact office coordinates and 20m radius
+   */
+  test("getGeofenceConfig returns exact coordinates (23.057808, 72.538926) and 20-meter radius", async () => {
+    const req = {};
+    const res = createMockRes();
+    await attendanceController.getGeofenceConfig(req, res);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.data.latitude).toBe(23.057808);
+    expect(res.body.data.longitude).toBe(72.538926);
+    expect(res.body.data.radiusMeters).toBe(20);
+  });
 });
+

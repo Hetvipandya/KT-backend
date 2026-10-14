@@ -20,10 +20,15 @@ const {
   getMonthlyAttendance,
   getAllAbsentAttendance,
   recalculateAllAttendance,
-  checkLocationGeofence
+  checkLocationGeofence,
+  getGeofenceConfig
 } = require("../controllers/attendanceController");
 
 const { protect } = require("../middleware/authMiddleware");
+
+// ================= GEOFENCE CONFIGURATION =================
+router.get("/geofence-config", getGeofenceConfig);
+router.get("/office-location", getGeofenceConfig);
 
 // ================= LOCATION GEOFENCE CHECK & AUTO CHECKOUT =================
 router.post(

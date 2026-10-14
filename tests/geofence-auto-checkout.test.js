@@ -41,7 +41,7 @@ const getToday = () => {
 beforeAll(async () => {
   mongoServer = await MongoMemoryServer.create();
   await mongoose.connect(mongoServer.getUri());
-});
+}, 60000);
 
 afterAll(async () => {
   await mongoose.disconnect();
