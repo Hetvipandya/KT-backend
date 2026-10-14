@@ -502,7 +502,7 @@ const calculateAttendanceStatus = (
     lateCutoff,
     halfDayCutoff,
     absentCutoff,
-  };
+  }; 
 };
 
 // ============================================================
@@ -1697,28 +1697,44 @@ exports.checkIn = async (
 // 1. Attendance's saved settings
 // 2. Request settings
 // 3. Defaults
-//
 // ============================================================
 
 exports.approveAttendance =
   async (req, res) => {
     try {
+      const attendanceIdFromRequest =
+        req.body?.attendanceId ||
+        req.body?.id ||
+        req.params?.attendanceId ||
+        req.params?.id;
+
+      const approverIdFromRequest =
+        req.user?._id ||
+        req.user?.id ||
+        req.body?.approvedBy ||
+        req.body?.approverId ||
+        req.body?.userId;
+
       const {
-        attendanceId,
         approvedBy,
         lateCutoffTime,
         absentCutoffTime,
       } = req.body;
-      const approverId = req.user?._id || approvedBy;
 
-      if (
-        !attendanceId ||
-        !approverId
-      ) {
+      const attendanceId = attendanceIdFromRequest;
+      const approverId = approverIdFromRequest || approvedBy;
+
+      if (!attendanceId) {
         return res.status(400).json({
           success: false,
-          message:
-            "attendanceId is required",
+          message: "attendanceId is required",
+        });
+      }
+
+      if (!approverId) {
+        return res.status(400).json({
+          success: false,
+          message: "approverId is required",
         });
       }
 
@@ -2623,78 +2639,108 @@ exports.getBreakStatus = async (req, res) => {
 exports.rejectAttendance =
   async (req, res) => {
     try {
+      const attendanceIdFromRequest =
+        req.body?.attendanceId ||
+        req.body?.id ||
+        req.params?.attendanceId ||
+        req.params?.id;
+
+      const rejectedByFromRequest =
+        req.user?._id ||
+        req.user?.id ||
+        req.body?.rejectedBy ||
+        req.body?.approvedBy ||
+        req.body?.approverId ||
+        req.body?.userId;
+
       const {
-        attendanceId,
-        reason, 
+        reason,
+        rejectedBy,
       } = req.body;
+
+      const attendanceId = attendanceIdFromRequest;
+      const approverId = rejectedByFromRequest || rejectedBy;
 
       if (!attendanceId) {
         return res.status(400).json({
           success: false,
-          message:
-            "attendanceId is required",
+          message: "attendanceId is required",
         });
       }
 
-      if (
-        !reason ||
-        !reason.trim()
-      ) {
+      if (!approverId) {
         return res.status(400).json({
           success: false,
-          message:
-            "Rejection reason is required",
+          message: "approverId is required",
         });
       }
 
-      const attendance =
-        await Attendance.findById(
-          attendanceId
-        );
+      const approver = await User.findById(approverId);
+      if (!approver) {
+        return res.status(404).json({
+          success: false,
+          message: "Approver not found",
+        });
+      }
+
+      const approverRole = normalizeRoleValue(approver.role);
+      if (!["admin", "hr"].includes(approverRole)) {
+        return res.status(403).json({
+          success: false,
+          message: "Only Admin or HR can reject attendance",
+        });
+      }
+
+      const rejectionText =
+        typeof reason === "string"
+          ? reason.trim()
+          : "";
+
+      if (!rejectionText) {
+        return res.status(400).json({
+          success: false,
+          message: "Rejection reason is required",
+        });
+      }
+
+      const attendance = await Attendance.findById(attendanceId);
 
       if (!attendance) {
         return res.status(404).json({
           success: false,
-          message:
-            "Attendance not found",
+          message: "Attendance not found",
         });
       }
 
-      if (
-        attendance.approvalStatus ===
-        "approved"
-      ) {
+      if (attendance.approvalStatus === "approved") {
         return res.status(400).json({
           success: false,
-          message:
-            "Attendance already approved, cannot reject",
+          message: "Attendance already approved, cannot reject",
         });
       }
 
-      attendance.approvalStatus =
-        "rejected";
+      if (attendance.approvalStatus === "rejected") {
+        return res.status(400).json({
+          success: false,
+          message: "Attendance already rejected",
+        });
+      }
 
-      attendance.rejectionReason =
-        reason.trim();
+      attendance.approvalStatus = "rejected";
+      attendance.rejectionReason = rejectionText;
+      attendance.approvedBy = null;
+      attendance.approvedAt = null;
+      attendance.approvedCheckInTime = null;
 
       await attendance.save();
 
-      return res.json({
+      return res.status(200).json({
         success: true,
-
-        message:
-          "Attendance Rejected",
-
-        data:
-          formatAttendanceDocument(
-            attendance
-          ),
+        message: "Attendance Rejected",
+        data: formatAttendanceDocument(attendance),
       });
     } catch (err) {
-      console.error(
-        "RejectAttendance Error:",
-        err
-      );
+      console.error("RejectAttendance Error:", err);
 
       return res.status(500).json({
         success: false,

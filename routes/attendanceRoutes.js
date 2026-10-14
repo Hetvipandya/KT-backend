@@ -7,7 +7,7 @@ const {
   checkOut,
   startBreak,  
   endBreak, 
-  getBreakStatus,
+  getBreakStatus, 
   getTodayAttendance,
   getAttendanceById,
   getPendingAttendance, 
@@ -207,9 +207,19 @@ router.put(
   protect,
   approveAttendance
 );
+router.post(
+  "/approve",
+  protect,
+  approveAttendance
+);
 
 // ================= REJECT ATTENDANCE =================
 router.put(
+  "/reject",
+  protect,
+  rejectAttendance
+);
+router.post(
   "/reject",
   protect,
   rejectAttendance
