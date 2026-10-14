@@ -1,5 +1,3 @@
-
-
 const mongoose = require("mongoose");
 const Attendance = require("../models/Attendance");
 const User = require("../models/User");
@@ -1710,19 +1708,15 @@ exports.approveAttendance =
 
       const approverIdFromRequest =
         req.user?._id ||
-        req.user?.id ||
-        req.body?.approvedBy ||
-        req.body?.approverId ||
-        req.body?.userId;
+        req.user?.id;
 
       const {
-        approvedBy,
         lateCutoffTime,
         absentCutoffTime,
       } = req.body;
 
       const attendanceId = attendanceIdFromRequest;
-      const approverId = approverIdFromRequest || approvedBy;
+      const approverId = approverIdFromRequest;
 
       if (!attendanceId) {
         return res.status(400).json({ 
@@ -2647,19 +2641,14 @@ exports.rejectAttendance =
 
       const rejectedByFromRequest =
         req.user?._id ||
-        req.user?.id ||
-        req.body?.rejectedBy ||
-        req.body?.approvedBy ||
-        req.body?.approverId ||
-        req.body?.userId;
+        req.user?.id;
 
       const {
         reason,
-        rejectedBy,
       } = req.body;
 
       const attendanceId = attendanceIdFromRequest;
-      const approverId = rejectedByFromRequest || rejectedBy;
+      const approverId = rejectedByFromRequest;
 
       if (!attendanceId) {
         return res.status(400).json({
@@ -4758,4 +4747,3 @@ exports.getGeofenceConfig = async (req, res) => {
     });
   }
 };
-

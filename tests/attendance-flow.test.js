@@ -1,12 +1,16 @@
 const mongoose = require("mongoose");
+const express = require("express");
+const request = require("supertest");
 const { MongoMemoryServer } = require("mongodb-memory-server");
 const Attendance = require("../models/Attendance");
 const User = require("../models/User");
 const Session = require("../models/Session");
 const AdjustmentRequest = require("../models/AdjustmentRequest");
 const attendanceController = require("../controllers/attendanceController");
+const attendanceRoutes = require("../routes/attendanceRoutes");
 const adjustmentRequestController = require("../controllers/adjustmentRequestController");
 const { OFFICE_LOCATION } = require("../utils/geofence");
+const { generateAccessToken } = require("../utils/jwt");
 
 let mongoServer;
 
@@ -126,6 +130,78 @@ describe("Attendance break-time adjustments", () => {
 
     expect(res.statusCode).toBe(400);
     expect(res.body.message).toBe("Both break start and break end are required.");
+  });
+});
+
+describe("Attendance approval authorization", () => {
+  test("accepts login access tokens for admins and rejects body-supplied approver identities", async () => {
+    const admin = await User.create({
+      name: "Attendance Admin",
+      email: "attendance-admin@example.com",
+      phoneNumber: "9000000101",
+      password: "Password123",
+      role: "admin",
+      isApproved: true,
+      isActive: true,
+    });
+    const employee = await User.create({
+      name: "Attendance Employee",
+      email: "attendance-employee@example.com",
+      phoneNumber: "9000000102",
+      password: "Password123",
+      role: "employee",
+      isApproved: true,
+      isActive: true,
+    });
+    const approvalRecord = await Attendance.create({
+      userId: employee._id,
+      userType: "employee",
+      date: "2026-10-14",
+      checkInTime: new Date("2026-10-14T04:30:00.000Z"),
+    });
+    const rejectionRecord = await Attendance.create({
+      userId: employee._id,
+      userType: "employee",
+      date: "2026-10-13",
+      checkInTime: new Date("2026-10-13T04:30:00.000Z"),
+    });
+    const app = express();
+    app.use(express.json());
+    app.use("/api/attendance", attendanceRoutes);
+
+    const employeeToken = generateAccessToken({
+      userId: employee._id.toString(),
+      role: employee.role,
+    });
+    const adminToken = generateAccessToken({
+      userId: admin._id.toString(),
+      role: admin.role,
+    });
+
+    const unauthorizedApproval = await request(app)
+      .post("/api/attendance/approve")
+      .set("Authorization", `Bearer ${employeeToken}`)
+      .send({ attendanceId: approvalRecord._id, approvedBy: admin._id });
+    expect(unauthorizedApproval.status).toBe(403);
+
+    const approval = await request(app)
+      .post("/api/attendance/approve")
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({ attendanceId: approvalRecord._id });
+    expect(approval.status).toBe(200);
+    expect(approval.body.success).toBe(true);
+    const approvedAttendance = await Attendance.findById(approvalRecord._id);
+    expect(approvedAttendance.approvedBy.toString()).toBe(admin._id.toString());
+
+    const rejection = await request(app)
+      .post("/api/attendance/reject")
+      .set("Authorization", `Bearer ${adminToken}`)
+      .send({
+        attendanceId: rejectionRecord._id,
+        reason: "Incorrect check-in details",
+      });
+    expect(rejection.status).toBe(200);
+    expect(rejection.body.data.approvalStatus).toBe("rejected");
   });
 });
 

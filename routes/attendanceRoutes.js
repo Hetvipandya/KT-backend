@@ -24,7 +24,8 @@ const {
   getGeofenceConfig
 } = require("../controllers/attendanceController");
 
-const { protect } = require("../middleware/authMiddleware");
+const protect = require("../middleware/authenticate");
+const { authorizeRoles } = require("../middleware/roleMiddleware");
 
 // ================= GEOFENCE CONFIGURATION =================
 router.get("/geofence-config", getGeofenceConfig);
@@ -210,11 +211,13 @@ router.get(
 router.put(
   "/approve",
   protect,
+  authorizeRoles("admin", "hr"),
   approveAttendance
 );
 router.post(
   "/approve",
   protect,
+  authorizeRoles("admin", "hr"),
   approveAttendance
 );
 
@@ -222,11 +225,13 @@ router.post(
 router.put(
   "/reject",
   protect,
+  authorizeRoles("admin", "hr"),
   rejectAttendance
 );
 router.post(
   "/reject",
   protect,
+  authorizeRoles("admin", "hr"),
   rejectAttendance
 );
 
