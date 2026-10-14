@@ -657,6 +657,137 @@ exports.createOrUpdateTeam = async (req, res) => {
 
 /*
 =========================
+REMOVE / UNASSIGN TEAM LEAD
+=========================
+*/
+
+/**
+ * PUT /api/team-lead/remove-team-lead
+ * Body: { teamLeadId } — User _id or Employee _id of the team lead to remove.
+ *
+ * 1. Reverts User.role → "employee"
+ * 2. Reverts Employee.isTeamLead → false
+ * 3. Clears teamLeadUser / teamLeadEmployee from the Team document they lead.
+ *    (Team document is NOT deleted — the team remains but is now lead-less.)
+ */
+exports.removeTeamLead = async (req, res) => {
+  try {
+    const { teamLeadId } = req.body;
+
+    if (!teamLeadId) {
+      return res.status(400).json({
+        success: false,
+        message: "teamLeadId is required",
+      });
+    }
+
+    // ─── Resolve the User and Employee records ────────────────────────
+    let leadUser = await User.findById(teamLeadId);
+    let leadEmployee = await Employee.findById(teamLeadId);
+
+    // If the ID belongs to a User but no matching Employee was found by that ID,
+    // look up the linked Employee record via userID.
+    if (leadUser && !leadEmployee) {
+      leadEmployee = await Employee.findOne({ userID: leadUser._id });
+    }
+
+    // If the ID belongs to an Employee but no matching User was found by that ID,
+    // look up the linked User record via the Employee's userID field.
+    if (!leadUser && leadEmployee && leadEmployee.userID) {
+      leadUser = await User.findById(leadEmployee.userID);
+    }
+
+    // Also try resolving by Employee.userID if still unresolved.
+    if (!leadUser && !leadEmployee) {
+      const empByUserId = await Employee.findOne({ userID: teamLeadId });
+      if (empByUserId) {
+        leadEmployee = empByUserId;
+        if (empByUserId.userID) {
+          leadUser = await User.findById(empByUserId.userID);
+        }
+      }
+    }
+
+    if (!leadUser && !leadEmployee) {
+      return res.status(404).json({
+        success: false,
+        message: "Team Lead not found. Please provide a valid User or Employee ID.",
+      });
+    }
+
+    // Guard: only allow removing someone who is actually a team lead.
+    const userIsTeamLead = leadUser && isTeamLeadRole(leadUser.role);
+    const empIsTeamLead = leadEmployee && leadEmployee.isTeamLead;
+
+    if (!userIsTeamLead && !empIsTeamLead) {
+      return res.status(400).json({
+        success: false,
+        message: "The specified user is not currently assigned as a Team Lead.",
+      });
+    }
+
+    // ─── 1. Revert User.role → "employee" ────────────────────────────
+    if (leadUser && isTeamLeadRole(leadUser.role)) {
+      leadUser.role = "employee";
+      await leadUser.save();
+      console.log(`✅ Reverted User ${leadUser._id} role to 'employee'`);
+    }
+
+    // ─── 2. Revert Employee.isTeamLead → false ───────────────────────
+    if (leadEmployee && leadEmployee.isTeamLead) {
+      leadEmployee.isTeamLead = false;
+      // Clear Team Lead designation; fall back to generic 'Employee'
+      if (
+        leadEmployee.designation &&
+        leadEmployee.designation.toLowerCase() === "team lead"
+      ) {
+        leadEmployee.designation = "Employee";
+      }
+      await leadEmployee.save();
+      console.log(`✅ Reverted Employee ${leadEmployee._id} isTeamLead to false`);
+    }
+
+    // ─── 3. Clear team lead reference from the Team document ─────────
+    const teamQuery = [];
+    if (leadUser) teamQuery.push({ teamLeadUser: leadUser._id });
+    if (leadEmployee) teamQuery.push({ teamLeadEmployee: leadEmployee._id });
+
+    const teamUpdateResult = await Team.updateMany(
+      { $or: teamQuery },
+      {
+        $set: {
+          teamLeadUser: null,
+          teamLeadEmployee: null,
+          teamLeadId: "",
+        },
+      }
+    );
+    console.log(
+      `✅ Cleared team lead from ${teamUpdateResult.modifiedCount} Team document(s)`
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: "Team Lead removed successfully. Role reverted to employee.",
+      data: {
+        userId: leadUser?._id || null,
+        employeeId: leadEmployee?._id || null,
+        newRole: leadUser?.role || "employee",
+        isTeamLead: leadEmployee?.isTeamLead || false,
+        teamsUpdated: teamUpdateResult.modifiedCount,
+      },
+    });
+  } catch (error) {
+    console.error("❌ Error in removeTeamLead:", error);
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+/*
+=========================
 GET MY TEAM
 =========================
 */

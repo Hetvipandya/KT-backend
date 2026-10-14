@@ -7,6 +7,7 @@ const {
   getMyTeam,
   getReports, 
   createOrUpdateTeam,
+  removeTeamLead,
 } = require("../controllers/teamLeadController");
 
 const {  
@@ -53,6 +54,18 @@ router.get(
     "admin"
   ),
   getReports
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PUT /api/team-lead/remove-team-lead
+// Admin only — unassigns a Team Lead, reverts User.role → "employee",
+// sets Employee.isTeamLead → false, and clears the Team document's lead.
+// ─────────────────────────────────────────────────────────────────────────────
+router.put(
+  "/remove-team-lead",
+  protect,
+  authorizeRoles("admin"),
+  removeTeamLead
 );
 
 module.exports = router;
