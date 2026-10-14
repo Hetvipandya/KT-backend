@@ -1,6 +1,7 @@
 const Company = require('../models/Company');
 const User = require('../models/User');
 const Employee = require('../models/Employee');
+const Department = require('../models/Department');
 const { shapeOnboardingUser, determineNextStep } = require('../utils/onboarding');
 const { seedDefaultCoa } = require('../services/coa.service');
 const { extractPanFromGstin } = require('../utils/gst.utils');
@@ -290,12 +291,17 @@ const getCompanyDetails = async (req, res, next) => {
  */
 const getCompanies = async (req, res, next) => {
   try {
-    const companyIds = [
-      req.user.companyId,
-      ...(req.user.companyAccess || [])
-        .filter((access) => access.isActive)
-        .map((access) => access.companyId)
-    ].filter(Boolean);
+    const companyIds = new Set();
+
+    if (req.user?.companyId) {
+      companyIds.add(req.user.companyId.toString());
+    }
+
+    for (const access of req.user?.companyAccess || []) {
+      if (access?.isActive && access?.companyId) {
+        companyIds.add(access.companyId.toString());
+      }
+    }
 
     const employeeProfiles = await Employee.find({
       $or: [
@@ -305,11 +311,28 @@ const getCompanies = async (req, res, next) => {
       companyId: { $ne: null }
     }).select('companyId').lean();
 
-    companyIds.push(...employeeProfiles.map((employee) => employee.companyId));
+    for (const employee of employeeProfiles) {
+      if (employee?.companyId) {
+        companyIds.add(employee.companyId.toString());
+      }
+    }
+
+    const departmentCompanies = await Department.find({
+      $or: [
+        { departmentHead: req.user._id },
+        { _id: req.user?.departmentId }
+      ]
+    }).select('companyId').lean();
+
+    for (const department of departmentCompanies) {
+      if (department?.companyId) {
+        companyIds.add(department.companyId.toString());
+      }
+    }
 
     const companies = await Company.find({
       $or: [
-        { _id: { $in: [...new Set(companyIds.map((id) => id.toString()))] } },
+        { _id: { $in: [...companyIds] } },
         { createdBy: req.user._id }
       ]
     }).sort({ name: 1 });

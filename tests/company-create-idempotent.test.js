@@ -6,6 +6,7 @@ const { MongoMemoryServer } = require('mongodb-memory-server');
 const Company = require('../models/Company');
 const Employee = require('../models/Employee');
 const User = require('../models/User');
+const Department = require('../models/Department');
 const companyRoutes = require('../routes/company.routes');
 const { createCompany } = require('../controllers/company.controller');
 const { generateAccessToken } = require('../utils/jwt');
@@ -142,5 +143,44 @@ describe('GET /api/company authorization', () => {
       .set('Authorization', `Bearer ${employeeToken}`);
 
     expect(deniedResponse.status).toBe(403);
+  });
+
+  it('allows department HR users to retrieve companies tied to their department', async () => {
+    const hr = await User.create({
+      name: 'Department HR',
+      email: 'department-hr@example.com',
+      phoneNumber: '9000000204',
+      password: 'Password123!',
+      role: 'hr'
+    });
+    const company = await Company.create({
+      name: 'Department Company',
+      gstin: '27ABCDE1234F1Z6',
+      pan: 'ABCDE1234G',
+      createdBy: hr._id
+    });
+    await Department.create({
+      companyId: company._id,
+      departmentName: 'Human Resources',
+      name: 'Human Resources',
+      departmentHead: hr._id,
+      status: true,
+      isActive: true
+    });
+
+    const app = express();
+    app.use('/api/company', companyRoutes);
+
+    const token = generateAccessToken({
+      userId: hr._id.toString(),
+      role: hr.role
+    });
+    const response = await request(app)
+      .get('/api/company')
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(response.status).toBe(200);
+    expect(response.body.success).toBe(true);
+    expect(response.body.data.map(({ _id }) => _id.toString())).toContain(company._id.toString());
   });
 });
