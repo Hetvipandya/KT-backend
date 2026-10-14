@@ -747,23 +747,16 @@ exports.removeTeamLead = async (req, res) => {
       console.log(`✅ Reverted Employee ${leadEmployee._id} isTeamLead to false`);
     }
 
-    // ─── 3. Clear team lead reference from the Team document ─────────
+    // ─── 3. Delete the Team document(s) led by this team lead ────────
+    // We delete the entire Team record rather than leaving it with null
+    // teamLeadUser / teamLeadEmployee, which would create orphan documents.
     const teamQuery = [];
     if (leadUser) teamQuery.push({ teamLeadUser: leadUser._id });
     if (leadEmployee) teamQuery.push({ teamLeadEmployee: leadEmployee._id });
 
-    const teamUpdateResult = await Team.updateMany(
-      { $or: teamQuery },
-      {
-        $set: {
-          teamLeadUser: null,
-          teamLeadEmployee: null,
-          teamLeadId: "",
-        },
-      }
-    );
+    const teamDeleteResult = await Team.deleteMany({ $or: teamQuery });
     console.log(
-      `✅ Cleared team lead from ${teamUpdateResult.modifiedCount} Team document(s)`
+      `✅ Deleted ${teamDeleteResult.deletedCount} Team document(s) for removed team lead`
     );
 
     return res.status(200).json({
@@ -774,7 +767,7 @@ exports.removeTeamLead = async (req, res) => {
         employeeId: leadEmployee?._id || null,
         newRole: leadUser?.role || "employee",
         isTeamLead: leadEmployee?.isTeamLead || false,
-        teamsUpdated: teamUpdateResult.modifiedCount,
+        teamsDeleted: teamDeleteResult.deletedCount,
       },
     });
   } catch (error) {
