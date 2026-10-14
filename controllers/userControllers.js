@@ -359,6 +359,21 @@ const buildUserResponse = (user) => {
   };
 };
 
+const getEmployeeStatus = (isActive) =>
+  isActive === false
+    ? { employeeStatus: "Inactive", status: "INACTIVE" }
+    : { employeeStatus: "Active", status: "ACTIVE" };
+
+const syncEmployeeStatus = async (employee, isActive) => {
+  if (!employee) {
+    return null;
+  }
+
+  Object.assign(employee, getEmployeeStatus(isActive));
+  await employee.save();
+  return employee;
+};
+
 // ============================================================
 // CREATE EMPLOYEE RECORD
 // ============================================================
@@ -422,7 +437,7 @@ const createEmployeeForUser = async (user) => {
 
     joiningDate: new Date(),
 
-    employeeStatus: "Active",
+    ...getEmployeeStatus(user.isActive),
 
     isTeamLead: role === "team lead",
   });
@@ -491,6 +506,10 @@ const syncUserToEmployee = async (user) => {
       : employee.designation);
 
   employee.isTeamLead = normalizeRole(user.role) === "team lead";
+
+  if (user.isActive === false) {
+    Object.assign(employee, getEmployeeStatus(false));
+  }
 
   await employee.save();
   if (userModified) {
@@ -1432,6 +1451,8 @@ const approveEmployee = async (req, res) => {
 
     await user.save();
 
+    await syncEmployeeStatus(employee, user.isActive);
+
     return res.status(200).json({
       success: true,
       message: "Employee approved successfully and login credentials sent via email.",
@@ -1491,6 +1512,11 @@ const rejectEmployee = async (req, res) => {
     user.status = "Inactive";
 
     await user.save();
+
+    const employee = await Employee.findOne({
+      $or: [{ userID: user._id }, { userId: user._id }],
+    });
+    await syncEmployeeStatus(employee, user.isActive);
 
     return res.json({
       success: true,
@@ -2420,6 +2446,8 @@ module.exports = {
   shouldRequireApproval,
   __test__applyPasswordUpdate: applyPasswordUpdate,
   __test__applySuccessfulLoginState: applySuccessfulLoginState,
+  __test__getEmployeeStatus: getEmployeeStatus,
+  __test__syncEmployeeStatus: syncEmployeeStatus,
 
   // HRMS
   updateProfile,
@@ -2442,5 +2470,3 @@ module.exports = {
   refreshUserToken,
   logoutUser,
 };
-
-

@@ -680,7 +680,7 @@ exports.removeTeamLead = async (req, res) => {
         message: "teamLeadId is required",
       });
     }
-
+ 
     // ─── Resolve the User and Employee records ────────────────────────
     let leadUser = await User.findById(teamLeadId);
     let leadEmployee = await Employee.findById(teamLeadId);

@@ -4522,7 +4522,7 @@ exports.checkLocationGeofence = async (req, res) => {
     console.log(
       `[Geofence Debug] User: ${userId} | Status: ${attendance.status} | IsOnBreak: ${isOnBreak}`
     );
-
+ 
     // ========================================================
     // IF INSIDE GEOFENCE (<= 70 meters):
     // ========================================================
