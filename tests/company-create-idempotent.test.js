@@ -1,9 +1,13 @@
 const mongoose = require('mongoose');
+const express = require('express');
+const request = require('supertest');
 const { MongoMemoryServer } = require('mongodb-memory-server');
 
 const Company = require('../models/Company');
 const User = require('../models/User');
+const companyRoutes = require('../routes/company.routes');
 const { createCompany } = require('../controllers/company.controller');
+const { generateAccessToken } = require('../utils/jwt');
 
 let mongoServer;
 
@@ -72,5 +76,68 @@ describe('company creation idempotency', () => {
         })
       })
     );
+  });
+});
+
+describe('GET /api/company authorization', () => {
+  it('allows admin and HR tokens to retrieve their available companies', async () => {
+    const admin = await User.create({
+      name: 'Company Admin',
+      email: 'company-admin@example.com',
+      phoneNumber: '9000000201',
+      password: 'Password123!',
+      role: 'admin'
+    });
+    const hr = await User.create({
+      name: 'Company HR',
+      email: 'company-hr@example.com',
+      phoneNumber: '9000000202',
+      password: 'Password123!',
+      role: 'hr'
+    });
+    const employee = await User.create({
+      name: 'Company Employee',
+      email: 'company-employee@example.com',
+      phoneNumber: '9000000203',
+      password: 'Password123!',
+      role: 'employee'
+    });
+    const company = await Company.create({
+      name: 'Accessible Company',
+      gstin: '27ABCDE1234F1Z5',
+      pan: 'ABCDE1234F',
+      createdBy: admin._id
+    });
+    await Promise.all([
+      User.updateOne({ _id: hr._id }, { companyId: company._id }),
+      User.updateOne({ _id: employee._id }, { companyId: company._id })
+    ]);
+
+    const app = express();
+    app.use('/api/company', companyRoutes);
+
+    for (const user of [admin, hr]) {
+      const token = generateAccessToken({
+        userId: user._id.toString(),
+        role: user.role
+      });
+      const response = await request(app)
+        .get('/api/company')
+        .set('Authorization', `Bearer ${token}`);
+
+      expect(response.status).toBe(200);
+      expect(response.body.success).toBe(true);
+      expect(response.body.data.map(({ _id }) => _id)).toContain(company._id.toString());
+    }
+
+    const employeeToken = generateAccessToken({
+      userId: employee._id.toString(),
+      role: employee.role
+    });
+    const deniedResponse = await request(app)
+      .get('/api/company')
+      .set('Authorization', `Bearer ${employeeToken}`);
+
+    expect(deniedResponse.status).toBe(403);
   });
 });

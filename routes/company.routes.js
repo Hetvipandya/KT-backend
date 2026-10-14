@@ -5,8 +5,9 @@ const checkCompanyAccess = require('../middleware/companyAccess');
 const validateRequest = require('../middleware/validateRequest');
 const { createCompanySchema, updateCompanySchema } = require('../validators/company.validators');
 const multer = require('multer');
+const { authorizeRoles } = require('../middleware/roleMiddleware');
 
-const router = express.Router();
+const router = express.Router(); 
   
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -86,7 +87,7 @@ router.post('/', validateRequest(createCompanySchema), createCompany);
  *       200:
  *         description: Companies retrieved successfully
  */
-router.get('/', getCompanies);
+router.get('/', authorizeRoles('admin', 'hr'), getCompanies);
 
 /**
  * @openapi
