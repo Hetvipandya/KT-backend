@@ -4,6 +4,7 @@ const request = require('supertest');
 const { MongoMemoryServer } = require('mongodb-memory-server');
 
 const Company = require('../models/Company');
+const Employee = require('../models/Employee');
 const User = require('../models/User');
 const companyRoutes = require('../routes/company.routes');
 const { createCompany } = require('../controllers/company.controller');
@@ -108,10 +109,12 @@ describe('GET /api/company authorization', () => {
       pan: 'ABCDE1234F',
       createdBy: admin._id
     });
-    await Promise.all([
-      User.updateOne({ _id: hr._id }, { companyId: company._id }),
-      User.updateOne({ _id: employee._id }, { companyId: company._id })
-    ]);
+    await Employee.create({
+      companyId: company._id,
+      userID: hr._id,
+      email: hr.email,
+      name: hr.name
+    });
 
     const app = express();
     app.use('/api/company', companyRoutes);

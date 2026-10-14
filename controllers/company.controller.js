@@ -1,5 +1,6 @@
 const Company = require('../models/Company');
 const User = require('../models/User');
+const Employee = require('../models/Employee');
 const { shapeOnboardingUser, determineNextStep } = require('../utils/onboarding');
 const { seedDefaultCoa } = require('../services/coa.service');
 const { extractPanFromGstin } = require('../utils/gst.utils');
@@ -296,9 +297,19 @@ const getCompanies = async (req, res, next) => {
         .map((access) => access.companyId)
     ].filter(Boolean);
 
+    const employeeProfiles = await Employee.find({
+      $or: [
+        { userID: req.user._id },
+        { userId: req.user._id }
+      ],
+      companyId: { $ne: null }
+    }).select('companyId').lean();
+
+    companyIds.push(...employeeProfiles.map((employee) => employee.companyId));
+
     const companies = await Company.find({
       $or: [
-        { _id: { $in: companyIds } },
+        { _id: { $in: [...new Set(companyIds.map((id) => id.toString()))] } },
         { createdBy: req.user._id }
       ]
     }).sort({ name: 1 });
