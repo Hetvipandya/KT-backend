@@ -179,12 +179,12 @@ exports.updateSessionStatus = async (req, res) => {
             isOnBreak: true,
             status: "break-start",
             autoCheckedOut: false,
-            message: `Device is outside 70m office radius (${geofenceResult.distance}m away), but status is break-start. Auto-checkout skipped.`,
+            message: `Device is outside 20m office radius (${geofenceResult.distance}m away), but status is break-start. Auto-checkout skipped.`,
             session,
           });
         }
 
-        // Active working session outside 70m -> auto checkout after 10s
+        // Active working session outside 20m -> auto checkout after 10s
         if (attendance && attendance.checkInTime && !attendance.checkOutTime) {
           const delaySeconds =
             req.body.delaySeconds !== undefined
@@ -248,7 +248,7 @@ exports.updateSessionStatus = async (req, res) => {
               allowedRadius: OFFICE_LOCATION.radiusMeters,
               isOnBreak: false,
               elapsedSeconds: Math.max(elapsedSeconds, delaySeconds),
-              message: `Auto-checkout triggered: Device is outside 70m office radius (${geofenceResult.distance}m away) for ${delaySeconds} seconds.`,
+              message: `Auto-checkout triggered: Device is outside 20m office radius (${geofenceResult.distance}m away) for ${delaySeconds} seconds.`,
               session,
             });
           } else {
@@ -263,7 +263,7 @@ exports.updateSessionStatus = async (req, res) => {
               distance: geofenceResult.distance,
               allowedRadius: OFFICE_LOCATION.radiusMeters,
               isOnBreak: false,
-              message: `Device is outside 70m office radius (${geofenceResult.distance}m away). Automatic check-out will occur in ${remainingSeconds} second(s).`,
+              message: `Device is outside 20m office radius (${geofenceResult.distance}m away). Automatic check-out will occur in ${remainingSeconds} second(s).`,
               session,
             });
           }

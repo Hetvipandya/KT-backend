@@ -70,12 +70,12 @@ afterEach(async () => {
   attendanceController.clearAllGeofenceTimers?.();
 });
 
-describe("Strict 70-Meter Office Geofencing Attendance System - 10 Core Scenarios", () => {
+describe("Strict 20-Meter Office Geofencing Attendance System - 10 Core Scenarios", () => {
   /**
-   * Scenario 1: Check-in inside 70m
-   * Distance = 50m -> Check-in ALLOWED
+   * Scenario 1: Check-in inside 20m
+   * Distance = 15m -> Check-in ALLOWED
    */
-  test("Test 1 — Check-in inside 70m: Distance = 50m -> Check-in ALLOWED", async () => {
+  test("Test 1 — Check-in inside 20m: Distance = 15m -> Check-in ALLOWED", async () => {
     const user = await User.create({
       name: "Test User 1",
       email: "user1@example.com",
@@ -84,22 +84,22 @@ describe("Strict 70-Meter Office Geofencing Attendance System - 10 Core Scenario
       isApproved: true,
     });
 
-    const coords50m = getCoordsAtDistanceNorth(50);
+    const coords15m = getCoordsAtDistanceNorth(15);
     const measuredDist = Math.round(
       calculateDistanceMeters(
-        coords50m.latitude,
-        coords50m.longitude,
+        coords15m.latitude,
+        coords15m.longitude,
         OFFICE_LOCATION.latitude,
         OFFICE_LOCATION.longitude
       )
     );
-    expect(measuredDist).toBeLessThanOrEqual(70);
+    expect(measuredDist).toBeLessThanOrEqual(20);
 
     const req = {
       user: { _id: user._id },
       body: {
         userId: user._id.toString(),
-        ...coords50m,
+        ...coords15m,
       },
     };
     const res = createMockRes();
@@ -113,14 +113,14 @@ describe("Strict 70-Meter Office Geofencing Attendance System - 10 Core Scenario
     expect(att).not.toBeNull();
     expect(att.checkInTime).not.toBeNull();
     expect(att.checkOutTime).toBeFalsy();
-    expect(att.checkInLocation.distanceFromOffice).toBeLessThanOrEqual(70);
+    expect(att.checkInLocation.distanceFromOffice).toBeLessThanOrEqual(20);
   });
 
   /**
-   * Scenario 2: Check-in outside 70m
+   * Scenario 2: Check-in outside 20m
    * Distance = 100m -> Check-in REJECTED
    */
-  test("Test 2 — Check-in outside 70m: Distance = 100m -> Check-in REJECTED", async () => {
+  test("Test 2 — Check-in outside 20m: Distance = 100m -> Check-in REJECTED", async () => {
     const user = await User.create({
       name: "Test User 2",
       email: "user2@example.com",
@@ -138,7 +138,7 @@ describe("Strict 70-Meter Office Geofencing Attendance System - 10 Core Scenario
         OFFICE_LOCATION.longitude
       )
     );
-    expect(measuredDist).toBeGreaterThan(70);
+    expect(measuredDist).toBeGreaterThan(20);
 
     const req = {
       user: { _id: user._id },
@@ -154,7 +154,7 @@ describe("Strict 70-Meter Office Geofencing Attendance System - 10 Core Scenario
     expect(res.statusCode).toBe(400);
     expect(res.body.success).toBe(false);
     expect(res.body.message).toContain("outside the office location");
-    expect(res.body.distance).toBeGreaterThan(70);
+    expect(res.body.distance).toBeGreaterThan(20);
 
     // Verify no check-in record was created in database
     const att = await Attendance.findOne({ userId: user._id, date: getToday() });
@@ -189,7 +189,7 @@ describe("Strict 70-Meter Office Geofencing Attendance System - 10 Core Scenario
     // Ensure approved for working
     await Attendance.updateOne({ userId: user._id, date: getToday() }, { approvalStatus: "approved" });
 
-    // 2. User is working, then distance becomes 80m (> 70m)
+    // 2. User is working, then distance becomes 80m (> 20m)
     const coords80m = getCoordsAtDistanceNorth(80);
     const pingReq = {
       user: { _id: user._id },
@@ -222,9 +222,9 @@ describe("Strict 70-Meter Office Geofencing Attendance System - 10 Core Scenario
 
   /**
    * Scenario 4: Working user stays inside
-   * Check-in -> Distance remains <= 70m -> Continue working
+   * Check-in -> Distance remains <= 20m -> Continue working
    */
-  test("Test 4 — Working user stays inside: Check-in -> Distance <= 70m -> Continue working", async () => {
+  test("Test 4 — Working user stays inside: Check-in -> Distance <= 20m -> Continue working", async () => {
     const user = await User.create({
       name: "Test User 4",
       email: "user4@example.com",
@@ -247,13 +247,13 @@ describe("Strict 70-Meter Office Geofencing Attendance System - 10 Core Scenario
 
     await Attendance.updateOne({ userId: user._id, date: getToday() }, { approvalStatus: "approved" });
 
-    // Location update at 50m (<= 70m)
-    const coords50m = getCoordsAtDistanceNorth(50);
+    // Location update at 15m (<= 20m)
+    const coords15m = getCoordsAtDistanceNorth(15);
     const pingReq = {
       user: { _id: user._id },
       body: {
         userId: user._id.toString(),
-        ...coords50m,
+        ...coords15m,
       },
     };
     const pingRes = createMockRes();
@@ -275,9 +275,9 @@ describe("Strict 70-Meter Office Geofencing Attendance System - 10 Core Scenario
 
   /**
    * Scenario 5: Break inside office
-   * Check-in -> Break-in inside 70m -> Break ACTIVE
+   * Check-in -> Break-in inside 20m -> Break ACTIVE
    */
-  test("Test 5 — Break inside office: Check-in -> Break-in inside 70m -> Break ACTIVE", async () => {
+  test("Test 5 — Break inside office: Check-in -> Break-in inside 20m -> Break ACTIVE", async () => {
     const user = await User.create({
       name: "Test User 5",
       email: "user5@example.com",
@@ -298,13 +298,13 @@ describe("Strict 70-Meter Office Geofencing Attendance System - 10 Core Scenario
     );
     await Attendance.updateOne({ userId: user._id, date: getToday() }, { approvalStatus: "approved" });
 
-    // Break-in inside 70m (30m from office)
-    const coords30m = getCoordsAtDistanceNorth(30);
+    // Break-in inside 20m (15m from office)
+    const coords15m = getCoordsAtDistanceNorth(15);
     const breakInReq = {
       user: { _id: user._id },
       body: {
         userId: user._id.toString(),
-        ...coords30m,
+        ...coords15m,
       },
     };
     const breakInRes = createMockRes();
@@ -351,7 +351,7 @@ describe("Strict 70-Meter Office Geofencing Attendance System - 10 Core Scenario
       createMockRes()
     );
 
-    // User leaves office: distance = 100m (> 70m) while ON BREAK
+    // User leaves office: distance = 100m (> 20m) while ON BREAK
     const coords100m = getCoordsAtDistanceNorth(100);
     const pingReq = {
       user: { _id: user._id },
@@ -409,7 +409,7 @@ describe("Strict 70-Meter Office Geofencing Attendance System - 10 Core Scenario
       createMockRes()
     );
 
-    // User attempts Break-out while outside 70m (distance = 100m)
+    // User attempts Break-out while outside 20m (distance = 100m)
     const coords100m = getCoordsAtDistanceNorth(100);
     const breakOutReq = {
       user: { _id: user._id },
@@ -434,9 +434,9 @@ describe("Strict 70-Meter Office Geofencing Attendance System - 10 Core Scenario
 
   /**
    * Scenario 8: Return to office
-   * Break ACTIVE -> Distance becomes 50m -> Break-out ALLOWED -> Working
+   * Break ACTIVE -> Distance becomes 15m -> Break-out ALLOWED -> Working
    */
-  test("Test 8 — Return to office: Break ACTIVE -> Distance = 50m -> Break-out ALLOWED -> Working", async () => {
+  test("Test 8 — Return to office: Break ACTIVE -> Distance = 15m -> Break-out ALLOWED -> Working", async () => {
     const user = await User.create({
       name: "Test User 8",
       email: "user8@example.com",
@@ -461,13 +461,13 @@ describe("Strict 70-Meter Office Geofencing Attendance System - 10 Core Scenario
       createMockRes()
     );
 
-    // User returns inside 70m (distance = 50m) and calls Break-out
-    const coords50m = getCoordsAtDistanceNorth(50);
+    // User returns inside 20m (distance = 15m) and calls Break-out
+    const coords15m = getCoordsAtDistanceNorth(15);
     const breakOutReq = {
       user: { _id: user._id },
       body: {
         userId: user._id.toString(),
-        ...coords50m,
+        ...coords15m,
       },
     };
     const breakOutRes = createMockRes();
@@ -545,10 +545,10 @@ describe("Strict 70-Meter Office Geofencing Attendance System - 10 Core Scenario
   });
 
   /**
-   * Scenario 10: Direct API manipulation from outside 70m
-   * Check-in, Break-in, Break-out, Check-out called from outside 70m are all REJECTED
+   * Scenario 10: Direct API manipulation from outside 20m
+   * Check-in, Break-in, Break-out, Check-out called from outside 20m are all REJECTED
    */
-  test("Test 10 — Direct API manipulation: Check-in, Break-in, Break-out, Check-out from outside 70m are all REJECTED", async () => {
+  test("Test 10 — Direct API manipulation: Check-in, Break-in, Break-out, Check-out from outside 20m are all REJECTED", async () => {
     const user = await User.create({
       name: "Test User 10",
       email: "user10@example.com",
@@ -559,7 +559,7 @@ describe("Strict 70-Meter Office Geofencing Attendance System - 10 Core Scenario
 
     const outsideCoords = getCoordsAtDistanceNorth(120); // 120m away
 
-    // 1. Direct Check-in outside 70m -> REJECTED
+    // 1. Direct Check-in outside 20m -> REJECTED
     const checkInRes = createMockRes();
     await attendanceController.checkIn(
       { user: { _id: user._id }, body: { userId: user._id.toString(), ...outsideCoords } },
@@ -568,7 +568,7 @@ describe("Strict 70-Meter Office Geofencing Attendance System - 10 Core Scenario
     expect(checkInRes.statusCode).toBe(400);
     expect(checkInRes.body.success).toBe(false);
 
-    // Now legitimately check in inside 70m to test subsequent actions
+    // Now legitimately check in inside 20m to test subsequent actions
     const insideCoords = {
       latitude: OFFICE_LOCATION.latitude,
       longitude: OFFICE_LOCATION.longitude,
@@ -579,7 +579,7 @@ describe("Strict 70-Meter Office Geofencing Attendance System - 10 Core Scenario
     );
     await Attendance.updateOne({ userId: user._id, date: getToday() }, { approvalStatus: "approved" });
 
-    // 2. Direct Break-in outside 70m -> REJECTED
+    // 2. Direct Break-in outside 20m -> REJECTED
     const breakInRes = createMockRes();
     await attendanceController.startBreak(
       { user: { _id: user._id }, body: { userId: user._id.toString(), ...outsideCoords } },
@@ -588,13 +588,13 @@ describe("Strict 70-Meter Office Geofencing Attendance System - 10 Core Scenario
     expect(breakInRes.statusCode).toBe(400);
     expect(breakInRes.body.success).toBe(false);
 
-    // Legitimately break in inside 70m
+    // Legitimately break in inside 20m
     await attendanceController.startBreak(
       { user: { _id: user._id }, body: { userId: user._id.toString(), ...insideCoords } },
       createMockRes()
     );
 
-    // 3. Direct Break-out outside 70m -> Auto-checkout triggered
+    // 3. Direct Break-out outside 20m -> Auto-checkout triggered
     const breakOutRes = createMockRes();
     await attendanceController.endBreak(
       { user: { _id: user._id }, body: { userId: user._id.toString(), ...outsideCoords } },
@@ -617,7 +617,7 @@ describe("Strict 70-Meter Office Geofencing Attendance System - 10 Core Scenario
   /**
    * Additional check: Frontend spoofing attempts (e.g. passing isInsideOffice: true)
    */
-  test("Frontend spoofing attempt (isInsideOffice: true with coordinates outside 70m) is rejected", async () => {
+  test("Frontend spoofing attempt (isInsideOffice: true with coordinates outside 20m) is rejected", async () => {
     const user = await User.create({
       name: "Spoofer",
       email: "spoofer@example.com",
@@ -646,15 +646,15 @@ describe("Strict 70-Meter Office Geofencing Attendance System - 10 Core Scenario
   });
 
   /**
-   * Additional check: Exactly 70 meters is considered inside
+   * Additional check: Exactly 20 meters is considered inside
    */
-  test("Exactly 70 meters is considered inside", () => {
-    const exact70 = validateAttendanceGeofence({ distance: 70 });
-    expect(exact70.isInside).toBe(true);
-    expect(exact70.distance).toBe(70);
+  test("Exactly 20 meters is considered inside", () => {
+    const exact20 = validateAttendanceGeofence({ distance: 20 });
+    expect(exact20.isInside).toBe(true);
+    expect(exact20.distance).toBe(20);
 
-    const outside71 = validateAttendanceGeofence({ distance: 71 });
-    expect(outside71.isInside).toBe(false);
-    expect(outside71.distance).toBe(71);
+    const outside21 = validateAttendanceGeofence({ distance: 21 });
+    expect(outside21.isInside).toBe(false);
+    expect(outside21.distance).toBe(21);
   });
 });

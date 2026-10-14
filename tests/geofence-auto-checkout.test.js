@@ -61,32 +61,32 @@ afterEach(async () => {
   attendanceController.clearAllGeofenceTimers?.();
 });
 
-describe("Geofence 70m Auto Check-Out & Break-Start Skip", () => {
-  test("1. Office location radius is set to 70 meters by default", () => {
-    expect(OFFICE_LOCATION.radiusMeters).toBe(70);
+describe("Geofence 20m Auto Check-Out & Break-Start Skip", () => {
+  test("1. Office location radius is set to 20 meters by default", () => {
+    expect(OFFICE_LOCATION.radiusMeters).toBe(20);
   });
 
-  test("2. validateAttendanceGeofence accurately validates within and outside 70m", () => {
+  test("2. validateAttendanceGeofence accurately validates within and outside 20m", () => {
     // Exact office location: 0 meters away
     const insideOffice = validateAttendanceGeofence({
       latitude: OFFICE_LOCATION.latitude,
       longitude: OFFICE_LOCATION.longitude,
     });
     expect(insideOffice.isInside).toBe(true);
-    expect(insideOffice.distance).toBeLessThanOrEqual(70);
+    expect(insideOffice.distance).toBeLessThanOrEqual(20);
 
-    // Far away point (> 70 meters away)
+    // Far away point (> 20 meters away)
     const outsideOffice = validateAttendanceGeofence({
       latitude: 23.060000,
       longitude: 72.540000,
     });
     expect(outsideOffice.isInside).toBe(false);
-    expect(outsideOffice.distance).toBeGreaterThan(70);
+    expect(outsideOffice.distance).toBeGreaterThan(20);
 
     // Direct distance support
-    const directInside = validateAttendanceGeofence({ distance: 50 });
+    const directInside = validateAttendanceGeofence({ distance: 15 });
     expect(directInside.isInside).toBe(true);
-    expect(directInside.distance).toBe(50);
+    expect(directInside.distance).toBe(15);
 
     const directOutside = validateAttendanceGeofence({ distance: 95 });
     expect(directOutside.isInside).toBe(false);
@@ -125,7 +125,7 @@ describe("Geofence 70m Auto Check-Out & Break-Start Skip", () => {
     expect(isBreakStartActive(null, { status: "break-start" }, {})).toBe(true);
   });
 
-  test("4. Inside 70m: no auto check-out when device is inside office radius", async () => {
+  test("4. Inside 20m: no auto check-out when device is inside office radius", async () => {
     const user = await User.create({
       name: "Rohan Patel",
       email: "rohan@example.com",
@@ -164,7 +164,7 @@ describe("Geofence 70m Auto Check-Out & Break-Start Skip", () => {
     expect(updatedAtt.checkOutTime).toBeFalsy();
   });
 
-  test("5. Outside 70m: initiates 10-second auto-checkout countdown when user is checked in and NOT on break", async () => {
+  test("5. Outside 20m: initiates 10-second auto-checkout countdown when user is checked in and NOT on break", async () => {
     const user = await User.create({
       name: "Pooja Shah",
       email: "pooja@example.com",
@@ -193,7 +193,7 @@ describe("Geofence 70m Auto Check-Out & Break-Start Skip", () => {
       user: { _id: user._id },
       body: {
         userId: user._id.toString(),
-        distance: 120, // 120 meters away (> 70m)
+        distance: 120, // 120 meters away (> 20m)
       },
     };
 
@@ -215,7 +215,7 @@ describe("Geofence 70m Auto Check-Out & Break-Start Skip", () => {
     expect(unchangedAtt.outsideGeofenceAt).not.toBeNull();
   });
 
-  test("5b. Outside 70m: auto check-out TRIGGERS after 10 seconds outside 70m radius", async () => {
+  test("5b. Outside 20m: auto check-out TRIGGERS after 10 seconds outside 20m radius", async () => {
     const user = await User.create({
       name: "Pooja Shah 2",
       email: "pooja2@example.com",
@@ -268,7 +268,7 @@ describe("Geofence 70m Auto Check-Out & Break-Start Skip", () => {
     expect(updatedSession.status).toBe("auto_checkout");
   });
 
-  test("5c. Outside 70m: auto check-out CANCELS if user returns inside 70m within 10 seconds", async () => {
+  test("5c. Outside 20m: auto check-out CANCELS if user returns inside 20m within 10 seconds", async () => {
     const user = await User.create({
       name: "Pooja Return",
       email: "pooja.return@example.com",
@@ -286,26 +286,26 @@ describe("Geofence 70m Auto Check-Out & Break-Start Skip", () => {
       approvalStatus: "approved",
     });
 
-    // 1. Goes outside 70m -> starts 10-second timer
+    // 1. Goes outside 20m -> starts 10-second timer
     const res1 = createMockRes();
     const req1 = {
       user: { _id: user._id },
       body: {
         userId: user._id.toString(),
-        distance: 120, // > 70m
+        distance: 120, // > 20m
       },
     };
     await attendanceController.checkLocationGeofence(req1, res1);
     expect(res1.body.autoCheckoutPending).toBe(true);
     expect(res1.body.autoCheckedOut).toBe(false);
 
-    // 2. Returns inside 70m within 10 seconds
+    // 2. Returns inside 20m within 10 seconds
     const res2 = createMockRes();
     const req2 = {
       user: { _id: user._id },
       body: {
         userId: user._id.toString(),
-        distance: 35, // <= 70m (inside)
+        distance: 15, // <= 20m (inside)
       },
     };
     await attendanceController.checkLocationGeofence(req2, res2);
@@ -319,7 +319,7 @@ describe("Geofence 70m Auto Check-Out & Break-Start Skip", () => {
     expect(updatedAtt.autoCheckedOut).toBe(false);
   });
 
-  test("5d. Outside 70m: background timer automatically checks out user in database after 10 seconds", async () => {
+  test("5d. Outside 20m: background timer automatically checks out user in database after 10 seconds", async () => {
     const user = await User.create({
       name: "Pooja Timer",
       email: "pooja.timer@example.com",
@@ -359,7 +359,7 @@ describe("Geofence 70m Auto Check-Out & Break-Start Skip", () => {
     expect(updatedAtt.autoCheckedOut).toBe(true);
   });
 
-  test("5e. Outside 70m: auto check-out triggers immediately when immediate: true is provided", async () => {
+  test("5e. Outside 20m: auto check-out triggers immediately when immediate: true is provided", async () => {
     const user = await User.create({
       name: "Pooja Immediate",
       email: "pooja.imm@example.com",
@@ -397,7 +397,7 @@ describe("Geofence 70m Auto Check-Out & Break-Start Skip", () => {
     expect(updatedAtt.checkOutTime).not.toBeNull();
   });
 
-  test("6. Outside 70m: auto check-out is SKIPPED when user status is break-start", async () => {
+  test("6. Outside 20m: auto check-out is SKIPPED when user status is break-start", async () => {
     const user = await User.create({
       name: "Meet Joshi",
       email: "meet@example.com",
@@ -433,7 +433,7 @@ describe("Geofence 70m Auto Check-Out & Break-Start Skip", () => {
       user: { _id: user._id },
       body: {
         userId: user._id.toString(),
-        distance: 95, // 95 meters away (> 70m)
+        distance: 95, // 95 meters away (> 20m)
       },
     };
 
@@ -456,7 +456,7 @@ describe("Geofence 70m Auto Check-Out & Break-Start Skip", () => {
     expect(updatedSession.status).toBe("break");
   });
 
-  test("7. Outside 70m: auto check-out is SKIPPED when body explicitly passes status: 'break-start'", async () => {
+  test("7. Outside 20m: auto check-out is SKIPPED when body explicitly passes status: 'break-start'", async () => {
     const user = await User.create({
       name: "Kavya Dave",
       email: "kavya@example.com",
@@ -479,7 +479,7 @@ describe("Geofence 70m Auto Check-Out & Break-Start Skip", () => {
       user: { _id: user._id },
       body: {
         userId: user._id.toString(),
-        distance: 150, // > 70m
+        distance: 150, // > 20m
         status: "break-start", // Explicit break-start status
       },
     };
@@ -497,7 +497,7 @@ describe("Geofence 70m Auto Check-Out & Break-Start Skip", () => {
     expect(updatedAtt.checkOutTime).toBeFalsy();
   });
 
-  test("8. Outside 70m: no auto check-out if user is NOT checked in", async () => {
+  test("8. Outside 20m: no auto check-out if user is NOT checked in", async () => {
     const user = await User.create({
       name: "Amit Desai",
       email: "amit@example.com",
@@ -510,7 +510,7 @@ describe("Geofence 70m Auto Check-Out & Break-Start Skip", () => {
       user: { _id: user._id },
       body: {
         userId: user._id.toString(),
-        distance: 100, // > 70m
+        distance: 100, // > 20m
       },
     };
 
@@ -521,7 +521,7 @@ describe("Geofence 70m Auto Check-Out & Break-Start Skip", () => {
     expect(res.body.autoCheckedOut).toBe(false);
   });
 
-  test("9. employeePanel sessionHeartbeat respects break-start status outside 70m", async () => {
+  test("9. employeePanel sessionHeartbeat respects break-start status outside 20m", async () => {
     const user = await User.create({
       name: "Bhavik Vyas",
       email: "bhavik@example.com",
@@ -552,7 +552,7 @@ describe("Geofence 70m Auto Check-Out & Break-Start Skip", () => {
       user: { _id: user._id },
       body: {
         sessionId: "sess_12345",
-        distance: 110, // > 70m
+        distance: 110, // > 20m
       },
     };
 
@@ -567,7 +567,7 @@ describe("Geofence 70m Auto Check-Out & Break-Start Skip", () => {
     expect(unchangedSession.status).toBe("break");
   });
 
-  test("10. BREAK_IN -> BREAK_OUT: outside 70m triggers auto checkout (Test 7); inside 70m remains CHECKED_IN (Test 8)", async () => {
+  test("10. BREAK_IN -> BREAK_OUT: outside 20m triggers auto checkout (Test 7); inside 20m remains CHECKED_IN (Test 8)", async () => {
     const user1 = await User.create({
       name: "Trupti Outside",
       email: "trupti.outside@example.com",
@@ -587,13 +587,13 @@ describe("Geofence 70m Auto Check-Out & Break-Start Skip", () => {
       approvalStatus: "approved",
     });
 
-    // Test 7: BREAK_OUT while outside 70m (100m away) -> ends break, status becomes CHECKED_IN, triggers AUTO CHECKOUT
+    // Test 7: BREAK_OUT while outside 20m (100m away) -> ends break, status becomes CHECKED_IN, triggers AUTO CHECKOUT
     const resOutside = createMockRes();
     const reqOutside = {
       user: { _id: user1._id },
       body: {
         userId: user1._id.toString(),
-        distance: 100, // Outside 70m
+        distance: 100, // Outside 20m
       },
     };
     await attendanceController.endBreak(reqOutside, resOutside);
@@ -607,7 +607,7 @@ describe("Geofence 70m Auto Check-Out & Break-Start Skip", () => {
     expect(attOutsideUpdated.checkOutTime).not.toBeNull();
     expect(attOutsideUpdated.autoCheckedOut).toBe(true);
 
-    // Test 8: BREAK_OUT while inside 70m (50m away) -> ends break, remains CHECKED_IN
+    // Test 8: BREAK_OUT while inside 20m (15m away) -> ends break, remains CHECKED_IN
     const user2 = await User.create({
       name: "Trupti Inside",
       email: "trupti.inside@example.com",
@@ -631,7 +631,7 @@ describe("Geofence 70m Auto Check-Out & Break-Start Skip", () => {
       user: { _id: user2._id },
       body: {
         userId: user2._id.toString(),
-        distance: 50, // Inside 70m
+        distance: 15, // Inside 20m
       },
     };
     await attendanceController.endBreak(reqInside, resInside);
@@ -644,4 +644,3 @@ describe("Geofence 70m Auto Check-Out & Break-Start Skip", () => {
     expect(attInsideUpdated.checkOutTime).toBeFalsy();
   });
 });
-

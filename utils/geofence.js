@@ -2,14 +2,14 @@
  * GPS Geofencing Utility for Employee Attendance
  * Office: Solaris Business Hub, 913, 9th Floor
  * Coordinates: 23.057808, 72.538926
- * Radius: 70 meters
+ * Radius: 20 meters
  */
 
 const OFFICE_LOCATION = {
   name: "Solaris Business Hub, 913, 9th Floor",
   latitude: parseFloat(process.env.OFFICE_LATITUDE) || 23.057808,
   longitude: parseFloat(process.env.OFFICE_LONGITUDE) || 72.538926,
-  radiusMeters: parseFloat(process.env.OFFICE_RADIUS_METERS) || 70,
+  radiusMeters: parseFloat(process.env.OFFICE_RADIUS_METERS) || 20,
 };
 
 const GEOFENCE_AUTO_CHECKOUT_DELAY_SECONDS =
@@ -188,7 +188,7 @@ function validateAttendanceGeofence(body) {
 
   const roundedDistance = Math.round(distance);
 
-  // Strict 70m rule: distance <= 70m is inside, distance > 70m is outside. Exactly 70m is inside.
+  // Strict 20m rule: distance <= 20m is inside, distance > 20m is outside. Exactly 20m is inside.
   if (roundedDistance > OFFICE_LOCATION.radiusMeters) {
     return {
       isInside: false,

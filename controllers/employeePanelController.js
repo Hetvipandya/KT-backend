@@ -728,7 +728,7 @@ exports.sessionHeartbeat = async (req, res) => {
               remainingSeconds,
               isOnBreak: false,
               distance: geofenceResult.distance,
-              message: `Device is outside 70m office radius (${geofenceResult.distance}m away). Automatic check-out will occur in ${remainingSeconds} second(s).`,
+              message: `Device is outside 20m office radius (${geofenceResult.distance}m away). Automatic check-out will occur in ${remainingSeconds} second(s).`,
             });
           }
         } else if (isOnBreak) {
