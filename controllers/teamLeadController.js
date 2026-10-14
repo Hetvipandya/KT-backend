@@ -740,8 +740,17 @@ exports.getMyTeam = async (req, res) => {
         },
       });
 
-    // If no teams exist, create one for the current user
+    // If no teams exist, create one for the current user ONLY if they are NOT an admin
     if (!teams.length) {
+      const currentUser = await User.findById(req.user._id);
+      if (currentUser && currentUser.role?.toLowerCase() === "admin") {
+        // Admin users should not get an auto-created team
+        return res.status(200).json({
+          success: true,
+          total: 0,
+          data: [],
+        });
+      }
       const newTeam = await createTeamForLead(req.user._id);
       teams = [newTeam];
     }
