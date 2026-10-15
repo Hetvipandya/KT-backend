@@ -314,9 +314,19 @@ monthlySalarySchema.pre("save", async function () {
   }
 });
 
+monthlySalarySchema.post("save", function (doc) {
+  try {
+    const Payslip = require("./Payslip");
+    if (typeof Payslip.syncPayslipFromMonthlySalary === "function") {
+      Payslip.syncPayslipFromMonthlySalary(doc).catch(() => {});
+    }
+  } catch (_) {}
+});
+
 monthlySalarySchema.index(
   { employeeId: 1, month: 1, year: 1 },
   { unique: true }
 );
 
 module.exports = mongoose.model("MonthlySalary", monthlySalarySchema);
+

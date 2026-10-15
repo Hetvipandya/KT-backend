@@ -260,6 +260,13 @@ const getSalarySlipHtml = async (req, res) => {
       (req.path && req.path.includes("/generate")) ||
       req.query?.format === "json";
 
+    try {
+      const Payslip = require("../models/Payslip");
+      if (typeof Payslip.syncPayslipFromMonthlySalary === "function") {
+        Payslip.syncPayslipFromMonthlySalary(monthlySalary).catch(() => {});
+      }
+    } catch (_) {}
+
     if (isApiJsonCall) {
       return res.status(200).json({
         success: true,

@@ -311,11 +311,13 @@ const startServer = async () => {
     // 1. Connect to single shared MongoDB
     await connectDB();
 
-    // 2. Reconcile any orphaned user references
+    // 2. Reconcile any orphaned user references & ensure payslip collection sync
     try {
       await cleanupAllOrphanedUsers();
+      const Payslip = require('./models/Payslip');
+      await Payslip.syncAllMonthlySalariesToPayslips();
     } catch (reconcileErr) {
-      logger.warn(`⚠️ Reconcile warning: ${reconcileErr.message}`);
+      logger.warn(`⚠️ Reconcile/Payslip warning: ${reconcileErr.message}`);
     }
 
     // 3. Start Listening 

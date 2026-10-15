@@ -34,6 +34,14 @@ const connectDB = async (customUri = null) => {
     }
     await User.createIndexes();
 
+    // Ensure Payslip collection exists in MongoDB and sync existing records
+    try {
+      const Payslip = require('../models/Payslip');
+      if (typeof Payslip.syncAllMonthlySalariesToPayslips === 'function') {
+        Payslip.syncAllMonthlySalariesToPayslips().catch(() => {});
+      }
+    } catch (_) {}
+
     isConnected = true;
     logger.info(`✅ MongoDB Connected: ${conn.connection.host}/${conn.connection.name}`);
   } catch (error) {
