@@ -8,7 +8,7 @@ const {
   getMonthlySalaries,
   getMonthlySalaryById,
   updateMonthlySalary,
-  approveMonthlySalary,
+  approveMonthlySalary, 
   payMonthlySalary,
   cancelMonthlySalary,
 } = require("../controllers/monthlySalaryController");

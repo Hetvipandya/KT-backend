@@ -11,7 +11,7 @@ const breakSchema = new mongoose.Schema(
       type: Date, 
       default: null,
     },
-
+ 
     duration: {
       type: Number,
       default: 0, // Minutes

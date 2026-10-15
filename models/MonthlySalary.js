@@ -314,11 +314,13 @@ monthlySalarySchema.pre("save", async function () {
   }
 });
 
-monthlySalarySchema.post("save", function (doc) {
+monthlySalarySchema.post("save", async function (doc) {
   try {
-    const Payslip = require("./Payslip");
-    if (typeof Payslip.syncPayslipFromMonthlySalary === "function") {
-      Payslip.syncPayslipFromMonthlySalary(doc).catch(() => {});
+    if (mongoose.connection && mongoose.connection.readyState === 1) {
+      const Payslip = require("./Payslip");
+      if (typeof Payslip.syncPayslipFromMonthlySalary === "function") {
+        await Payslip.syncPayslipFromMonthlySalary(doc);
+      }
     }
   } catch (_) {}
 });

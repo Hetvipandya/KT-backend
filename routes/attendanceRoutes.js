@@ -4,7 +4,7 @@ const router = express.Router();
 
 const {
   checkIn,
-  checkOut,
+  checkOut, 
   startBreak,  
   endBreak, 
   getBreakStatus, 

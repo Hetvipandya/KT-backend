@@ -1711,7 +1711,7 @@ exports.approveAttendance =
         req.user?.id;
 
       const {
-        lateCutoffTime,
+        lateCutoffTime, 
         absentCutoffTime,
       } = req.body;
 

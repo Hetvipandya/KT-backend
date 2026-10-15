@@ -209,7 +209,7 @@ salaryStructureSchema.pre("save", async function () {
   this.basicForPf = Number(this.basicSalary || 0) + Number(this.dearnessAllowance || 0);
 
   // Formula 2: PF (Employee) = (Basic + DA) * 12%
-  if (this.autoCalculateStatutory && (!this.pfDeduction || this.pfDeduction === 0)) {
+  if (this.autoCalculateStatutory && (!this.pfDeduction || this.isModified("basicSalary") || this.isModified("dearnessAllowance"))) {
     this.pfDeduction = Math.round(this.basicForPf * 0.12);
   }
 
@@ -217,12 +217,12 @@ salaryStructureSchema.pre("save", async function () {
   const employerPf = Math.round(this.basicForPf * 0.12);
 
   // Formula 4: ESI (Employee) = Gross Salary * 0.75%
-  if (this.autoCalculateStatutory && (!this.esicDeduction || this.esicDeduction === 0)) {
+  if (this.autoCalculateStatutory && (!this.esicDeduction || this.isModified("basicSalary") || this.isModified("grossSalary"))) {
     this.esicDeduction = Math.round(this.grossSalary * 0.0075);
   }
 
   // Formula 5: PROFESSIONAL TAX = As per State Rules (Default: Gross > 12000 => 200)
-  if (this.autoCalculateStatutory && (!this.professionalTax || this.professionalTax === 0)) {
+  if (this.autoCalculateStatutory && (!this.professionalTax || this.isModified("basicSalary") || this.isModified("grossSalary"))) {
     this.professionalTax = this.grossSalary > 12000 ? 200 : 0;
   }
 
@@ -258,6 +258,118 @@ salaryStructureSchema.pre("save", async function () {
   this.netSalary = Math.max(0, Number((this.grossSalary - this.totalDeduction).toFixed(2)));
 });
 
+/**
+ * Sync changes from SalaryStructure to any un-paid MonthlySalary records for this employee
+ */
+const syncSalaryStructureToMonthlySalaries = async (structure) => {
+  if (!structure || !structure._id) return 0;
+  if (!mongoose.connection || mongoose.connection.readyState !== 1) return 0;
+  try {
+    const MonthlySalary = mongoose.models.MonthlySalary || require("./MonthlySalary");
+    const targetUserId = structure.userId || structure.employeeId;
+    if (!targetUserId) return 0;
+
+    const query = {
+      $or: [
+        { salaryStructureId: structure._id },
+        { userId: targetUserId },
+        { employeeId: targetUserId },
+      ],
+      status: { $nin: ["Paid", "paid"] },
+    };
+
+    const matchingSalaries = await MonthlySalary.find(query);
+    if (!matchingSalaries || matchingSalaries.length === 0) return 0;
+
+    for (const salary of matchingSalaries) {
+      salary.basicSalary = Number(structure.basicSalary || 0);
+      salary.hra = Number(structure.hra || 0);
+      salary.conveyanceAllowance = Number(structure.conveyanceAllowance || 0);
+      salary.medicalAllowance = Number(structure.medicalAllowance || 0);
+      salary.specialAllowance = Number(structure.specialAllowance || structure.allowance || 0);
+      salary.allowance = Number(structure.specialAllowance || structure.allowance || 0);
+      salary.dearnessAllowance = Number(structure.dearnessAllowance || 0);
+      salary.otherAllowances = Number(structure.otherAllowances || 0);
+      salary.fixedBonus = Number(structure.fixedBonus || 0);
+
+      salary.pfDeduction = Number(structure.pfDeduction || 0);
+      salary.esicDeduction = Number(structure.esicDeduction || 0);
+      salary.professionalTax = Number(structure.professionalTax || 0);
+      salary.tds = Number(structure.tds || 0);
+      salary.tdsPercentage = Number(structure.tdsPercentage || 0);
+      salary.fixedDeduction = Number(structure.fixedDeduction || 0);
+      salary.otherDeductions = Number(structure.otherDeductions || 0);
+
+      if (structure.employerContributions) {
+        salary.employerContributions = structure.employerContributions;
+      }
+
+      salary.salaryStructureId = structure._id;
+      salary.salaryStructureSnapshot = typeof structure.toObject === "function" ? structure.toObject() : structure;
+
+      // Formula 1: GROSS SALARY
+      salary.grossSalary = Number((
+        salary.basicSalary +
+        salary.hra +
+        salary.conveyanceAllowance +
+        salary.medicalAllowance +
+        salary.specialAllowance +
+        salary.dearnessAllowance +
+        salary.otherAllowances +
+        salary.fixedBonus +
+        Number(salary.extraBonus || 0)
+      ).toFixed(2));
+
+      // Formula 9: BASIC FOR PF
+      salary.basicForPf = Number(salary.basicSalary || 0) + Number(salary.dearnessAllowance || 0);
+
+      // Formula 8 & LOP calculation
+      if (salary.lopDays && salary.lopDays > 0) {
+        salary.perDaySalary = salary.totalDays > 0 ? Number((salary.grossSalary / salary.totalDays).toFixed(2)) : 0;
+        salary.lopDeduction = Number((salary.perDaySalary * salary.lopDays).toFixed(2));
+      }
+
+      // TDS Amount
+      const calculatedTds = salary.tds > 0
+        ? Number(salary.tds)
+        : (salary.grossSalary * Number(salary.tdsPercentage || 0)) / 100;
+      salary.tdsAmount = Number(calculatedTds.toFixed(2));
+
+      // Formula 6: TOTAL DEDUCTIONS
+      salary.totalDeduction = Number((
+        salary.pfDeduction +
+        salary.esicDeduction +
+        salary.professionalTax +
+        calculatedTds +
+        salary.fixedDeduction +
+        Number(salary.extraDeduction || 0) +
+        salary.otherDeductions +
+        Number(salary.lopDeduction || 0)
+      ).toFixed(2));
+
+      // Formula 7: NET SALARY
+      salary.netSalary = Math.max(0, Number((salary.grossSalary - salary.totalDeduction).toFixed(2)));
+
+      await salary.save();
+    }
+    return matchingSalaries.length;
+  } catch (err) {
+    if (mongoose.connection && mongoose.connection.readyState === 1) {
+      console.error("Error syncing SalaryStructure to MonthlySalary:", err.message);
+    }
+    return 0;
+  }
+};
+
+salaryStructureSchema.post("save", async function (doc) {
+  try {
+    await syncSalaryStructureToMonthlySalaries(doc);
+  } catch (_) {}
+});
+
 salaryStructureSchema.index({ userId: 1, isActive: 1 }, { unique: false });
 
-module.exports = mongoose.model("SalaryStructure", salaryStructureSchema);
+const SalaryStructure = mongoose.models.SalaryStructure || mongoose.model("SalaryStructure", salaryStructureSchema);
+
+module.exports = SalaryStructure;
+module.exports.syncSalaryStructureToMonthlySalaries = syncSalaryStructureToMonthlySalaries;

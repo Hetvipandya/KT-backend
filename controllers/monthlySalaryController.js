@@ -144,7 +144,7 @@ const generateMonthlySalary = async (req, res) => {
       const grossSalary = Number(
         (basic + hra + conveyance + medical + special + da + otherAllowances + fixedBonus + Number(extraBonus)).toFixed(2)
       );
-
+ 
       // Formula 9: BASIC FOR PF = Basic + DA
       const basicForPf = basic + da;
 
@@ -723,7 +723,7 @@ const getMonthlySalaryById = async (req, res) => {
 // UPDATE MONTHLY SALARY (BEFORE APPROVAL)
 // PUT /api/salaries/:id
 // =====================================================
-const updateMonthlySalary = async (req, res) => {
+const updateMonthlySalary = async (req, res) => { 
   try {
     const { id } = req.params;
 
