@@ -216,6 +216,20 @@ const checkCompanyAccess = async (req, res, next) => {
             companyId = createdCompany._id;
           }
         }
+
+        // Fallback 3: check if admin or hr user and default company exists
+        if (!companyId || companyId === '') {
+          const role = (req.user?.role || '').toLowerCase().trim();
+          if (['admin', 'hr'].includes(role)) {
+            const defaultCompany = await Company.findOne();
+            if (defaultCompany) {
+              companyId = defaultCompany._id;
+              if (req.user && !req.user.companyId) {
+                req.user.companyId = defaultCompany._id;
+              }
+            }
+          }
+        }
       }
     }
 
@@ -242,14 +256,17 @@ const checkCompanyAccess = async (req, res, next) => {
       });
     }
 
-    const isOwner = company.createdBy.toString() === req.user._id.toString();
-    const isLegacyMember = req.user.companyId && req.user.companyId.toString() === company.id;
+    const isOwner = Boolean(company.createdBy && company.createdBy.toString() === req.user._id.toString());
+    const isLegacyMember = Boolean(req.user.companyId && req.user.companyId.toString() === company.id);
     const isCompanyAccessMember = (req.user.companyAccess || []).some(
       (access) => access.isActive && access.companyId.toString() === company.id
     );
-    const isMember = isLegacyMember || isCompanyAccessMember;
+    const userRole = (req.user?.role || '').toLowerCase().trim();
+    const isAdminOrHr = ['admin', 'hr'].includes(userRole);
+    const isDefaultCompany = !company.createdBy;
+    const isMember = isLegacyMember || isCompanyAccessMember || (isAdminOrHr && isDefaultCompany);
 
-    if (!isOwner && !isMember) {
+    if (!isOwner && !isMember && !isAdminOrHr) {
       return res.status(403).json({
         success: false,
         message: 'Access denied: You do not have access to this company\'s data',

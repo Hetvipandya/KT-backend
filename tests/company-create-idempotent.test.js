@@ -183,4 +183,81 @@ describe('GET /api/company authorization', () => {
     expect(response.body.success).toBe(true);
     expect(response.body.data.map(({ _id }) => _id.toString())).toContain(company._id.toString());
   });
+
+  it('allows HR tokens to retrieve default/unassigned companies without explicit companyId on user', async () => {
+    const hr = await User.create({
+      name: 'Global HR',
+      email: 'global-hr@example.com',
+      phoneNumber: '9000000205',
+      password: 'Password123!',
+      role: 'hr'
+    });
+    const defaultCompany = await Company.create({
+      name: 'Global Default Company',
+      gstin: '27ABCDE1234F1Z7',
+      pan: 'ABCDE1234H'
+    });
+
+    const app = express();
+    app.use('/api/company', companyRoutes);
+
+    const token = generateAccessToken({
+      userId: hr._id.toString(),
+      role: hr.role
+    });
+    const response = await request(app)
+      .get('/api/company')
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(response.status).toBe(200);
+    expect(response.body.success).toBe(true);
+    expect(response.body.data.length).toBeGreaterThan(0);
+    expect(response.body.data.map(({ _id }) => _id.toString())).toContain(defaultCompany._id.toString());
+  });
+
+  it('allows HR tokens to retrieve companies created by admin when HR has null companyId and auto-links companyId', async () => {
+    const admin = await User.create({
+      name: 'System Admin',
+      email: 'sys-admin@example.com',
+      phoneNumber: '9000000206',
+      password: 'Password123!',
+      role: 'admin'
+    });
+    const hr = await User.create({
+      name: 'Independent HR',
+      email: 'indep-hr@example.com',
+      phoneNumber: '9000000207',
+      password: 'Password123!',
+      role: 'hr',
+      companyId: null
+    });
+    const company = await Company.create({
+      name: 'Admin Created Enterprise',
+      gstin: '24BQSPH0154B1Z8',
+      pan: 'BQSPH0154A',
+      createdBy: admin._id
+    });
+
+    const app = express();
+    app.use('/api/company', companyRoutes);
+
+    const token = generateAccessToken({
+      userId: hr._id.toString(),
+      role: hr.role
+    });
+    const response = await request(app)
+      .get('/api/company')
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(response.status).toBe(200);
+    expect(response.body.success).toBe(true);
+    expect(response.body.data.length).toBeGreaterThan(0);
+    expect(response.body.data.map(({ _id }) => _id.toString())).toContain(company._id.toString());
+
+    // Verify user was auto-linked to the company
+    const updatedUser = await User.findById(hr._id);
+    expect(updatedUser.companyId).toBeDefined();
+    expect(updatedUser.companyId.toString()).toBe(company._id.toString());
+  });
 });
+

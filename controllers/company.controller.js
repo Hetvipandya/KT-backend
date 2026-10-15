@@ -303,10 +303,14 @@ const getCompanies = async (req, res, next) => {
       }
     }
 
+    const userRole = (req.user?.role || '').toLowerCase().trim();
+    const isAdminOrHr = ['admin', 'hr'].includes(userRole);
+
     const employeeProfiles = await Employee.find({
       $or: [
         { userID: req.user._id },
-        { userId: req.user._id }
+        { userId: req.user._id },
+        { email: req.user?.email }
       ],
       companyId: { $ne: null }
     }).select('companyId').lean();
@@ -320,7 +324,9 @@ const getCompanies = async (req, res, next) => {
     const departmentCompanies = await Department.find({
       $or: [
         { departmentHead: req.user._id },
-        { _id: req.user?.departmentId }
+        { _id: req.user?.departmentId },
+        { name: req.user?.department },
+        { departmentName: req.user?.department }
       ]
     }).select('companyId').lean();
 
@@ -330,12 +336,39 @@ const getCompanies = async (req, res, next) => {
       }
     }
 
-    const companies = await Company.find({
-      $or: [
+    let filter = {};
+    if (companyIds.size > 0) {
+      const orConditions = [
         { _id: { $in: [...companyIds] } },
         { createdBy: req.user._id }
-      ]
-    }).sort({ name: 1 });
+      ];
+      if (isAdminOrHr) {
+        orConditions.push({ createdBy: null }, { createdBy: { $exists: false } });
+      }
+      filter = { $or: orConditions };
+    } else if (isAdminOrHr) {
+      filter = {};
+    } else {
+      filter = { createdBy: req.user._id };
+    }
+
+    let companies = await Company.find(filter).sort({ name: 1, companyName: 1 });
+
+    // Fallback: If admin or hr user found no companies with the specific filter, return all companies in the system
+    if (isAdminOrHr && (!companies || companies.length === 0)) {
+      companies = await Company.find({}).sort({ name: 1, companyName: 1 });
+    }
+
+    // Auto-link primary companyId to user if user currently has none
+    if (req.user && !req.user.companyId && companies && companies.length > 0) {
+      const primaryCompanyId = companies[0]._id;
+      req.user.companyId = primaryCompanyId;
+      await User.findByIdAndUpdate(req.user._id, {
+        $set: { companyId: primaryCompanyId }
+      }).catch(() => {});
+      const { invalidateUserCache } = require('../middleware/authenticate');
+      invalidateUserCache(req.user._id);
+    }
 
     return res.status(200).json({
       success: true,
