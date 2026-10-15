@@ -190,7 +190,8 @@ app.get(['/', '/health', '/api/ping'], (req, res) => {
     success: true,
     message: '🚀 Unified Kevalon KT HRMS + Finance Backend Running Successfully',
     timestamp: new Date().toISOString(),
-    status: 'HEALTHY'
+    status: 'HEALTHY',
+    version: '1.0.1-hr-fix'
   });
 });
 
