@@ -11,9 +11,16 @@ const {
 
 // Partial update
 router.patch("/update/:employeeId/:date", patchAttendanceAdjustment);
+router.patch("/update", patchAttendanceAdjustment);
 
 // Full update
 router.put("/update/:employeeId/:date", putAttendanceAdjustment);
+router.put("/update", putAttendanceAdjustment);
+router.post("/update/:employeeId/:date", putAttendanceAdjustment);
+router.post("/update", putAttendanceAdjustment);
+router.post("/create", putAttendanceAdjustment);
+router.post("/request", putAttendanceAdjustment);
+router.post("/", putAttendanceAdjustment);
 
 // History
 router.get("/history", getAdjustmentHistory);

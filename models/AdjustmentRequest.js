@@ -41,6 +41,14 @@ const adjustmentRequestSchema = new mongoose.Schema({
     enum: ['pending', 'approved', 'rejected'],
     default: 'pending'
   },
+  breakStart: {
+    type: String,
+    default: ''
+  },
+  breakEnd: {
+    type: String,
+    default: ''
+  },
   sessions: [{
     checkin: String,
     breakStart: String,

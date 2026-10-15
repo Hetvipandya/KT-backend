@@ -129,6 +129,12 @@ const attendanceSchema = new mongoose.Schema(
   trim: true,
 },
 
+    adjustmentReason: {
+      type: String,
+      default: null,
+      trim: true,
+    },
+
     approvalStatus: {
       type: String,
       enum: ["pending", "approved", "rejected"],

@@ -4,16 +4,110 @@ const User = require("../models/User");
 const TeamLead = require("../models/Team");
 const AdjustmentRequest = require("../models/AdjustmentRequest"); 
 
+const normalizeAttendanceDate = (value) => {
+  if (!value) return null;
+
+  if (value instanceof Date) {
+    const year = value.getUTCFullYear();
+    const month = String(value.getUTCMonth() + 1).padStart(2, "0");
+    const day = String(value.getUTCDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  }
+
+  if (typeof value === "string") {
+    const trimmedValue = value.trim();
+
+    if (/^\d{4}-\d{2}-\d{2}$/.test(trimmedValue)) {
+      return trimmedValue;
+    }
+
+    const parsedDate = new Date(trimmedValue);
+    if (!Number.isNaN(parsedDate.getTime())) {
+      const year = parsedDate.getUTCFullYear();
+      const month = String(parsedDate.getUTCMonth() + 1).padStart(2, "0");
+      const day = String(parsedDate.getUTCDate()).padStart(2, "0");
+      return `${year}-${month}-${day}`;
+    }
+  }
+
+  return String(value);
+};
+
+const formatDateToISTTimeString = (date) => {
+  if (!date) return "";
+  const d = new Date(date);
+  if (isNaN(d.getTime())) return "";
+  const istDate = new Date(d.getTime() + 5.5 * 60 * 60 * 1000);
+  const hours = String(istDate.getUTCHours()).padStart(2, "0");
+  const minutes = String(istDate.getUTCMinutes()).padStart(2, "0");
+  return `${hours}:${minutes}`;
+};
+
 // Helper function to parse time
 const parseTimeToDate = (dateStr, timeStr) => {
   if (!timeStr) return null;
-  if (typeof timeStr !== "string" || !/^([01]\d|2[0-3]):[0-5]\d$/.test(timeStr)) {
+  if (!dateStr) return null;
+
+  if (timeStr instanceof Date) {
+    return isNaN(timeStr.getTime()) ? null : timeStr;
+  }
+
+  if (typeof timeStr !== "string") {
     return null;
   }
 
-  const [year, month, day] = dateStr.split("-").map(Number);
-  const [hour, minute] = timeStr.split(":").map(Number);
-  return new Date(Date.UTC(year, month - 1, day, hour - 5, minute - 30, 0));
+  const trimmed = timeStr.trim();
+  if (!trimmed) return null;
+
+  // If already an ISO string with T
+  if (trimmed.includes("T")) {
+    const parsed = new Date(trimmed);
+    if (!isNaN(parsed.getTime())) return parsed;
+  }
+
+  const normalizedDate = normalizeAttendanceDate(dateStr);
+  if (!normalizedDate || !/^\d{4}-\d{2}-\d{2}$/.test(normalizedDate)) {
+    return null;
+  }
+
+  const [year, month, day] = normalizedDate.split("-").map(Number);
+
+  // Check 12-hour AM/PM
+  const isPM = /pm$/i.test(trimmed);
+  const isAM = /am$/i.test(trimmed);
+  const cleanTime = trimmed.replace(/\s*(am|pm)$/i, "");
+  const parts = cleanTime.split(":");
+
+  if (parts.length >= 2) {
+    let hour = parseInt(parts[0], 10);
+    const minute = parseInt(parts[1], 10);
+    const second = parts.length > 2 ? parseInt(parts[2], 10) || 0 : 0;
+
+    if (isPM && hour < 12) hour += 12;
+    if (isAM && hour === 12) hour = 0;
+
+    if (
+      !isNaN(hour) &&
+      !isNaN(minute) &&
+      !isNaN(second) &&
+      hour >= 0 &&
+      hour <= 23 &&
+      minute >= 0 &&
+      minute <= 59 &&
+      second >= 0 &&
+      second <= 59
+    ) {
+      return new Date(Date.UTC(year, month - 1, day, hour - 5, minute - 30, second));
+    }
+  }
+
+  // Fallback for date strings
+  const fallback = new Date(trimmed);
+  if (!isNaN(fallback.getTime())) {
+    return fallback;
+  }
+
+  return null;
 };
 
 const applyCheckInStatus = (attendance) => {
@@ -66,33 +160,147 @@ const applyCheckInStatus = (attendance) => {
   }
 };
 
-const normalizeAttendanceDate = (value) => {
-  if (!value) return null;
+const parseBreaksFromInput = ({ sessions, breaks, breakStart, breakEnd }, attendanceDate) => {
+  // If sessions array is provided
+  if (Array.isArray(sessions) && sessions.length > 0) {
+    const parsedBreaks = [];
+    let totalDuration = 0;
 
-  if (value instanceof Date) {
-    const year = value.getUTCFullYear();
-    const month = String(value.getUTCMonth() + 1).padStart(2, "0");
-    const day = String(value.getUTCDate()).padStart(2, "0");
-    return `${year}-${month}-${day}`;
-  }
+    for (const session of sessions) {
+      if (!session || typeof session !== "object") continue;
 
-  if (typeof value === "string") {
-    const trimmedValue = value.trim();
+      const rawStart = session.breakStart ?? session.breakStartTime ?? session.break_start ?? session.breakIn ?? "";
+      const rawEnd = session.breakEnd ?? session.breakEndTime ?? session.break_end ?? session.breakOut ?? "";
 
-    if (/^\d{4}-\d{2}-\d{2}$/.test(trimmedValue)) {
-      return trimmedValue;
+      const hasStart = Boolean(rawStart && String(rawStart).trim());
+      const hasEnd = Boolean(rawEnd && String(rawEnd).trim());
+
+      if (hasStart !== hasEnd) {
+        return { error: "Both break start and break end are required." };
+      }
+
+      if (hasStart && hasEnd) {
+        const start = parseTimeToDate(attendanceDate, rawStart);
+        const end = parseTimeToDate(attendanceDate, rawEnd);
+
+        if (!start || !end) {
+          return { error: "Invalid break time." };
+        }
+
+        let duration = (end.getTime() - start.getTime()) / 60000;
+        if (duration < 0) {
+          return { error: "Break end must be after break start." };
+        }
+
+        duration = Number(duration.toFixed(2));
+        parsedBreaks.push({
+          startTime: start,
+          endTime: end,
+          duration,
+        });
+        totalDuration += duration;
+      }
     }
 
-    const parsedDate = new Date(trimmedValue);
-    if (!Number.isNaN(parsedDate.getTime())) {
-      const year = parsedDate.getUTCFullYear();
-      const month = String(parsedDate.getUTCMonth() + 1).padStart(2, "0");
-      const day = String(parsedDate.getUTCDate()).padStart(2, "0");
-      return `${year}-${month}-${day}`;
+    return {
+      breaks: parsedBreaks,
+      totalBreakTime: Number(totalDuration.toFixed(2)),
+      provided: true,
+    };
+  }
+
+  // If breaks array is provided
+  if (Array.isArray(breaks)) {
+    const parsedBreaks = [];
+    let totalDuration = 0;
+
+    for (const b of breaks) {
+      if (!b || typeof b !== "object") continue;
+
+      const rawStart = b.startTime ?? b.breakStart ?? b.breakStartTime ?? b.break_start ?? "";
+      const rawEnd = b.endTime ?? b.breakEnd ?? b.breakEndTime ?? b.break_end ?? "";
+
+      const hasStart = Boolean(rawStart && String(rawStart).trim());
+      const hasEnd = Boolean(rawEnd && String(rawEnd).trim());
+
+      if (hasStart !== hasEnd) {
+        return { error: "Both break start and break end are required." };
+      }
+
+      if (hasStart && hasEnd) {
+        const start = parseTimeToDate(attendanceDate, rawStart);
+        const end = parseTimeToDate(attendanceDate, rawEnd);
+
+        if (!start || !end) {
+          return { error: "Invalid break time." };
+        }
+
+        let duration = (end.getTime() - start.getTime()) / 60000;
+        if (duration < 0) {
+          return { error: "Break end must be after break start." };
+        }
+
+        duration = Number(duration.toFixed(2));
+        parsedBreaks.push({
+          startTime: start,
+          endTime: end,
+          duration,
+        });
+        totalDuration += duration;
+      }
+    }
+
+    return {
+      breaks: parsedBreaks,
+      totalBreakTime: Number(totalDuration.toFixed(2)),
+      provided: true,
+    };
+  }
+
+  // If top-level breakStart / breakEnd provided
+  if (breakStart !== undefined || breakEnd !== undefined) {
+    const hasStart = Boolean(breakStart && String(breakStart).trim());
+    const hasEnd = Boolean(breakEnd && String(breakEnd).trim());
+
+    if (hasStart !== hasEnd) {
+      return { error: "Both break start and break end are required." };
+    }
+
+    if (hasStart && hasEnd) {
+      const start = parseTimeToDate(attendanceDate, breakStart);
+      const end = parseTimeToDate(attendanceDate, breakEnd);
+
+      if (!start || !end) {
+        return { error: "Invalid break time." };
+      }
+
+      let duration = (end.getTime() - start.getTime()) / 60000;
+      if (duration < 0) {
+        return { error: "Break end must be after break start." };
+      }
+
+      duration = Number(duration.toFixed(2));
+      return {
+        breaks: [
+          {
+            startTime: start,
+            endTime: end,
+            duration,
+          },
+        ],
+        totalBreakTime: duration,
+        provided: true,
+      };
+    } else {
+      return {
+        breaks: [],
+        totalBreakTime: 0,
+        provided: true,
+      };
     }
   }
 
-  return String(value);
+  return { provided: false };
 };
 
 // Helper to get employee name from different sources - FIXED
@@ -167,6 +375,54 @@ const createOrUpdateAdjustmentHistory = async ({
   sessions = [],
 }) => {
   try {
+    const finalSessions =
+      Array.isArray(sessions) && sessions.length > 0
+        ? sessions.map((session) => ({
+            checkin:
+              session.checkin ||
+              session.checkIn ||
+              session.checkInTime ||
+              "",
+            breakStart:
+              session.breakStart ||
+              session.breakStartTime ||
+              session.break_start ||
+              session.breakIn ||
+              "",
+            breakEnd:
+              session.breakEnd ||
+              session.breakEndTime ||
+              session.break_end ||
+              session.breakOut ||
+              "",
+            checkout:
+              session.checkout ||
+              session.checkOut ||
+              session.checkOutTime ||
+              "",
+          }))
+        : attendance.breaks && attendance.breaks.length > 0
+        ? attendance.breaks.map((b, idx) => ({
+            checkin:
+              idx === 0
+                ? formatDateToISTTimeString(attendance.checkInTime)
+                : "",
+            breakStart: formatDateToISTTimeString(b.startTime),
+            breakEnd: formatDateToISTTimeString(b.endTime),
+            checkout:
+              idx === attendance.breaks.length - 1
+                ? formatDateToISTTimeString(attendance.checkOutTime)
+                : "",
+          }))
+        : [
+            {
+              checkin: formatDateToISTTimeString(attendance.checkInTime),
+              breakStart: "",
+              breakEnd: "",
+              checkout: formatDateToISTTimeString(attendance.checkOutTime),
+            },
+          ];
+
     const adjustmentData = {
       userId: employeeId,
 
@@ -176,14 +432,13 @@ const createOrUpdateAdjustmentHistory = async ({
       // These are Date fields
       checkInTime: attendance.checkInTime || null,
       checkOutTime: attendance.checkOutTime || null,
-      approvedCheckInTime:
-        attendance.approvedCheckInTime || null,
+      approvedCheckInTime: attendance.approvedCheckInTime || null,
 
-      totalBreakTime:
-        attendance.totalBreakTime || 0,
+      totalBreakTime: attendance.totalBreakTime || 0,
+      totalWorkTime: attendance.totalWorkTime || 0,
 
-      totalWorkTime:
-        attendance.totalWorkTime || 0,
+      breakStart: finalSessions?.[0]?.breakStart || "",
+      breakEnd: finalSessions?.[0]?.breakEnd || "",
 
       reason: reason || "Attendance adjusted",
 
@@ -192,38 +447,27 @@ const createOrUpdateAdjustmentHistory = async ({
 
       approvalStatus: "approved",
 
-      // These fields are String in schema
-      sessions: sessions.map((session) => ({
-        checkin: session.checkin || "",
-        breakStart: session.breakStart || "",
-        breakEnd: session.breakEnd || "",
-        checkout: session.checkout || "",
-      })),
+      sessions: finalSessions,
     };
 
-    const adjustment =
-      await AdjustmentRequest.findOneAndUpdate(
-        {
-          userId: employeeId,
-          date: adjustmentData.date,
-        },
-        {
-          $set: adjustmentData,
-        },
-        {
-          new: true,
-          upsert: true,
-          setDefaultsOnInsert: true,
-        }
-      );
+    const adjustment = await AdjustmentRequest.findOneAndUpdate(
+      {
+        userId: employeeId,
+        date: adjustmentData.date,
+      },
+      {
+        $set: adjustmentData,
+      },
+      {
+        new: true,
+        upsert: true,
+        setDefaultsOnInsert: true,
+      }
+    );
 
     return adjustment;
   } catch (error) {
-    console.error(
-      "Adjustment history save error:",
-      error
-    );
-
+    console.error("Adjustment history save error:", error);
     throw error;
   }
 };
@@ -234,12 +478,34 @@ const createOrUpdateAdjustmentHistory = async ({
 
 exports.patchAttendanceAdjustment = async (req, res) => {
   try {
+    const employeeId =
+      req.body.employeeId ||
+      req.body.userId ||
+      req.params.employeeId;
+
+    const date =
+      req.body.date ||
+      req.params.date;
+
     const {
-      employeeId,
-      date,
       checkInTime,
       checkOutTime,
+      checkin,
+      checkout,
+      checkIn,
+      checkOut,
+      breakStart,
+      breakEnd,
+      breakStartTime,
+      breakEndTime,
+      break_start,
+      break_end,
+      breakIn,
+      breakOut,
+      sessions,
+      breaks,
       reason,
+      totalBreakTime,
     } = req.body;
 
     if (!employeeId || !date) {
@@ -286,15 +552,21 @@ exports.patchAttendanceAdjustment = async (req, res) => {
     // ==========================================
     // CHECK-IN
     // ==========================================
+    const effectiveCheckIn =
+      checkInTime !== undefined
+        ? checkInTime
+        : checkin !== undefined
+        ? checkin
+        : checkIn;
 
-    if (checkInTime !== undefined) {
-      if (!checkInTime) {
+    if (effectiveCheckIn !== undefined) {
+      if (!effectiveCheckIn) {
         attendance.checkInTime = null;
         attendance.approvedCheckInTime = null;
       } else {
         const parsedCheckIn = parseTimeToDate(
           attendanceDate,
-          checkInTime
+          effectiveCheckIn
         );
 
         if (!parsedCheckIn) {
@@ -312,14 +584,20 @@ exports.patchAttendanceAdjustment = async (req, res) => {
     // ==========================================
     // CHECK-OUT
     // ==========================================
+    const effectiveCheckOut =
+      checkOutTime !== undefined
+        ? checkOutTime
+        : checkout !== undefined
+        ? checkout
+        : checkOut;
 
-    if (checkOutTime !== undefined) {
-      if (!checkOutTime) {
+    if (effectiveCheckOut !== undefined) {
+      if (!effectiveCheckOut) {
         attendance.checkOutTime = null;
       } else {
         const parsedCheckOut = parseTimeToDate(
           attendanceDate,
-          checkOutTime
+          effectiveCheckOut
         );
 
         if (!parsedCheckOut) {
@@ -334,9 +612,40 @@ exports.patchAttendanceAdjustment = async (req, res) => {
     }
 
     // ==========================================
+    // BREAKS
+    // ==========================================
+    const bStartInput =
+      breakStart ?? breakStartTime ?? break_start ?? breakIn;
+    const bEndInput =
+      breakEnd ?? breakEndTime ?? break_end ?? breakOut;
+
+    const breaksResult = parseBreaksFromInput(
+      {
+        sessions,
+        breaks,
+        breakStart: bStartInput,
+        breakEnd: bEndInput,
+      },
+      attendanceDate
+    );
+
+    if (breaksResult.error) {
+      return res.status(400).json({
+        success: false,
+        message: breaksResult.error,
+      });
+    }
+
+    if (breaksResult.provided) {
+      attendance.breaks = breaksResult.breaks;
+      attendance.totalBreakTime = breaksResult.totalBreakTime;
+    } else if (totalBreakTime !== undefined) {
+      attendance.totalBreakTime = Number(totalBreakTime) || 0;
+    }
+
+    // ==========================================
     // REASON
     // ==========================================
-
     if (reason !== undefined) {
       attendance.adjustmentReason = reason;
     }
@@ -344,7 +653,6 @@ exports.patchAttendanceAdjustment = async (req, res) => {
     // ==========================================
     // WORK TIME
     // ==========================================
-
     if (
       attendance.checkInTime &&
       attendance.checkOutTime
@@ -373,50 +681,70 @@ exports.patchAttendanceAdjustment = async (req, res) => {
       } else {
         attendance.status = "absent";
       }
+    } else {
+      attendance.totalWorkTime = 0;
     }
 
     // ==========================================
     // CHECK-IN BASED STATUS
-    // IMPORTANT
     // ==========================================
-
     applyCheckInStatus(attendance);
 
     // ==========================================
     // APPROVED
     // ==========================================
-
     attendance.approvalStatus = "approved";
 
     await attendance.save();
 
     // ==========================================
+    // SESSIONS FOR HISTORY
+    // ==========================================
+    let historySessions =
+      Array.isArray(sessions) && sessions.length > 0
+        ? sessions
+        : attendance.breaks && attendance.breaks.length > 0
+        ? attendance.breaks.map((b, idx) => ({
+            checkin:
+              idx === 0
+                ? (effectiveCheckIn || formatDateToISTTimeString(attendance.checkInTime))
+                : "",
+            breakStart: formatDateToISTTimeString(b.startTime),
+            breakEnd: formatDateToISTTimeString(b.endTime),
+            checkout:
+              idx === attendance.breaks.length - 1
+                ? (effectiveCheckOut || formatDateToISTTimeString(attendance.checkOutTime))
+                : "",
+          }))
+        : [
+            {
+              checkin:
+                effectiveCheckIn ||
+                formatDateToISTTimeString(attendance.checkInTime),
+              breakStart: "",
+              breakEnd: "",
+              checkout:
+                effectiveCheckOut ||
+                formatDateToISTTimeString(attendance.checkOutTime),
+            },
+          ];
+
+    // ==========================================
     // SAVE ADJUSTMENT HISTORY
     // ==========================================
-const adjustment =
-  await createOrUpdateAdjustmentHistory({
-    employeeId,
-    attendanceDate,
-    reason,
-    attendance,
+    const adjustment = await createOrUpdateAdjustmentHistory({
+      employeeId,
+      attendanceDate,
+      reason,
+      attendance,
+      sessions: historySessions,
+    });
 
-    sessions: [
-      {
-        checkin: checkInTime || "",
-        breakStart: "",
-        breakEnd: "",
-        checkout: checkOutTime || "",
-      },
-    ],
-  });
-
-    const employeeName =
-      await getEmployeeName(employeeId);
+    const employeeName = await getEmployeeName(employeeId);
 
     return res.status(200).json({
       success: true,
-      message:
-        "Attendance adjustment updated successfully.",
+      message: "Attendance adjustment updated successfully.",
       data: {
         attendance,
         adjustment,
@@ -439,10 +767,32 @@ const adjustment =
 
 exports.putAttendanceAdjustment = async (req, res) => {
   try {
-    const {
-      employeeId,
-      date,
+    const employeeId =
+      req.body.employeeId ||
+      req.body.userId ||
+      req.params.employeeId;
+
+    const date =
+      req.body.date ||
+      req.params.date;
+
+    let {
       sessions,
+      breaks,
+      checkInTime,
+      checkOutTime,
+      checkin,
+      checkout,
+      checkIn,
+      checkOut,
+      breakStart,
+      breakEnd,
+      breakStartTime,
+      breakEndTime,
+      break_start,
+      break_end,
+      breakIn,
+      breakOut,
       reason,
     } = req.body;
 
@@ -453,18 +803,51 @@ exports.putAttendanceAdjustment = async (req, res) => {
       });
     }
 
-    if (!Array.isArray(sessions) || sessions.length === 0) {
-      return res.status(400).json({
-        success: false,
-        message: "Sessions are required.",
-      });
+    if (sessions !== undefined) {
+      if (!Array.isArray(sessions) || sessions.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: "Sessions are required.",
+        });
+      }
+
+      if (
+        sessions.some(
+          (session) =>
+            !session || typeof session !== "object" || Array.isArray(session)
+        )
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: "Each session must be an object.",
+        });
+      }
     }
 
-    if (sessions.some((session) => !session || typeof session !== "object" || Array.isArray(session))) {
-      return res.status(400).json({
-        success: false,
-        message: "Each session must be an object.",
-      });
+    // If sessions not provided, check if flat timing fields or breaks provided
+    if (!Array.isArray(sessions) || sessions.length === 0) {
+      const cin = checkInTime ?? checkin ?? checkIn ?? "";
+      const cout = checkOutTime ?? checkout ?? checkOut ?? "";
+      const bstart =
+        breakStart ?? breakStartTime ?? break_start ?? breakIn ?? "";
+      const bend =
+        breakEnd ?? breakEndTime ?? break_end ?? breakOut ?? "";
+
+      if (cin || cout || bstart || bend || breaks) {
+        sessions = [
+          {
+            checkin: cin,
+            checkout: cout,
+            breakStart: bstart,
+            breakEnd: bend,
+          },
+        ];
+      } else {
+        return res.status(400).json({
+          success: false,
+          message: "Sessions are required.",
+        });
+      }
     }
 
     const attendanceDate = normalizeAttendanceDate(date);
@@ -505,52 +888,48 @@ exports.putAttendanceAdjustment = async (req, res) => {
     // First session = Check In
     // Last session = Check Out
     // ==========================================
-
     const firstSession = sessions[0];
     const lastSession = sessions[sessions.length - 1];
 
-    // ==========================================
-    // Check In
-    // ==========================================
+    const firstCheckIn =
+      firstSession.checkin ?? firstSession.checkIn ?? firstSession.checkInTime;
+    const lastCheckOut =
+      lastSession.checkout ?? lastSession.checkOut ?? lastSession.checkOutTime;
 
-    if (firstSession.checkin) {
-      const checkInTime = parseTimeToDate(
+    if (firstCheckIn) {
+      const checkInParsed = parseTimeToDate(
         attendanceDate,
-        firstSession.checkin
+        firstCheckIn
       );
 
-      if (!checkInTime) {
+      if (!checkInParsed) {
         return res.status(400).json({
           success: false,
           message: "Invalid check-in time.",
         });
       }
 
-      attendance.checkInTime = checkInTime;
-      attendance.approvedCheckInTime = checkInTime;
+      attendance.checkInTime = checkInParsed;
+      attendance.approvedCheckInTime = checkInParsed;
     } else {
       attendance.checkInTime = null;
       attendance.approvedCheckInTime = null;
     }
 
-    // ==========================================
-    // Check Out
-    // ==========================================
-
-    if (lastSession.checkout) {
-      const checkOutTime = parseTimeToDate(
+    if (lastCheckOut) {
+      const checkOutParsed = parseTimeToDate(
         attendanceDate,
-        lastSession.checkout
+        lastCheckOut
       );
 
-      if (!checkOutTime) {
+      if (!checkOutParsed) {
         return res.status(400).json({
           success: false,
           message: "Invalid check-out time.",
         });
       }
 
-      attendance.checkOutTime = checkOutTime;
+      attendance.checkOutTime = checkOutParsed;
     } else {
       attendance.checkOutTime = null;
     }
@@ -558,69 +937,24 @@ exports.putAttendanceAdjustment = async (req, res) => {
     // ==========================================
     // Breaks
     // ==========================================
+    const breaksResult = parseBreaksFromInput(
+      { sessions, breaks },
+      attendanceDate
+    );
 
-    attendance.breaks = [];
-
-    let totalBreakMinutes = 0;
-
-    for (const session of sessions) {
-      const hasBreakStart = Boolean(session.breakStart);
-      const hasBreakEnd = Boolean(session.breakEnd);
-
-      if (hasBreakStart !== hasBreakEnd) {
-        return res.status(400).json({
-          success: false,
-          message: "Both break start and break end are required.",
-        });
-      }
-
-      if (hasBreakStart) {
-        const breakStart = parseTimeToDate(
-          attendanceDate,
-          session.breakStart
-        );
-
-        const breakEnd = parseTimeToDate(
-          attendanceDate,
-          session.breakEnd
-        );
-
-        if (!breakStart || !breakEnd) {
-          return res.status(400).json({
-            success: false,
-            message: "Invalid break time.",
-          });
-        }
-
-        let duration =
-          (breakEnd.getTime() - breakStart.getTime()) /
-          60000;
-
-        if (duration < 0) {
-          return res.status(400).json({
-            success: false,
-            message: "Break end must be after break start.",
-          });
-        }
-
-        duration = Number(duration.toFixed(2));
-
-        attendance.breaks.push({
-          startTime: breakStart,
-          endTime: breakEnd,
-          duration,
-        });
-
-        totalBreakMinutes += duration;
-      }
+    if (breaksResult.error) {
+      return res.status(400).json({
+        success: false,
+        message: breaksResult.error,
+      });
     }
 
-    attendance.totalBreakTime = Number(totalBreakMinutes.toFixed(2));
+    attendance.breaks = breaksResult.breaks || [];
+    attendance.totalBreakTime = breaksResult.totalBreakTime || 0;
 
     // ==========================================
     // Calculate Work Time
     // ==========================================
-
     if (
       attendance.checkInTime &&
       attendance.checkOutTime
@@ -646,7 +980,6 @@ exports.putAttendanceAdjustment = async (req, res) => {
     // ==========================================
     // Status
     // ==========================================
-
     attendance.status =
       attendance.totalWorkTime >= 8
         ? "present"
@@ -663,35 +996,31 @@ exports.putAttendanceAdjustment = async (req, res) => {
       attendance.adjustmentReason = reason;
     }
 
-   await attendance.save();
+    await attendance.save();
 
-// ==========================================
-// SAVE / UPDATE ADJUSTMENT HISTORY
-// ==========================================
+    // ==========================================
+    // SAVE / UPDATE ADJUSTMENT HISTORY
+    // ==========================================
+    const adjustment = await createOrUpdateAdjustmentHistory({
+      employeeId,
+      attendanceDate,
+      reason,
+      attendance,
+      sessions,
+    });
 
-const adjustment =
-  await createOrUpdateAdjustmentHistory({
-    employeeId,
-    attendanceDate,
-    reason,
-    attendance,
-    sessions,
-  });
+    const employeeName = await getEmployeeName(employeeId);
 
-const employeeName =
-  await getEmployeeName(employeeId);
-
-return res.status(200).json({
-  success: true,
-  message:
-    "Complete attendance updated successfully.",
-  data: {
-    attendance,
-    adjustment,
-    employeeName,
-  },
-});
-  } catch (error) { 
+    return res.status(200).json({
+      success: true,
+      message: "Complete attendance updated successfully.",
+      data: {
+        attendance,
+        adjustment,
+        employeeName,
+      },
+    });
+  } catch (error) {
     console.error("PUT attendance error:", error);
 
     return res.status(500).json({
@@ -700,6 +1029,7 @@ return res.status(200).json({
     });
   }
 };
+
 // ==========================================
 // Get Adjustment History - FIXED
 // ==========================================
@@ -730,8 +1060,8 @@ exports.getAdjustmentHistory = async (req, res) => {
       date: request.date,
       checkInTime: request.checkInTime,
       checkOutTime: request.checkOutTime,
-      breakStart: request.sessions?.[0]?.breakStart || "",
-      breakEnd: request.sessions?.[0]?.breakEnd || "",
+      breakStart: request.sessions?.[0]?.breakStart || request.breakStart || "",
+      breakEnd: request.sessions?.[0]?.breakEnd || request.breakEnd || "",
       sessions: request.sessions || [],
       totalBreakTime: request.totalBreakTime,
       totalWorkTime: request.totalWorkTime,

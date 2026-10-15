@@ -131,6 +131,86 @@ describe("Attendance break-time adjustments", () => {
     expect(res.statusCode).toBe(400);
     expect(res.body.message).toBe("Both break start and break end are required.");
   });
+
+  test("adjusts break-start and break-end using patchAttendanceAdjustment with flat fields", async () => {
+    const user = await User.create({
+      name: "Patch Adjustment Test",
+      email: "patch-adjustment-test@example.com",
+      password: "Password123",
+      role: "employee",
+      isApproved: true,
+    });
+    const res = createMockRes();
+
+    await adjustmentRequestController.patchAttendanceAdjustment(
+      {
+        body: {
+          employeeId: user._id.toString(),
+          date: "2026-09-30",
+          checkInTime: "09:00",
+          checkOutTime: "18:00",
+          breakStart: "13:00",
+          breakEnd: "14:00",
+          reason: "Patch adjustment for break",
+        },
+      },
+      res
+    );
+
+    expect(res.statusCode).toBe(200);
+    const attendance = await Attendance.findOne({ userId: user._id, date: "2026-09-30" });
+    expect(attendance.totalBreakTime).toBe(60);
+    expect(attendance.breaks.length).toBe(1);
+    expect(attendance.breaks[0].duration).toBe(60);
+    expect(attendance.totalWorkTime).toBe(8);
+
+    const history = await AdjustmentRequest.findOne({ userId: user._id });
+    expect(history.breakStart).toBe("13:00");
+    expect(history.breakEnd).toBe("14:00");
+    expect(history.totalBreakTime).toBe(60);
+    expect(history.totalWorkTime).toBe(8);
+
+    // Verify getAdjustmentHistory returns breakStart and breakEnd
+    const histRes = createMockRes();
+    await adjustmentRequestController.getAdjustmentHistory(
+      { query: { employeeId: user._id.toString() } },
+      histRes
+    );
+    expect(histRes.statusCode).toBe(200);
+    expect(histRes.body.data[0].breakStart).toBe("13:00");
+    expect(histRes.body.data[0].breakEnd).toBe("14:00");
+  });
+
+  test("adjusts break timing with seconds format in time strings", async () => {
+    const user = await User.create({
+      name: "Seconds Format Test",
+      email: "seconds-adjustment-test@example.com",
+      password: "Password123",
+      role: "employee",
+      isApproved: true,
+    });
+    const res = createMockRes();
+
+    await adjustmentRequestController.putAttendanceAdjustment(
+      {
+        params: { employeeId: user._id.toString(), date: "2026-09-30" },
+        body: {
+          checkInTime: "09:00:00",
+          checkOutTime: "18:00:00",
+          breakStart: "13:00:00",
+          breakEnd: "14:15:00",
+          reason: "Seconds format test",
+        },
+      },
+      res
+    );
+
+    expect(res.statusCode).toBe(200);
+    const attendance = await Attendance.findOne({ userId: user._id, date: "2026-09-30" });
+    expect(attendance.totalBreakTime).toBe(75);
+    expect(attendance.breaks[0].duration).toBe(75);
+    expect(attendance.totalWorkTime).toBe(7.75);
+  });
 });
 
 describe("Attendance approval authorization", () => {
