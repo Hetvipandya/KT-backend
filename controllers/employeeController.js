@@ -14,6 +14,7 @@ const TeamMember = require("../models/TeamMember");
 const { syncEmployeeToUser } = require("../utils/userEmployeeSync");
 const sanitizeUserUpdatePayload = require("../utils/userPayloadSanitizer");
 const generateEmployeeID = require("../utils/employeeId");
+const { cascadeDeleteUser } = require("../utils/userCascadeDelete");
 
 const resolveDepartmentName = async (departmentValue) => {
   if (!departmentValue) return "";
@@ -431,99 +432,9 @@ exports.deleteEmployee = async (req, res) => {
       });
     }
 
-    // ==========================================
-    // DELETE EMPLOYEE DOCUMENTS
-    // ==========================================
-    await EmployeeDocument.deleteMany({
-      employeeID: employeeId,
+    await cascadeDeleteUser(user || employee._id, {
+      employeeId: employee._id,
     });
-
-    // ==========================================
-    // DELETE TEAM / TEAM LEAD REFERENCES
-    // ==========================================
-    await Team.deleteMany({
-      $or: [
-        {
-          teamLeadEmployee: employee._id,
-        },
-        ...(user
-          ? [
-              {
-                teamLeadUser: user._id,
-              },
-            ]
-          : []),
-      ],
-    });
-
-    const targetUserIds = [employee._id];
-    if (user?._id) targetUserIds.push(user._id);
-    if (employee.userID) targetUserIds.push(employee.userID);
-    if (employee.userId) targetUserIds.push(employee.userId);
-
-    await TeamMember.deleteMany({
-      userId: { $in: targetUserIds },
-    });
-
-    // If employee is inside another team's employees/interns
-    await Team.updateMany(
-      {},
-      {
-        $pull: {
-          employees: employee._id,
-          interns: employee._id,
-        },
-      }
-    );
-
-    // ==========================================
-    // HISTORY
-    // ==========================================
-    await EmployeeHistory.create({
-      employeeID: employeeId,
-      action: "deleted",
-      message: `${employee.firstName || ""} ${
-        employee.lastName || ""
-      } employee deleted from company`,
-    });
-
-    // ==========================================
-    // DELETE CASCADE RECORDS (Attendance, Adjustments, Leaves)
-    // ==========================================
-    const userIds = [employee._id];
-    if (user?._id) userIds.push(user._id);
-    if (employee.userID) userIds.push(employee.userID);
-
-    await Attendance.deleteMany({
-      $or: [
-        { userId: { $in: userIds } },
-        { employeeId: { $in: userIds } },
-      ],
-    });
-
-    await AdjustmentRequest.deleteMany({
-      $or: [
-        { userId: { $in: userIds } },
-        { employeeId: { $in: userIds } },
-      ],
-    });
-
-    await Leave.deleteMany({
-      employeeId: { $in: userIds },
-    });
-
-    await LeaveBalance.deleteMany({
-      employeeId: { $in: userIds },
-    });
-
-    await EmployeePerformance.deleteMany({
-      employeeID: { $in: userIds },
-    });
-
-    // ==========================================
-    // DELETE EMPLOYEE
-    // ==========================================
-    await Employee.findByIdAndDelete(employeeId);
 
     // ==========================================
     // DELETE RELATED USER

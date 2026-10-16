@@ -18,7 +18,7 @@ const getModel = (name, relativePath) => {
  *    - Deletes employee record(s) from Employee table
  *    - Deletes employee documents (EmployeeDocument)
  *    - Deletes employee history (EmployeeHistory)
- *    - Deletes attendance, adjustment requests, leaves, leave balances, performance, salary records
+ *    - Deletes attendance, adjustment requests, leaves, leave balances, performance, and payroll records
  * 2. If user is a Team Lead or in TeamMember:
  *    - Deletes from TeamMember table
  *    - Deletes teams led by this team lead (Team table)
@@ -76,6 +76,9 @@ const cascadeDeleteUser = async (userIdOrUser, options = {}) => {
         orConditions.push({ userID: actualUserId });
         orConditions.push({ userId: actualUserId });
       }
+      if (options.employeeId) {
+        orConditions.push({ _id: options.employeeId });
+      }
       if (userEmail) {
         orConditions.push({ email: userEmail });
       }
@@ -98,7 +101,14 @@ const cascadeDeleteUser = async (userIdOrUser, options = {}) => {
     );
 
     const allTargetIds = [...new Set([...uniqueUserIds, ...employeeIds])];
-    const stringTargetIds = allTargetIds.map((id) => String(id));
+    const stringTargetIds = [
+      ...allTargetIds.map((id) => String(id)),
+      user?.uniqueID,
+      ...employees.flatMap((employee) => [
+        employee.employeeID,
+        employee.employeeCode,
+      ]),
+    ].filter(Boolean);
 
     // ----------------------------------------------------
     // 2. DELETE EMPLOYEE DOCUMENTS & HISTORY
@@ -177,29 +187,45 @@ const cascadeDeleteUser = async (userIdOrUser, options = {}) => {
       });
     }
 
-    // Salary & SalaryStructure
+    // Salary records & generated payroll
     const Salary = getModel("Salary", "../models/Salary");
     if (Salary && allTargetIds.length > 0) {
-      try {
-        await Salary.deleteMany({
-          $or: [
-            { employeeId: { $in: allTargetIds } },
-            { userId: { $in: allTargetIds } },
-          ],
-        });
-      } catch (_) {}
+      await Salary.deleteMany({
+        $or: [
+          { employeeId: { $in: allTargetIds } },
+          { userId: { $in: allTargetIds } },
+        ],
+      });
     }
 
     const SalaryStructure = getModel("SalaryStructure", "../models/SalaryStructure");
     if (SalaryStructure && allTargetIds.length > 0) {
-      try {
-        await SalaryStructure.deleteMany({
-          $or: [
-            { employeeId: { $in: allTargetIds } },
-            { userId: { $in: allTargetIds } },
-          ],
-        });
-      } catch (_) {}
+      await SalaryStructure.deleteMany({
+        $or: [
+          { employeeId: { $in: allTargetIds } },
+          { userId: { $in: allTargetIds } },
+        ],
+      });
+    }
+
+    const MonthlySalary = getModel("MonthlySalary", "../models/MonthlySalary");
+    if (MonthlySalary && allTargetIds.length > 0) {
+      await MonthlySalary.deleteMany({
+        $or: [
+          { employeeId: { $in: allTargetIds } },
+          { userId: { $in: allTargetIds } },
+        ],
+      });
+    }
+
+    const Payslip = getModel("Payslip", "../models/Payslip");
+    if (Payslip && allTargetIds.length > 0) {
+      await Payslip.deleteMany({
+        $or: [
+          { employeeId: { $in: allTargetIds } },
+          { userId: { $in: allTargetIds } },
+        ],
+      });
     }
 
     // ----------------------------------------------------
@@ -308,6 +334,41 @@ const cascadeDeleteUser = async (userIdOrUser, options = {}) => {
           },
         }
       );
+
+      await Task.updateMany(
+        { assignedEmployee: { $in: allTargetIds } },
+        { $set: { assignedEmployee: null } }
+      );
+      await Task.updateMany(
+        { assignedIntern: { $in: allTargetIds } },
+        { $set: { assignedIntern: null } }
+      );
+      await Task.updateMany(
+        { assignedBy: { $in: allTargetIds } },
+        { $set: { assignedBy: null } }
+      );
+      await Task.updateMany(
+        { "taskHistory.updatedBy": { $in: allTargetIds } },
+        { $pull: { taskHistory: { updatedBy: { $in: allTargetIds } } } }
+      );
+      await Task.updateMany(
+        {
+          $or: [
+            { "comments.userId": { $in: allTargetIds } },
+            { "comments.commentedBy": { $in: allTargetIds } },
+          ],
+        },
+        {
+          $pull: {
+            comments: {
+              $or: [
+                { userId: { $in: allTargetIds } },
+                { commentedBy: { $in: allTargetIds } },
+              ],
+            },
+          },
+        }
+      );
     }
 
     // ----------------------------------------------------
@@ -318,6 +379,16 @@ const cascadeDeleteUser = async (userIdOrUser, options = {}) => {
       await Session.deleteMany({
         userId: { $in: allTargetIds },
       });
+    }
+
+    const Screenshot = getModel("Screenshot", "../models/Screenshot");
+    if (Screenshot && allTargetIds.length > 0) {
+      await Screenshot.deleteMany({ userId: { $in: allTargetIds } });
+    }
+
+    const InactivityEvent = getModel("InactivityEvent", "../models/InactivityEvent");
+    if (InactivityEvent && allTargetIds.length > 0) {
+      await InactivityEvent.deleteMany({ userId: { $in: allTargetIds } });
     }
 
     // ----------------------------------------------------

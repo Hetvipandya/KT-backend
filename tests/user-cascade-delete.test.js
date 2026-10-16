@@ -16,6 +16,10 @@ const Task = require("../models/taskModel");
 const Session = require("../models/Session");
 const Salary = require("../models/Salary");
 const SalaryStructure = require("../models/SalaryStructure");
+const MonthlySalary = require("../models/MonthlySalary");
+const Payslip = require("../models/Payslip");
+const Screenshot = require("../models/Screenshot");
+const InactivityEvent = require("../models/InactivityEvent");
 const { cascadeDeleteUser } = require("../utils/userCascadeDelete");
 const { deleteUser } = require("../controllers/userControllers");
 
@@ -35,6 +39,10 @@ describe("User Cascade Deletion (Employee & Team Lead)", () => {
     jest.spyOn(Session, "deleteMany").mockResolvedValue({ deletedCount: 1 });
     jest.spyOn(Salary, "deleteMany").mockResolvedValue({ deletedCount: 1 });
     jest.spyOn(SalaryStructure, "deleteMany").mockResolvedValue({ deletedCount: 1 });
+    jest.spyOn(MonthlySalary, "deleteMany").mockResolvedValue({ deletedCount: 1 });
+    jest.spyOn(Payslip, "deleteMany").mockResolvedValue({ deletedCount: 1 });
+    jest.spyOn(Screenshot, "deleteMany").mockResolvedValue({ deletedCount: 1 });
+    jest.spyOn(InactivityEvent, "deleteMany").mockResolvedValue({ deletedCount: 1 });
   });
 
   afterEach(() => {
@@ -144,6 +152,74 @@ describe("User Cascade Deletion (Employee & Team Lead)", () => {
           ]),
         })
       );
+    });
+
+    it("deletes payroll and salary records for a deleted employee and their linked user", async () => {
+      const userId = new mongoose.Types.ObjectId();
+      const employeeId = new mongoose.Types.ObjectId();
+      const mockUser = {
+        _id: userId,
+        email: "payroll-employee@kevalon.com",
+        role: "employee",
+      };
+      const mockEmployee = {
+        _id: employeeId,
+        userID: userId,
+        email: mockUser.email,
+        employeeID: "EMP-100",
+        employeeCode: "EMP-100",
+      };
+
+      jest.spyOn(User, "findById").mockResolvedValue(mockUser);
+      jest.spyOn(Employee, "find").mockResolvedValue([mockEmployee]);
+      jest.spyOn(Employee, "deleteMany").mockResolvedValue({ deletedCount: 1 });
+      jest.spyOn(TeamMember, "deleteMany").mockResolvedValue({ deletedCount: 0 });
+      jest.spyOn(Team, "deleteMany").mockResolvedValue({ deletedCount: 0 });
+      jest.spyOn(Team, "updateMany").mockResolvedValue({ modifiedCount: 0 });
+      jest.spyOn(Project, "updateMany").mockResolvedValue({ modifiedCount: 0 });
+
+      await cascadeDeleteUser(mockUser);
+
+      for (const model of [Salary, SalaryStructure, MonthlySalary, Payslip]) {
+        expect(model.deleteMany).toHaveBeenCalledWith({
+          $or: [
+            { employeeId: { $in: expect.arrayContaining([userId, employeeId]) } },
+            { userId: { $in: expect.arrayContaining([userId, employeeId]) } },
+          ],
+        });
+      }
+    });
+
+    it("cascades a direct employee deletion even when no linked user exists", async () => {
+      const employeeId = new mongoose.Types.ObjectId();
+      const mockEmployee = {
+        _id: employeeId,
+        email: "standalone-employee@kevalon.com",
+        employeeID: "EMP-200",
+        employeeCode: "EMP-200",
+      };
+
+      jest.spyOn(User, "findById").mockResolvedValue(null);
+      jest.spyOn(Employee, "find").mockResolvedValue([mockEmployee]);
+      const employeeDeleteSpy = jest
+        .spyOn(Employee, "deleteMany")
+        .mockResolvedValue({ deletedCount: 1 });
+      jest.spyOn(TeamMember, "deleteMany").mockResolvedValue({ deletedCount: 0 });
+      jest.spyOn(Team, "deleteMany").mockResolvedValue({ deletedCount: 0 });
+      jest.spyOn(Team, "updateMany").mockResolvedValue({ modifiedCount: 0 });
+      jest.spyOn(Project, "updateMany").mockResolvedValue({ modifiedCount: 0 });
+
+      await cascadeDeleteUser(employeeId, { employeeId });
+
+      expect(employeeDeleteSpy).toHaveBeenCalledWith({
+        _id: { $in: [employeeId] },
+      });
+      expect(MonthlySalary.deleteMany).toHaveBeenCalledWith({
+        $or: [
+          { employeeId: { $in: expect.arrayContaining([employeeId]) } },
+          { userId: { $in: expect.arrayContaining([employeeId]) } },
+        ],
+      });
     });
   });
 
@@ -328,4 +404,3 @@ describe("User Cascade Deletion (Employee & Team Lead)", () => {
     });
   });
 });
-
