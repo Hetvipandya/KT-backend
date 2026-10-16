@@ -23,6 +23,7 @@ const {
 } = require("../utils/geofence");
 const { calculateWorkingLeaveDays, toDateString } = require("../utils/leaveUtils");
 const { calculateBreakTimerState } = require("./attendanceController");
+const { buildAttendanceTimeline } = require("../utils/attendanceTimeline");
 
 // Helper for IST Today Date String (YYYY-MM-DD)
 const getTodayIST = () => {
@@ -352,124 +353,22 @@ exports.getEmployeeAttendanceTimeline = async (req, res) => {
     const averageWorkingHours =
       totalDays > 0 ? Number((totalWorkingHours / totalDays).toFixed(2)) : 0;
 
-    // Timeline Color Rules and Segment Generation
-    // Blue = Active Working Time
-    // Yellow = Break Time
-    // Grey = Checked Out / Inactive / Non-working Time
     const timelineData = records.map((r) => {
-      const segments = [];
-      const halfDayType = r.halfDayType;
-
-      // Office default window: 10 AM (600 min) to 7 PM (1140 min)
-      let workWindowStart = 10 * 60; // 10:00 AM
-      let workWindowEnd = 19 * 60; // 7:00 PM
-
-      if (halfDayType === "first-half") {
-        workWindowEnd = 14 * 60; // 2:00 PM
-      } else if (halfDayType === "second-half") {
-        workWindowStart = 14 * 60; // 2:00 PM
-      }
-
-      if (r.checkInTime) {
-        const checkInDate = new Date(r.checkInTime);
-        const checkInMinutes =
-          checkInDate.getHours() * 60 + checkInDate.getMinutes();
-
-        // Grey before check in / before working window
-        if (checkInMinutes > workWindowStart) {
-          segments.push({
-            type: "grey",
-            label: "Non-working / Pre-checkin",
-            fromMinutes: workWindowStart,
-            toMinutes: checkInMinutes,
-          });
-        }
-
-        let currentPtr = checkInMinutes;
-
-        if (r.breaks && r.breaks.length > 0) {
-          r.breaks.forEach((b) => {
-            const bStart = new Date(b.startTime);
-            const bStartMin = bStart.getHours() * 60 + bStart.getMinutes();
-
-            if (bStartMin > currentPtr) {
-              segments.push({
-                type: "blue",
-                label: "Working Time",
-                fromMinutes: currentPtr,
-                toMinutes: bStartMin,
-              });
-            }
-
-            if (b.endTime) {
-              const bEnd = new Date(b.endTime);
-              const bEndMin = bEnd.getHours() * 60 + bEnd.getMinutes();
-              segments.push({
-                type: "yellow",
-                label: "Break Time",
-                fromMinutes: bStartMin,
-                toMinutes: bEndMin,
-              });
-              currentPtr = bEndMin;
-            } else {
-              segments.push({
-                type: "yellow",
-                label: "Active Break",
-                fromMinutes: bStartMin,
-                toMinutes: Math.min(
-                  workWindowEnd,
-                  now.getHours() * 60 + now.getMinutes(),
-                ),
-              });
-              currentPtr = Math.min(
-                workWindowEnd,
-                now.getHours() * 60 + now.getMinutes(),
-              );
-            }
-          });
-        }
-
-        const checkoutMin = r.checkOutTime
-          ? new Date(r.checkOutTime).getHours() * 60 +
-            new Date(r.checkOutTime).getMinutes()
-          : Math.min(workWindowEnd, now.getHours() * 60 + now.getMinutes());
-
-        if (checkoutMin > currentPtr) {
-          segments.push({
-            type: "blue",
-            label: "Working Time",
-            fromMinutes: currentPtr,
-            toMinutes: checkoutMin,
-          });
-        }
-
-        if (checkoutMin < workWindowEnd) {
-          segments.push({
-            type: "grey",
-            label: "Checked Out / Non-working",
-            fromMinutes: checkoutMin,
-            toMinutes: workWindowEnd,
-          });
-        }
-      } else {
-        segments.push({
-          type: "grey",
-          label: "Absent / Non-working",
-          fromMinutes: workWindowStart,
-          toMinutes: workWindowEnd,
-        });
-      }
-
+      const timeline = buildAttendanceTimeline(r, now);
       return {
         _id: r._id,
         date: r.date,
         checkInTime: r.checkInTime,
+        approvedCheckInTime: r.approvedCheckInTime,
+        effectiveCheckInTime: timeline.effectiveCheckInTime,
         checkOutTime: r.checkOutTime,
         totalBreakTime: r.totalBreakTime,
         totalWorkTime: r.totalWorkTime,
         status: r.status,
         halfDayType: r.halfDayType,
-        timelineSegments: segments,
+        adjustmentReason: r.adjustmentReason,
+        timelineEvents: timeline.timelineEvents,
+        timelineSegments: timeline.timelineSegments,
       };
     });
 

@@ -1,5 +1,6 @@
 const mongoose = require("mongoose");
 const Attendance = require("../models/Attendance");
+const { buildAttendanceTimeline } = require("../utils/attendanceTimeline");
 const User = require("../models/User");
 const {
   OFFICE_LOCATION,
@@ -860,6 +861,10 @@ const formatAttendanceDocument = (
   }
 
   plainAttendance.breakTimer = calculateBreakTimerState(plainAttendance);
+  Object.assign(
+    plainAttendance,
+    buildAttendanceTimeline(plainAttendance),
+  );
 
   return plainAttendance;
 };

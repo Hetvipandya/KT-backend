@@ -213,6 +213,52 @@ describe("Attendance break-time adjustments", () => {
   });
 });
 
+describe("Attendance detail timeline", () => {
+  test("returns adjustment events and a timeline when check-in is missing", async () => {
+    const user = await User.create({
+      name: "Timeline Test",
+      email: "timeline-test@example.com",
+      password: "Password123",
+      role: "employee",
+      isApproved: true,
+    });
+    const attendance = await Attendance.create({
+      userId: user._id,
+      userType: "employee",
+      date: "2026-10-16",
+      status: "present",
+      approvalStatus: "approved",
+      checkOutTime: new Date("2026-10-16T12:30:00.000Z"),
+      adjustmentReason: "Check-in was not recorded",
+    });
+    const res = createMockRes();
+
+    await attendanceController.getAttendanceById(
+      { params: { id: attendance._id.toString() } },
+      res,
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.data.timelineSegments).toEqual([
+      {
+        type: "grey",
+        label: "No check-in recorded",
+        fromMinutes: 600,
+        toMinutes: 1140,
+      },
+    ]);
+    expect(res.body.data.timelineEvents).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: "check-out" }),
+        expect.objectContaining({
+          type: "adjustment",
+          description: "Check-in was not recorded",
+        }),
+      ]),
+    );
+  });
+});
+
 describe("Attendance approval authorization", () => {
   test("accepts login access tokens for admins and rejects body-supplied approver identities", async () => {
     const admin = await User.create({
