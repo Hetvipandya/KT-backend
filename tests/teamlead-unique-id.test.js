@@ -183,7 +183,35 @@ describe("Team Leader Unique ID Generation & Storage Tests", () => {
     assert.strictEqual(emp.employeeID, "TL0099");
   });
 
-  test("4. getMyTeam generates and formats Team Lead unique ID in API response", async () => {
+  test("4. ensureTeamLeadUniqueID does not generate an ID for a team without a lead", async () => {
+    const team = { _id: "t-no-lead", teamLeadId: "", save: jest.fn() };
+
+    const id = await ensureTeamLeadUniqueID({ team });
+
+    assert.strictEqual(id, "");
+    assert.strictEqual(team.teamLeadId, "");
+    assert.strictEqual(team.save.mock.calls.length, 0);
+  });
+
+  test("5. getMyTeam does not create a team when no team lead exists", async () => {
+    const req = { user: { _id: "u-without-team" } };
+    const res = {
+      status: jest.fn().mockReturnThis(),
+      json: jest.fn(),
+    };
+
+    await getMyTeam(req, res);
+
+    expect(Team.create).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.json).toHaveBeenCalledWith({
+      success: true,
+      total: 0,
+      data: [],
+    });
+  });
+
+  test("6. getMyTeam generates and formats Team Lead unique ID in API response", async () => {
     const user = { _id: "u3", name: "TL Three", role: "team lead", email: "tl3@test.com", save: jest.fn() };
     const emp = { _id: "e3", firstName: "TL", lastName: "Three", isTeamLead: true, email: "tl3@test.com", save: jest.fn() };
     const team = { _id: "t3", name: "TL Three Team", teamLeadUser: user, teamLeadEmployee: emp, employees: [], interns: [] };

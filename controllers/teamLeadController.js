@@ -93,41 +93,6 @@ const findTeamByLead = async (teamLeadId) => {
   });
 };
 
-const createTeamForLead = async (teamLeadId) => {
-  const user = await User.findById(teamLeadId);
-  const employee = await Employee.findById(teamLeadId);
-
-  let teamLeadUser = null;
-  let teamLeadEmployee = null;
-
-  if (user) {
-    teamLeadUser = user._id;
-  }
-
-  if (employee) {
-    teamLeadEmployee = employee._id;
-  }
-
-  if (!teamLeadEmployee && user) {
-    const linkedEmployee = await Employee.findOne({ userID: user._id });
-    if (linkedEmployee) {
-      teamLeadEmployee = linkedEmployee._id;
-    }
-  }
-
-  if (!teamLeadUser && employee?.userID) {
-    teamLeadUser = employee.userID;
-  }
-
-  return await Team.create({
-    name: "",
-    teamLeadUser,
-    teamLeadEmployee,
-    employees: [],
-    interns: [],
-  });
-};
-
 const getTeamIds = async (teamLeadId) => {
   console.log("Logged In Team Lead ID:", teamLeadId);
 
@@ -864,19 +829,13 @@ exports.getMyTeam = async (req, res) => {
         },
       });
 
-    // If no teams exist, create one for the current user ONLY if they are NOT an admin
+    // A team must not be created when no team lead is assigned.
     if (!teams.length) {
-      const currentUser = await User.findById(req.user._id);
-      if (currentUser && currentUser.role?.toLowerCase() === "admin") {
-        // Admin users should not get an auto-created team
-        return res.status(200).json({
-          success: true,
-          total: 0,
-          data: [],
-        });
-      }
-      const newTeam = await createTeamForLead(req.user._id);
-      teams = [newTeam];
+      return res.status(200).json({
+        success: true,
+        total: 0,
+        data: [],
+      });
     }
 
     // Process and format the data

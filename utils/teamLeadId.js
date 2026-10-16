@@ -66,6 +66,10 @@ const mongoose = require("mongoose");
  * Stores it on User.uniqueID, Employee.employeeID, and returns it.
  */
 const ensureTeamLeadUniqueID = async ({ user, employee, team }) => {
+  if (!user && !employee) {
+    return team?.teamLeadId || "";
+  }
+
   let existingID =
     user?.uniqueID ||
     employee?.employeeID ||
