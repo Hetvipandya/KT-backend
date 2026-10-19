@@ -5,7 +5,7 @@ const {
   createPerformance,
   getAllPerformance, 
   getPerformanceById,
-  getPerformanceByEmployeeId,
+  getPerformanceByEmployeeId, 
   updatePerformance,
   deletePerformance,
   getPerformanceDropdown,

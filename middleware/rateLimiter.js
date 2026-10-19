@@ -2,7 +2,8 @@ const rateLimit = require('express-rate-limit');
 const env = require('../config/env');
 
 const createAuthLimiter = () => {
-  return rateLimit({
+  return rateLimit({ 
+    keyGenerator: (req) => req.ip,
     windowMs: process.env.RATE_LIMIT_WINDOW_MS
       ? Number(process.env.RATE_LIMIT_WINDOW_MS)
       : (env.RATE_LIMIT_WINDOW_MS || 15 * 60 * 1000),

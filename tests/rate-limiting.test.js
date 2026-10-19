@@ -18,6 +18,7 @@ describe('Rate Limiting Middleware for Auth Endpoints', () => {
     const { authLimiter } = require('../middleware/rateLimiter');
     
     app = express();
+    app.set('trust proxy', true);
     app.use(express.json());
     app.post('/api/auth/login', authLimiter, (req, res) => {
       res.status(200).json({ success: true, message: 'Login page' });
@@ -25,15 +26,27 @@ describe('Rate Limiting Middleware for Auth Endpoints', () => {
 
     // Requests 1, 2, 3 should succeed (HTTP 200)
     for (let i = 0; i < 3; i++) {
-      const res = await request(app).post('/api/auth/login').send({});
+      const res = await request(app)
+        .post('/api/auth/login')
+        .set('X-Forwarded-For', '192.0.2.1')
+        .send({});
       expect(res.status).toBe(200);
     }
 
     // Request 4 should be rate limited (HTTP 429)
-    const blockedRes = await request(app).post('/api/auth/login').send({});
+    const blockedRes = await request(app)
+      .post('/api/auth/login')
+      .set('X-Forwarded-For', '192.0.2.1')
+      .send({});
     expect(blockedRes.status).toBe(429);
     expect(blockedRes.body.success).toBe(false);
     expect(blockedRes.body.message).toContain('Too many authentication attempts');
+
+    const otherIpRes = await request(app)
+      .post('/api/auth/login')
+      .set('X-Forwarded-For', '192.0.2.2')
+      .send({});
+    expect(otherIpRes.status).toBe(200);
   });
 
   it('rate limits forgot-password endpoint independently or per IP', async () => {

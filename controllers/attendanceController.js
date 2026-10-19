@@ -2947,7 +2947,7 @@ exports.getAllAttendanceForAdmin =
         date,
 
         count:
-          attendance.length,
+          attendance.length, 
 
         summary: {
           total:
