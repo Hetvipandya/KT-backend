@@ -3055,7 +3055,7 @@ exports.getTodayAttendance = async (req, res) => {
 
 exports.getAttendanceById =
   async (req, res) => {
-    try {
+    try { 
       const { id } =
         req.params;
 
@@ -3119,24 +3119,26 @@ exports.getAttendanceById =
 exports.getPendingAttendance =
   async (req, res) => {
     try {
-      const data =
-        await Attendance.find({
-          approvalStatus:
-            "pending",
-        }).populate(
-          "userId",
-          "name uniqueID role"
-        );
+      const [data, approvedCount, rejectedCount] =
+        await Promise.all([
+          Attendance.find({
+            approvalStatus: "pending",
+          }).populate("userId", "name uniqueID role"),
+          Attendance.countDocuments({
+            approvalStatus: "approved",
+          }),
+          Attendance.countDocuments({
+            approvalStatus: "rejected",
+          }),
+        ]);
 
       return res.json({
         success: true,
-
-        count:
-          data.length,
-
-        data: data.map(
-          formatAttendanceDocument
-        ),
+        count: data.length,
+        pendingCount: data.length,
+        approvedCount,
+        rejectedCount,
+        data: data.map(formatAttendanceDocument),
       });
     } catch (err) {
       console.error(

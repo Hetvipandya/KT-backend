@@ -58,6 +58,54 @@ beforeEach(async () => {
   await AdjustmentRequest.deleteMany({});
 });
 
+describe("Attendance approval counts", () => {
+  test("returns pending, approved, and rejected attendance request counts", async () => {
+    const user = await User.create({
+      name: "Attendance Count Test",
+      email: "attendance-count-test@example.com",
+      password: "Password123",
+      role: "employee",
+      isApproved: true,
+    });
+
+    await Attendance.create([
+      {
+        userId: user._id,
+        userType: "employee",
+        date: "2026-10-17",
+        checkInTime: new Date("2026-10-17T04:30:00.000Z"),
+        approvalStatus: "pending",
+      },
+      {
+        userId: user._id,
+        userType: "employee",
+        date: "2026-10-16",
+        checkInTime: new Date("2026-10-16T04:30:00.000Z"),
+        approvalStatus: "approved",
+      },
+      {
+        userId: user._id,
+        userType: "employee",
+        date: "2026-10-15",
+        checkInTime: new Date("2026-10-15T04:30:00.000Z"),
+        approvalStatus: "rejected",
+      },
+    ]);
+
+    const res = createMockRes();
+    await attendanceController.getPendingAttendance({}, res);
+
+    expect(res.body).toMatchObject({
+      success: true,
+      count: 1,
+      pendingCount: 1,
+      approvedCount: 1,
+      rejectedCount: 1,
+    });
+    expect(res.body.data).toHaveLength(1);
+  });
+});
+
 describe("Attendance break-time adjustments", () => {
   test("stores the full adjusted break duration and subtracts it from work time", async () => {
     const user = await User.create({
