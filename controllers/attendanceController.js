@@ -16,6 +16,29 @@ const {
 
 const pad = (value) => String(value).padStart(2, "0");
 
+const resolveAttendanceUserId = (req) => {
+  const authenticatedUserId =
+    req.user?._id ||
+    req.user?.id;
+  const requestedUserId =
+    req.body?.userId ||
+    req.body?.user_id ||
+    req.body?.employeeId ||
+    req.body?.id ||
+    req.query?.userId ||
+    req.query?.user_id ||
+    req.query?.id;
+
+  return {
+    userId: authenticatedUserId || requestedUserId,
+    hasMismatch: Boolean(
+      authenticatedUserId &&
+      requestedUserId &&
+      String(authenticatedUserId) !== String(requestedUserId)
+    ),
+  };
+};
+
 const normalizeRoleValue = (value) => {
   if (value === null || value === undefined) {
     return "";
@@ -1187,8 +1210,9 @@ const getDateWiseAttendance =
           data.status || "absent",
 
         approvalStatus:
-          data.approvalStatus ||
-          "pending",
+          data.checkInTime
+            ? data.approvalStatus || "pending"
+            : "not_checked_in",
 
         approvedAt:
           data.approvedAt || null,
@@ -1243,131 +1267,6 @@ const getDateWiseAttendance =
   };
 
 // ============================================================
-// ENSURE TODAY ATTENDANCE
-// ============================================================
-
-const ensureTodayAttendance =
-  async (date = getToday()) => {
-    try {
-      const users =
-        await User.find({
-          isApproved: { $ne: false },
-        }).select("_id role");
-
-      const Employee =
-        require("../models/Employee");
-
-      const teamLeadEmployees =
-        await Employee.find({
-          isTeamLead: true,
-        }).select("userId");
-
-      const membersMap =
-        new Map();
-
-      users.forEach((user) => {
-        membersMap.set(
-          user._id.toString(),
-          {
-            _id: user._id,
-            role: user.role,
-          }
-        );
-      });
-
-      teamLeadEmployees.forEach(
-        (employee) => {
-          if (employee.userId) {
-            membersMap.set(
-              employee.userId.toString(),
-              {
-                _id:
-                  employee.userId,
-                role: "teamlead",
-              }
-            );
-          }
-        }
-      );
-
-      const existingAttendance =
-        await Attendance.find({
-          date,
-        }).select("userId");
-
-      const existingUserIds =
-        new Set(
-          existingAttendance.map(
-            (attendance) =>
-              attendance.userId.toString()
-          )
-        );
-
-      const absentRecords = [];
-
-      for (
-        const member of membersMap.values()
-      ) {
-        const userId =
-          member._id.toString();
-
-        if (
-          !existingUserIds.has(
-            userId
-          )
-        ) {
-          absentRecords.push({
-            userId: member._id,
-
-            userType:
-              normalizeRoleValue(member.role),
-
-            date,
-
-            checkInTime: null,
-            approvedCheckInTime: null,
-            checkOutTime: null,
-
-            breaks: [],
-
-            totalBreakTime: 0,
-            totalWorkTime: 0,
-
-            isLate: false,
-
-            status: "absent",
-
-            approvalStatus:
-              "approved",
-          });
-        }
-      }
-
-      if (
-        absentRecords.length > 0
-      ) {
-        await Attendance.insertMany(
-          absentRecords
-        );
-      }
-
-      return {
-        success: true,
-        date,
-        created:
-          absentRecords.length,
-      };
-    } catch (error) {
-      console.error(
-        "ensureTodayAttendance Error:",
-        error
-      );
-
-      throw error;
-    }
-  };
-
-// ============================================================
 // CHECK IN
 // ============================================================
 
@@ -1376,12 +1275,15 @@ exports.checkIn = async (
   res
 ) => {
   try {
-    const userId =
-      req.body.userId ||
-      req.body.id ||
-      req.body.employeeId ||
-      req.user?._id ||
-      req.user?.id;
+    const { userId, hasMismatch } =
+      resolveAttendanceUserId(req);
+
+    if (hasMismatch) {
+      return res.status(403).json({
+        success: false,
+        message: "You can only check in for your authenticated account.",
+      });
+    }
 
     if (!userId) {
       return res.status(400).json({
@@ -1441,10 +1343,6 @@ exports.checkIn = async (
     // ENSURE ATTENDANCE
     // ========================================================
 
-    await ensureTodayAttendance(
-      date
-    );
-
     let attendance =
       await Attendance.findOne({
         userId,
@@ -1472,7 +1370,7 @@ exports.checkIn = async (
           status: "absent",
 
           approvalStatus:
-            "approved",
+            "pending",
         });
     }
 
@@ -1486,7 +1384,8 @@ exports.checkIn = async (
 
     if (
       attendance.approvalStatus ===
-      "pending"
+        "pending" &&
+      attendance.checkInTime
     ) {
       return res.status(400).json({
         success: false,
@@ -2019,12 +1918,15 @@ exports.approveAttendance =
 
 exports.checkOut = async (req, res) => {
   try {
-    const userId =
-      req.body?.userId ||
-      req.body?.id ||
-      req.body?.employeeId ||
-      req.user?._id ||
-      req.user?.id;
+    const { userId, hasMismatch } =
+      resolveAttendanceUserId(req);
+
+    if (hasMismatch) {
+      return res.status(403).json({
+        success: false,
+        message: "You can only check out for your authenticated account.",
+      });
+    }
 
     if (!userId) {
       return res.status(400).json({
@@ -2214,12 +2116,15 @@ exports.checkOut = async (req, res) => {
 exports.startBreak =
   async (req, res) => {
     try {
-      const userId =
-        req.body?.userId ||
-        req.body?.id ||
-        req.body?.employeeId ||
-        req.user?._id ||
-        req.user?.id;
+      const { userId, hasMismatch } =
+        resolveAttendanceUserId(req);
+
+      if (hasMismatch) {
+        return res.status(403).json({
+          success: false,
+          message: "You can only start a break for your authenticated account.",
+        });
+      }
 
       if (!userId) {
         return res.status(400).json({
@@ -2372,12 +2277,15 @@ exports.startBreak =
 exports.endBreak =
   async (req, res) => {
     try {
-      const userId =
-        req.body?.userId ||
-        req.body?.id ||
-        req.body?.employeeId ||
-        req.user?._id ||
-        req.user?.id;
+      const { userId, hasMismatch } =
+        resolveAttendanceUserId(req);
+
+      if (hasMismatch) {
+        return res.status(403).json({
+          success: false,
+          message: "You can only end a break for your authenticated account.",
+        });
+      }
 
       if (!userId) {
         return res.status(400).json({
@@ -2590,12 +2498,15 @@ exports.endBreak =
 
 exports.getBreakStatus = async (req, res) => {
   try {
-    const userId =
-      req.user?._id ||
-      req.user?.id ||
-      req.query.userId ||
-      req.query.id ||
-      req.body?.userId;
+    const { userId, hasMismatch } =
+      resolveAttendanceUserId(req);
+
+    if (hasMismatch) {
+      return res.status(403).json({
+        success: false,
+        message: "You can only view the break status for your authenticated account.",
+      });
+    }
 
     if (!userId) {
       return res.status(400).json({
@@ -2986,7 +2897,15 @@ exports.getAllAttendanceForAdmin =
 
 exports.getTodayAttendance = async (req, res) => {
   try {
-    const userId = req.query.userId || req.user?._id || req.user?.id;
+    const { userId, hasMismatch } =
+      resolveAttendanceUserId(req);
+
+    if (hasMismatch) {
+      return res.status(403).json({
+        success: false,
+        message: "You can only view attendance for your authenticated account.",
+      });
+    }
 
     if (!userId) {
       return res.status(400).json({
@@ -3123,12 +3042,15 @@ exports.getPendingAttendance =
         await Promise.all([
           Attendance.find({
             approvalStatus: "pending",
+            checkInTime: { $ne: null },
           }).populate("userId", "name uniqueID role"),
           Attendance.countDocuments({
             approvalStatus: "approved",
+            checkInTime: { $ne: null },
           }),
           Attendance.countDocuments({
             approvalStatus: "rejected",
+            checkInTime: { $ne: null },
           }),
         ]);
 
@@ -3374,6 +3296,7 @@ exports.getAttendanceStats =
           {
             $match: {
               date: today,
+              checkInTime: { $ne: null },
             },
           },
 
@@ -4145,16 +4068,12 @@ exports.getAllAbsentAttendance =
 
       const notCheckedIn =
         absentRecords.filter(
-          (item) =>
-            item.approvalStatus ===
-            "not_checked_in"
+          (item) => !item.checkInTime
         ).length;
 
       const checkedInAbsent =
         absentRecords.filter(
-          (item) =>
-            item.approvalStatus !==
-            "not_checked_in"
+          (item) => Boolean(item.checkInTime)
         ).length;
 
       return res.status(200).json({
@@ -4408,12 +4327,15 @@ const executeAutoCheckout = async ({
 exports.checkLocationGeofence = async (req, res) => {
   try {
     const payload = { ...req.query, ...req.body };
-    const userId =
-      payload.userId ||
-      payload.user_id ||
-      payload.id ||
-      req.user?._id ||
-      req.user?.id;
+    const { userId, hasMismatch } =
+      resolveAttendanceUserId(req);
+
+    if (hasMismatch) {
+      return res.status(403).json({
+        success: false,
+        message: "You can only update your own attendance location.",
+      });
+    }
 
     const deviceType =
       payload.deviceType ||

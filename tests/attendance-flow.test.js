@@ -90,6 +90,20 @@ describe("Attendance approval counts", () => {
         checkInTime: new Date("2026-10-15T04:30:00.000Z"),
         approvalStatus: "rejected",
       },
+      {
+        userId: user._id,
+        userType: "employee",
+        date: "2026-10-14",
+        status: "absent",
+        approvalStatus: "approved",
+      },
+      {
+        userId: user._id,
+        userType: "employee",
+        date: "2026-10-13",
+        status: "absent",
+        approvalStatus: "pending",
+      },
     ]);
 
     const res = createMockRes();
@@ -327,8 +341,23 @@ describe("Attendance approval authorization", () => {
       isApproved: true,
       isActive: true,
     });
+    const priya = await User.create({
+      name: "Priya",
+      email: "priya-attendance@example.com",
+      phoneNumber: "9000000103",
+      password: "Password123",
+      role: "employee",
+      isApproved: true,
+      isActive: true,
+    });
     const approvalRecord = await Attendance.create({
       userId: employee._id,
+      userType: "employee",
+      date: "2026-10-14",
+      checkInTime: new Date("2026-10-14T04:30:00.000Z"),
+    });
+    const priyaAttendance = await Attendance.create({
+      userId: priya._id,
       userType: "employee",
       date: "2026-10-14",
       checkInTime: new Date("2026-10-14T04:30:00.000Z"),
@@ -366,6 +395,9 @@ describe("Attendance approval authorization", () => {
     expect(approval.body.success).toBe(true);
     const approvedAttendance = await Attendance.findById(approvalRecord._id);
     expect(approvedAttendance.approvedBy.toString()).toBe(admin._id.toString());
+    const unchangedPriyaAttendance = await Attendance.findById(priyaAttendance._id);
+    expect(unchangedPriyaAttendance.approvalStatus).toBe("pending");
+    expect(unchangedPriyaAttendance.approvedBy).toBeUndefined();
 
     const rejection = await request(app)
       .post("/api/attendance/reject")
@@ -376,6 +408,63 @@ describe("Attendance approval authorization", () => {
       });
     expect(rejection.status).toBe(200);
     expect(rejection.body.data.approvalStatus).toBe("rejected");
+  });
+});
+
+describe("Attendance request ownership", () => {
+  test("creates a pending check-in only for the authenticated user", async () => {
+    const kuresh = await User.create({
+      name: "Kuresh",
+      email: "kuresh-owner@example.com",
+      phoneNumber: "9000000104",
+      password: "Password123",
+      role: "employee",
+      isApproved: true,
+    });
+    const priya = await User.create({
+      name: "Priya",
+      email: "priya-owner@example.com",
+      phoneNumber: "9000000105",
+      password: "Password123",
+      role: "employee",
+      isApproved: true,
+    });
+    const officeCoords = {
+      latitude: OFFICE_LOCATION.latitude,
+      longitude: OFFICE_LOCATION.longitude,
+    };
+    const mismatchRes = createMockRes();
+
+    await attendanceController.checkIn(
+      {
+        user: { _id: kuresh._id },
+        body: {
+          userId: priya._id.toString(),
+          ...officeCoords,
+        },
+      },
+      mismatchRes
+    );
+
+    expect(mismatchRes.statusCode).toBe(403);
+    expect(await Attendance.countDocuments({ date: getToday() })).toBe(0);
+
+    const checkInRes = createMockRes();
+    await attendanceController.checkIn(
+      {
+        user: { _id: kuresh._id },
+        body: {
+          userId: kuresh._id.toString(),
+          ...officeCoords,
+        },
+      },
+      checkInRes
+    );
+
+    expect(checkInRes.statusCode).toBe(201);
+    expect(checkInRes.body.data.approvalStatus).toBe("pending");
+    expect(await Attendance.countDocuments({ date: getToday() })).toBe(1);
+    expect(await Attendance.findOne({ userId: priya._id, date: getToday() })).toBeNull();
   });
 });
 
