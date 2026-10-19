@@ -723,7 +723,7 @@ const getMonthlySalaryById = async (req, res) => {
 // UPDATE MONTHLY SALARY (BEFORE APPROVAL)
 // PUT /api/salaries/:id
 // =====================================================
-const updateMonthlySalary = async (req, res) => { 
+const updateMonthlySalary = async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -749,51 +749,74 @@ const updateMonthlySalary = async (req, res) => {
       });
     }
 
-    const {
-      basicSalary,
-      hra,
-      conveyanceAllowance,
-      medicalAllowance,
-      specialAllowance,
-      dearnessAllowance,
-      otherAllowances,
-      fixedBonus,
-      extraBonus,
-      pfDeduction,
-      esicDeduction,
-      professionalTax,
-      tds,
-      fixedDeduction,
-      extraDeduction,
-      otherDeductions,
-      lopDays,
-      remarks,
-    } = req.body;
+    const body = req.body && typeof req.body === "object" ? req.body : {};
+    const updates =
+      body.data && typeof body.data === "object" && !Array.isArray(body.data)
+        ? body.data
+        : body;
+    const numericFields = [
+      "basicSalary",
+      "hra",
+      "conveyanceAllowance",
+      "medicalAllowance",
+      "specialAllowance",
+      "allowance",
+      "dearnessAllowance",
+      "otherAllowances",
+      "fixedBonus",
+      "extraBonus",
+      "pfDeduction",
+      "esicDeduction",
+      "professionalTax",
+      "tds",
+      "tdsAmount",
+      "tdsPercentage",
+      "fixedDeduction",
+      "extraDeduction",
+      "otherDeductions",
+      "lopDays",
+    ];
+    const providedFields = numericFields.filter((field) =>
+      Object.prototype.hasOwnProperty.call(updates, field)
+    );
 
-    if (basicSalary !== undefined) salary.basicSalary = basicSalary;
-    if (hra !== undefined) salary.hra = hra;
-    if (conveyanceAllowance !== undefined) salary.conveyanceAllowance = conveyanceAllowance;
-    if (medicalAllowance !== undefined) salary.medicalAllowance = medicalAllowance;
-    if (specialAllowance !== undefined) salary.specialAllowance = specialAllowance;
-    if (dearnessAllowance !== undefined) salary.dearnessAllowance = dearnessAllowance;
-    if (otherAllowances !== undefined) salary.otherAllowances = otherAllowances;
-    if (fixedBonus !== undefined) salary.fixedBonus = fixedBonus;
-    if (extraBonus !== undefined) salary.extraBonus = extraBonus;
-
-    if (pfDeduction !== undefined) salary.pfDeduction = pfDeduction;
-    if (esicDeduction !== undefined) salary.esicDeduction = esicDeduction;
-    if (professionalTax !== undefined) salary.professionalTax = professionalTax;
-    if (tds !== undefined) salary.tds = tds;
-    if (fixedDeduction !== undefined) salary.fixedDeduction = fixedDeduction;
-    if (extraDeduction !== undefined) salary.extraDeduction = extraDeduction;
-    if (otherDeductions !== undefined) salary.otherDeductions = otherDeductions;
-    if (remarks !== undefined) salary.remarks = remarks;
-
-    if (lopDays !== undefined) {
-      salary.lopDays = Number(lopDays);
-      salary.perDaySalary = salary.totalDays > 0 ? salary.grossSalary / salary.totalDays : 0;
-      salary.lopDeduction = Number((salary.perDaySalary * salary.lopDays).toFixed(2));
+    if (Object.prototype.hasOwnProperty.call(updates, "remarks")) {
+      salary.remarks = updates.remarks;
     }
+    if (providedFields.length === 0 && !Object.prototype.hasOwnProperty.call(updates, "remarks")) {
+      return res.status(400).json({
+        success: false,
+        message: "No supported salary fields were provided",
+      });
+    }
+
+    for (const field of providedFields) {
+      const value = updates[field];
+      const numericValue =
+        typeof value === "string" && value.trim() !== "" ? Number(value) : value;
+
+      if (
+        value === null ||
+        typeof value === "boolean" ||
+        (typeof value === "string" && value.trim() === "") ||
+        !Number.isFinite(numericValue)
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: `${field} must be a valid number`,
+        });
+      }
+
+      salary[field] = numericValue;
+    }
+
+    if (
+      Object.prototype.hasOwnProperty.call(updates, "allowance") &&
+      !Object.prototype.hasOwnProperty.call(updates, "specialAllowance")
+    ) {
+      salary.specialAllowance = salary.allowance;
+    }
+    salary.allowance = Number(salary.specialAllowance || 0);
 
     // Recompute Gross, Deductions, Net
     salary.grossSalary =
@@ -807,7 +830,24 @@ const updateMonthlySalary = async (req, res) => {
       Number(salary.fixedBonus || 0) +
       Number(salary.extraBonus || 0);
 
+    if (Object.prototype.hasOwnProperty.call(updates, "tds")) {
+      salary.tdsAmount = Number(salary.tds || 0);
+    } else if (Object.prototype.hasOwnProperty.call(updates, "tdsAmount")) {
+      salary.tds = Number(salary.tdsAmount || 0);
+    } else if (Object.prototype.hasOwnProperty.call(updates, "tdsPercentage")) {
+      salary.tdsAmount = Number(
+        ((salary.grossSalary * Number(salary.tdsPercentage || 0)) / 100).toFixed(2)
+      );
+      salary.tds = salary.tdsAmount;
+    }
+
     salary.basicForPf = Number(salary.basicSalary || 0) + Number(salary.dearnessAllowance || 0);
+
+    salary.perDaySalary =
+      salary.totalDays > 0 ? Number((salary.grossSalary / salary.totalDays).toFixed(2)) : 0;
+    salary.lopDeduction = Number(
+      (salary.perDaySalary * Number(salary.lopDays || 0)).toFixed(2)
+    );
 
     salary.totalDeduction =
       Number(salary.pfDeduction || 0) +

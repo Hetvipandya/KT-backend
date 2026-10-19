@@ -211,7 +211,7 @@ app.use('/api/position', ktPositionRoutes);
 app.use('/api/contact', ktContactRoutes);
 app.use('/api/application', ktAppRoutes);
 app.use('/api/holiday', ktHolidayRoutes);
-app.use('/api/team', ktTeamRoutes);
+app.use('/api/team', ktTeamRoutes); 
 app.use('/api/student', ktStudentRoutes);
 app.use('/api/recruitment', ktRecruitmentRoutes);
 app.use('/api/interviewRound', ktInterviewRoundRoutes);
