@@ -83,4 +83,41 @@ describe("Monthly salary update API", () => {
     expect(res.status).toHaveBeenCalledWith(400);
     expect(salary.save).not.toHaveBeenCalled();
   });
+
+  test("updates an editable status without requiring salary fields", async () => {
+    jest.spyOn(MonthlySalary, "findById")
+      .mockResolvedValueOnce(salary)
+      .mockReturnValueOnce({
+        populate: jest.fn().mockResolvedValue(salary),
+      });
+
+    await updateMonthlySalary(
+      {
+        params: { id: salary._id.toString() },
+        body: { status: "pending" },
+      },
+      res
+    );
+
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(salary.status).toBe("pending");
+    expect(salary.save).toHaveBeenCalledTimes(1);
+    expect(res.json.mock.calls[0][0].data.status).toBe("pending");
+  });
+
+  test("does not allow final statuses through the general update endpoint", async () => {
+    jest.spyOn(MonthlySalary, "findById").mockResolvedValue(salary);
+
+    await updateMonthlySalary(
+      {
+        params: { id: salary._id.toString() },
+        body: { status: "Paid" },
+      },
+      res
+    );
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(salary.status).toBe("Generated");
+    expect(salary.save).not.toHaveBeenCalled();
+  });
 });

@@ -776,14 +776,29 @@ const updateMonthlySalary = async (req, res) => {
       "otherDeductions",
       "lopDays",
     ];
+    const editableStatuses = ["Draft", "Generated", "pending", "processed"];
     const providedFields = numericFields.filter((field) =>
       Object.prototype.hasOwnProperty.call(updates, field)
     );
+    const hasStatus = Object.prototype.hasOwnProperty.call(updates, "status");
 
     if (Object.prototype.hasOwnProperty.call(updates, "remarks")) {
       salary.remarks = updates.remarks;
     }
-    if (providedFields.length === 0 && !Object.prototype.hasOwnProperty.call(updates, "remarks")) {
+    if (hasStatus) {
+      if (typeof updates.status !== "string" || !editableStatuses.includes(updates.status)) {
+        return res.status(400).json({
+          success: false,
+          message: `status must be one of: ${editableStatuses.join(", ")}`,
+        });
+      }
+      salary.status = updates.status;
+    }
+    if (
+      providedFields.length === 0 &&
+      !Object.prototype.hasOwnProperty.call(updates, "remarks") &&
+      !hasStatus
+    ) {
       return res.status(400).json({
         success: false,
         message: "No supported salary fields were provided",
