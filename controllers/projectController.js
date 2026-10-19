@@ -7,6 +7,8 @@ const Employee = require("../models/Employee");
 const Team = require("../models/Team");  
 const { sanitizeTaskWithAttachments } = require("./taskManagementController");  
  
+const recalculateMilestoneAndProjectProgress = require("../utils/recalculateMilestoneAndProjectProgress");
+
 // ======================================================
 // HELPER FUNCTIONS FOR TEAM & PROGRESS MANAGEMENT
 // ======================================================
@@ -379,73 +381,6 @@ const buildProjectAssignmentTasks = ({
 // Explicit task creation only: project/member assignment should never create tasks automatically.
 const autoCreateProjectTasks = async () => {
   return [];
-};
-
-// Helper: Cascading Progress Update (Task Progress -> Milestone Progress -> Project Progress)
-const recalculateMilestoneAndProjectProgress = async (milestoneId, targetProjectId = null) => {
-  let pId = targetProjectId;
-
-  if (milestoneId) {
-    const milestone = await Milestone.findById(milestoneId);
-    if (milestone && milestone.projectId) {
-      pId = milestone.projectId;
-    }
-
-    const tasks = await Task.find({ milestoneId });
-    const totalTasks = tasks.length;
-
-    const milestoneProgress =
-      totalTasks === 0
-        ? 0
-        : Math.round(tasks.reduce((sum, t) => sum + (t.progress || 0), 0) / totalTasks);
-
-    let milestoneStatus = "pending";
-    if (milestoneProgress > 0 && milestoneProgress < 100) {
-      milestoneStatus = "in_progress";
-    } else if (milestoneProgress === 100) {
-      milestoneStatus = "completed";
-    }
-
-    await Milestone.findByIdAndUpdate(
-      milestoneId,
-      {
-        progress: milestoneProgress,
-        status: milestoneStatus,
-        completedAt: milestoneProgress === 100 ? new Date() : null,
-      },
-      { new: true }
-    );
-  }
-
-  if (pId) {
-    const milestones = await Milestone.find({ projectId: pId });
-    let projectProgress = 0;
-
-    if (milestones.length > 0) {
-      projectProgress = Math.round(
-        milestones.reduce((sum, m) => sum + (m.progress || 0), 0) / milestones.length
-      );
-    } else {
-      const projectTasks = await Task.find({ projectId: pId });
-      if (projectTasks.length > 0) {
-        projectProgress = Math.round(
-          projectTasks.reduce((sum, t) => sum + (t.progress || 0), 0) / projectTasks.length
-        );
-      }
-    }
-
-    let projectStatus = "pending";
-    if (projectProgress > 0 && projectProgress < 100) {
-      projectStatus = "in_progress";
-    } else if (projectProgress === 100) {
-      projectStatus = "completed";
-    }
-
-    await Project.findByIdAndUpdate(pId, {
-      progress: projectProgress,
-      status: projectStatus,
-    });
-  }
 };
 
 module.exports.buildProjectAssignmentTasks = buildProjectAssignmentTasks;

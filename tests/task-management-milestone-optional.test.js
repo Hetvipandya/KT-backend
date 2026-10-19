@@ -1,6 +1,6 @@
 const mongoose = require("mongoose");
 const { MongoMemoryServer } = require("mongodb-memory-server");
-require("../models/projectModel");
+const Project = require("../models/projectModel");
 const TaskManagement = require("../models/taskModel");
 const User = require("../models/User");
 const Employee = require("../models/Employee");
@@ -23,6 +23,7 @@ afterAll(async () => {
 
 beforeEach(async () => {
   await TaskManagement.deleteMany({});
+  await Project.deleteMany({});
   await User.deleteMany({});
   await Employee.deleteMany({});
 });
@@ -333,6 +334,64 @@ describe("task management milestone handling", () => {
     const persisted = await TaskManagement.findById(task._id);
     expect(persisted.status).toBe("completed");
     expect(persisted.progress).toBe(100);
+  });
+
+  it("recalculates project progress as the average of its task progress", async () => {
+    const project = await Project.create({
+      projectName: "Progress tracking",
+      clientName: "Acme",
+    });
+    const tasks = await TaskManagement.create([
+      {
+        projectId: project._id,
+        taskTitle: "First task",
+        assignedEmployee: new mongoose.Types.ObjectId(),
+        assignedBy: new mongoose.Types.ObjectId(),
+        dueDate: new Date(Date.now() + 86400000),
+        progress: 0,
+      },
+      {
+        projectId: project._id,
+        taskTitle: "Second task",
+        assignedEmployee: new mongoose.Types.ObjectId(),
+        assignedBy: new mongoose.Types.ObjectId(),
+        dueDate: new Date(Date.now() + 86400000),
+        progress: 0,
+      },
+    ]);
+
+    const makeResponse = () => ({
+      statusCode: null,
+      body: null,
+      status(code) {
+        this.statusCode = code;
+        return this;
+      },
+      json(payload) {
+        this.body = payload;
+        return this;
+      },
+    });
+
+    const firstResponse = makeResponse();
+    await taskManagementController.updateTaskStatus(
+      { params: { id: tasks[0]._id.toString() }, body: { status: "completed" } },
+      firstResponse,
+    );
+
+    expect(firstResponse.statusCode).toBe(200);
+    expect((await Project.findById(project._id)).progress).toBe(50);
+
+    const secondResponse = makeResponse();
+    await taskManagementController.updateTaskStatus(
+      { params: { id: tasks[1]._id.toString() }, body: { status: "completed" } },
+      secondResponse,
+    );
+
+    expect(secondResponse.statusCode).toBe(200);
+    const updatedProject = await Project.findById(project._id);
+    expect(updatedProject.progress).toBe(100);
+    expect(updatedProject.status).toBe("completed");
   });
 
   it("GET /api/task/all (taskManagementController.getAllTasks) fetches employee name for User, Employee, Team Lead, and Project fallbacks", async () => {

@@ -2,6 +2,22 @@ const TaskManagement = require("../models/taskModel");
 const Employee = require("../models/Employee");
 const User = require("../models/User");
 const Project = require("../models/projectModel");
+const recalculateMilestoneAndProjectProgress = require("../utils/recalculateMilestoneAndProjectProgress");
+
+const recalculateTaskProgress = async (task, previousTask = null) => {
+  if (
+    previousTask &&
+    (String(previousTask.projectId) !== String(task.projectId) ||
+      String(previousTask.milestoneId || "") !== String(task.milestoneId || ""))
+  ) {
+    await recalculateMilestoneAndProjectProgress(
+      previousTask.milestoneId,
+      previousTask.projectId
+    );
+  }
+
+  await recalculateMilestoneAndProjectProgress(task.milestoneId, task.projectId);
+};
 
 const getBaseUrl = (req) => {
   if (process.env.BASE_URL) return process.env.BASE_URL.replace(/\/$/, "");
@@ -555,6 +571,7 @@ const taskPayload = applyDelayedStatus(
 );
 
 const createdTask = await TaskManagement.create(taskPayload);
+await recalculateTaskProgress(createdTask);
 const [resolvedTask] = await resolveTasksWithEmployees([createdTask], req);
 
     return res.status(201).json({
@@ -653,6 +670,14 @@ exports.getTaskById =
 exports.updateTask =
   async (req, res) => {
     try {
+      const previousTask = await TaskManagement.findById(req.params.id);
+      if (!previousTask) {
+        return res.status(404).json({
+          success: false,
+          message: "Task not found",
+        });
+      }
+
       let updatePayload = { ...req.body };
 
       if (req.files && req.files.length > 0) {
@@ -711,6 +736,7 @@ exports.updateTask =
       }
 
       const ensuredTask = await ensureDelayedStatusForDocument(task);
+      await recalculateTaskProgress(ensuredTask, previousTask);
       const [resolvedTask] = await resolveTasksWithEmployees([ensuredTask], req);
 
       res.status(200).json({
@@ -763,6 +789,7 @@ exports.createStatus = async (req, res) => {
     });
 
     await task.save();
+    await recalculateTaskProgress(task);
 
     res.status(200).json({
       success: true,
@@ -848,6 +875,7 @@ exports.updateTaskStatus =
       });
 
       await task.save();
+      await recalculateTaskProgress(task);
 
       res.status(200).json({
         success: true,
@@ -1023,6 +1051,8 @@ exports.deleteTask =
               "Task not found",
           });
       }
+
+      await recalculateTaskProgress(task);
 
       res.status(200).json({
         success: true,
