@@ -7,6 +7,7 @@ const MonthlySalary = require("../models/MonthlySalary");
 const User = require("../models/User");
 const Company = require("../models/Company");
 const Attendance = require("../models/Attendance");
+const Leave = require("../models/Leave");
 
 const salaryStructureRoutes = require("../routes/salaryStructureRoutes");
 const monthlySalaryRoutes = require("../routes/monthlySalaryRoutes");
@@ -299,8 +300,9 @@ describe("HR Payroll Formula Module Test Suite", () => {
         calculationMode: "CALENDAR_DAYS",
         totalDays: 30,
         workingDays: 30,
-        presentDays: 28,
-        daysPayable: 28,
+        presentDays: 26,
+        daysPayable: 30,
+        leaveDays: 2,
         lopDays: 2,
         perDaySalary: 1333.33,
         lopDeduction: 2666.66,
@@ -334,6 +336,14 @@ describe("HR Payroll Formula Module Test Suite", () => {
         { status: "absent" },
         { status: "absent" },
       ]);
+      jest.spyOn(Leave, "find").mockResolvedValue([
+        {
+          startDate: new Date(2026, 8, 7),
+          endDate: new Date(2026, 8, 8),
+          totalDays: 2,
+          isHalfDay: false,
+        },
+      ]);
 
       jest.spyOn(MonthlySalary, "findOneAndUpdate").mockResolvedValue(monthlySalaryDoc);
 
@@ -357,6 +367,13 @@ describe("HR Payroll Formula Module Test Suite", () => {
       expect(res.status).toBe(201);
       expect(res.body.success).toBe(true);
       expect(res.body.count).toBe(1);
+      const salaryUpdate = MonthlySalary.findOneAndUpdate.mock.calls[0][1];
+      expect(salaryUpdate.daysPayable).toBe(30);
+      expect(salaryUpdate.leaveDays).toBe(2);
+      expect(salaryUpdate.presentDays).toBe(26);
+      expect(salaryUpdate.presentDays).toBe(
+        salaryUpdate.daysPayable - salaryUpdate.leaveDays - salaryUpdate.lopDays
+      );
     });
 
     test("POST /api/salaries/:id/approve - Approves monthly salary and locks status", async () => {

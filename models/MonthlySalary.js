@@ -73,7 +73,7 @@ const monthlySalarySchema = new mongoose.Schema(
       default: "CALENDAR_DAYS",
     },
 
-    // Formula 8: DAYS PAYABLE = (Total Working Days / Total Days) * Days Present
+    // Days available in the month before approved leave and LOP are deducted.
     totalDays: {
       type: Number,
       default: 30,
@@ -330,4 +330,3 @@ monthlySalarySchema.index(
 );
 
 module.exports = mongoose.model("MonthlySalary", monthlySalarySchema);
-

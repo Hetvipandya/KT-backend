@@ -3,9 +3,11 @@ const MonthlySalary = require("../models/MonthlySalary");
 const SalaryStructure = require("../models/SalaryStructure");
 const User = require("../models/User");
 const Attendance = require("../models/Attendance");
+const Leave = require("../models/Leave");
 const Company = require("../models/Company");
 const Branch = require("../models/Branch");
 const Employee = require("../models/Employee");
+const { calculateWorkingLeaveDays, toDateString } = require("../utils/leaveUtils");
 
 const monthNames = [
   "January", "February", "March", "April", "May", "June",
@@ -102,12 +104,44 @@ const generateMonthlySalary = async (req, res) => {
         continue;
       }
 
+      const monthStartStr = `${yearNum}-${String(monthNum).padStart(2, "0")}-01`;
+      const monthEndStr = `${yearNum}-${String(monthNum).padStart(2, "0")}-${String(getDaysInMonth(monthNum, yearNum)).padStart(2, "0")}`;
+      const monthStart = new Date(yearNum, monthNum - 1, 1);
+      const monthEnd = new Date(yearNum, monthNum, 0, 23, 59, 59, 999);
+      const approvedLeaves = await Leave.find({
+        employeeId: user._id,
+        status: "approved",
+        startDate: { $lte: monthEnd },
+        endDate: { $gte: monthStart },
+      });
+
+      let leaveDays = 0;
+      for (const leave of approvedLeaves) {
+        const leaveStartStr = toDateString(leave.startDate);
+        const leaveEndStr = toDateString(leave.endDate || leave.startDate);
+        if (!leaveStartStr || !leaveEndStr) continue;
+
+        const clippedStartStr = leaveStartStr < monthStartStr ? monthStartStr : leaveStartStr;
+        const clippedEndStr = leaveEndStr > monthEndStr ? monthEndStr : leaveEndStr;
+        if (clippedStartStr === leaveStartStr && clippedEndStr === leaveEndStr) {
+          leaveDays += Number(leave.totalDays) || 0;
+          continue;
+        }
+
+        const partialLeave = await calculateWorkingLeaveDays(
+          clippedStartStr,
+          clippedEndStr,
+          leave.isHalfDay && clippedStartStr === clippedEndStr
+        );
+        leaveDays += partialLeave.workingDays;
+      }
+
       // Calculate Attendance Present and LOP Days
       let finalLopDays = 0;
       if (manualLopDays !== undefined && manualLopDays !== null) {
         finalLopDays = Number(manualLopDays) || 0;
       } else {
-        const startDateStr = `${yearNum}-${String(monthNum).padStart(2, "0")}-01`;
+        const startDateStr = monthStartStr;
         const endDateStr = `${yearNum}-${String(monthNum).padStart(2, "0")}-${String(totalDaysInMonth).padStart(2, "0")}`;
 
         const attendanceRecords = await Attendance.find({
@@ -125,10 +159,8 @@ const generateMonthlySalary = async (req, res) => {
         finalLopDays = absentCount + halfDayCount * 0.5;
       }
 
-      const presentDays = Math.max(0, totalDaysInMonth - finalLopDays);
-
-      // Formula 8: DAYS PAYABLE = (Total Working Days / Total Days) * Days Present
-      const daysPayable = Math.round((totalWorkingDays / totalDaysInMonth) * presentDays);
+      const daysPayable = Math.round(totalWorkingDays);
+      const presentDays = Math.max(0, daysPayable - leaveDays - finalLopDays);
 
       // Earnings Components
       const basic = activeStructure.basicSalary || 0;
@@ -229,7 +261,7 @@ const generateMonthlySalary = async (req, res) => {
           workingDays: totalWorkingDays,
           presentDays,
           daysPayable,
-          leaveDays: 0,
+          leaveDays,
           lopDays: finalLopDays,
           perDaySalary: Number(perDaySalary.toFixed(2)),
           lopDeduction,
