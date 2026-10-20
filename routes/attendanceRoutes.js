@@ -15,7 +15,7 @@ const {
   approveAttendance, 
   rejectAttendance,
   getMyAttendanceHistory,
-  getAttendanceByDate,
+  getAttendanceByDate, 
   getSingleAttendance, 
   getMonthlyAttendance,
   getAllAbsentAttendance,

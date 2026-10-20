@@ -10,7 +10,7 @@ const Company = require("../models/Company");
 // =====================================================
 const createSalaryStructure = async (req, res) => {
   try {
-    const {
+    const { 
       employeeId,
       userId,
       companyId, 

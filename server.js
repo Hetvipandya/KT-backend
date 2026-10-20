@@ -252,6 +252,7 @@ app.use('/api/expense', finExpenseRoutes);
 app.use('/api/role', finRoleRoutes);
 
 // FIN Specific Routes
+
 app.use('/api/branch', finBranchRoutes);
 app.use('/api/financial-year', finFinancialYearRoutes);
 app.use('/api/coa', finCoaRoutes);

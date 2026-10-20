@@ -774,7 +774,7 @@ const updateMonthlySalary = async (req, res) => {
       "fixedDeduction",
       "extraDeduction",
       "otherDeductions",
-      "lopDays",
+      "lopDays", 
     ];
     const editableStatuses = ["Draft", "Generated", "pending", "processed"];
     const providedFields = numericFields.filter((field) =>

@@ -247,7 +247,6 @@ const monthlySalarySchema = new mongoose.Schema(
 
     status: {
       type: String,
-      enum: ["Draft", "Generated", "Approved", "Paid", "Cancelled", "pending", "processed", "paid"],
       default: "Generated",
       index: true,
     },

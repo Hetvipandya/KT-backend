@@ -8,7 +8,7 @@ const {
   getMyLeaves,  
   getLeaveBalance,  
   createHoliday,
-  getAllHolidays,  
+  getAllHolidays,   
   getAllLeaves,
   adminApproval,
   calculateLeaveDays,
