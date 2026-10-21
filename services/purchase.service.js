@@ -10,7 +10,7 @@ const shape = (p, detail = false) => {
   const bName = p.branchId && typeof p.branchId === 'object' ? p.branchId.branchName : null;
   const fyLabel = p.financialYearId && typeof p.financialYearId === 'object' ? p.financialYearId.yearLabel : null;
 
-  return {
+  return { 
     id: id(p._id),
     companyId: id(p.companyId),
     branchId: p.branchId ? id(p.branchId?._id || p.branchId) : null,
@@ -55,9 +55,14 @@ const shape = (p, detail = false) => {
           productId: prod ? id(prod._id) : id(line.productId),
           productName: prod?.name || line.description || null,
           productCode: prod?.code || null,
-          hsnCode: prod?.hsn || prod?.sac || null,
-          unit: prod?.unit || null,
-          product: prod ? { id: id(prod._id), name: prod.name, code: prod.code, hsn: prod.hsn } : null,
+          hsnCode: prod?.hsnSacCode || prod?.hsn || prod?.sac || null,
+          unit: prod?.unitOfMeasure || prod?.unit || null,
+          product: prod ? {
+            id: id(prod._id),
+            name: prod.name,
+            code: prod.code,
+            hsn: prod.hsnSacCode || prod.hsn || prod.sac || null
+          } : null,
           taxRateId: taxRateObj ? id(taxRateObj._id) : id(line.taxRateId),
           taxRateName: taxRateObj?.name || null,
           taxRatePercent: taxRateObj?.rate || 0,
@@ -73,7 +78,7 @@ const shape = (p, detail = false) => {
   };
 };
 const postJournal = async (purchase, supplier, userId) => { const payable = supplier.payableAccountId ? await ChartOfAccount.findById(supplier.payableAccountId) : await ChartOfAccount.findOne({ companyId: purchase.companyId, code: '2310', isActive: true, isGroup: false }); const purchaseAccount = await ChartOfAccount.findOne({ companyId: purchase.companyId, code: '5110', isActive: true, isGroup: false }); const gst = purchase.taxTotal > 0 ? await ChartOfAccount.findOne({ companyId: purchase.companyId, code: '1410', isActive: true, isGroup: false }) : null; if (!payable || !purchaseAccount || (purchase.taxTotal > 0 && !gst)) throw fail('Required purchase, input GST, or supplier payable COA account is unavailable', 500, 'PURCHASE_JOURNAL_ENTRY_FAILED'); const lines = [{ accountId: purchaseAccount._id, debit: purchase.subTotal - purchase.discountTotal, credit: 0, remarks: 'Purchase / inventory' }, ...(purchase.taxTotal ? [{ accountId: gst._id, debit: purchase.taxTotal, credit: 0, remarks: 'Input GST' }] : []), { accountId: payable._id, debit: 0, credit: purchase.grandTotal, remarks: 'Supplier payable' }]; return journal.createJournalEntry({ companyId: purchase.companyId, branchId: purchase.branchId || null, financialYearId: purchase.financialYearId, entryDate: purchase.billDate, reference: purchase.billNumber, narration: `Purchase bill ${purchase.billNumber}`, lines }, userId); };
-const createPurchase = async (data, userId) => { validateTotals(data); const supplier = await validateRefs(data); const purchase = await Purchase.create({ ...data, billDate: new Date(data.billDate), dueDate: data.dueDate ? new Date(data.dueDate) : null, status: 'POSTED', createdBy: userId, updatedBy: userId }); try { const entry = await postJournal(purchase, supplier, userId); purchase.journalEntryId = entry._id; await purchase.save(); const populated = await Purchase.findById(purchase._id).populate('supplierId', 'name gstin').populate('branchId', 'branchName').populate('financialYearId', 'yearLabel').lean(); return shape(populated, true); } catch (error) { await Purchase.deleteOne({ _id: purchase._id }); throw error; } };
+const createPurchase = async (data, userId) => { validateTotals(data); const supplier = await validateRefs(data); const purchase = await Purchase.create({ ...data, billDate: new Date(data.billDate), dueDate: data.dueDate ? new Date(data.dueDate) : null, status: 'POSTED', createdBy: userId, updatedBy: userId }); try { const entry = await postJournal(purchase, supplier, userId); purchase.journalEntryId = entry._id; await purchase.save(); const populated = await Purchase.findById(purchase._id).populate('supplierId', 'name gstin').populate('branchId', 'branchName').populate('financialYearId', 'yearLabel').populate('lineItems.productId', 'name code hsnSacCode unitOfMeasure').populate('lineItems.taxRateId', 'name rate type').lean(); return shape(populated, true); } catch (error) { await Purchase.deleteOne({ _id: purchase._id }); throw error; } };
 const listPurchases = async (companyId, q) => { const filter = { companyId }; if (q.branchId) filter.branchId = q.branchId; for (const key of ['supplierId', 'financialYearId', 'status']) if (q[key]) filter[key] = q[key]; if (q.from || q.to) { filter.billDate = {}; if (q.from) filter.billDate.$gte = new Date(q.from); if (q.to) filter.billDate.$lte = new Date(q.to); } if (q.search) filter.$or = [{ billNumber: new RegExp(q.search, 'i') }, { notes: new RegExp(q.search, 'i') }]; const [items, total] = await Promise.all([Purchase.find(filter).populate('supplierId', 'name gstin').populate('branchId', 'branchName').populate('financialYearId', 'yearLabel').sort({ billDate: -1, createdAt: -1 }).skip((q.page - 1) * q.limit).limit(q.limit).lean(), Purchase.countDocuments(filter)]); return { items: items.map((item) => shape(item)), pagination: { page: q.page, limit: q.limit, total } }; };
 const getPurchaseDocument = async (value) => {
   if (!mongoose.isValidObjectId(value)) throw fail('Purchase not found', 404, 'PURCHASE_NOT_FOUND');
@@ -81,7 +86,7 @@ const getPurchaseDocument = async (value) => {
     .populate('supplierId', 'name email phone gstin pan billingAddress shippingAddress contactPerson')
     .populate('branchId', 'branchName code address')
     .populate('financialYearId', 'yearLabel startDate endDate')
-    .populate('lineItems.productId', 'name code hsn sac unit')
+    .populate('lineItems.productId', 'name code hsnSacCode unitOfMeasure')
     .populate('lineItems.taxRateId', 'name rate type')
     .lean();
   if (!purchase) throw fail('Purchase not found', 404, 'PURCHASE_NOT_FOUND');
