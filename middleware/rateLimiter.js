@@ -1,9 +1,27 @@
 const rateLimit = require('express-rate-limit');
 const env = require('../config/env');
+const crypto = require('crypto');
+
+const getRateLimitKey = (req) => {
+  const path = String(req.path || '').toLowerCase();
+  const isLoginRequest = path === '/login' || path.endsWith('/login');
+
+  if (isLoginRequest) {
+    const identifier = String(req.body?.login || req.body?.email || '')
+      .trim()
+      .toLowerCase();
+
+    if (identifier) {
+      return `login:${crypto.createHash('sha256').update(identifier).digest('hex')}`;
+    }
+  }
+
+  return `ip:${req.ip}`;
+};
 
 const createAuthLimiter = () => {
   return rateLimit({ 
-    keyGenerator: (req) => req.ip,
+    keyGenerator: getRateLimitKey,
     windowMs: process.env.RATE_LIMIT_WINDOW_MS
       ? Number(process.env.RATE_LIMIT_WINDOW_MS)
       : (env.RATE_LIMIT_WINDOW_MS || 15 * 60 * 1000),
