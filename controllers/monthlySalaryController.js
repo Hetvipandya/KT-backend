@@ -17,7 +17,7 @@ const monthNames = [
 const getDaysInMonth = (month, year) => {
   return new Date(year, month, 0).getDate(); 
 };
-
+ 
 // =====================================================
 // GENERATE MONTHLY SALARY (HR PAYROLL FORMULA BASED)
 // POST /api/salaries/generate

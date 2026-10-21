@@ -14,7 +14,7 @@ const {
   updateProductSchema
 } = require('../validators/product.validators');
 
-const router = express.Router();
+const router = express.Router(); 
 
 // Apply JWT authentication globally for all product routes
 router.use(authenticate);

@@ -11,7 +11,7 @@ const recalculateMilestoneAndProjectProgress = async (milestoneId, targetProject
       projectId = milestone.projectId;
     }
 
-    const tasks = await Task.find({ milestoneId });
+    const tasks = await Task.find({ milestoneId }); 
     const milestoneProgress =
       tasks.length === 0
         ? 0

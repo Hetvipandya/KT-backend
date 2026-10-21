@@ -47,7 +47,7 @@ const employeePerformanceSchema = new mongoose.Schema(
     feedback: {
       type: String,
       default: "",
-    },
+    }, 
 
     submittedBy: {
       type: mongoose.Schema.Types.ObjectId,

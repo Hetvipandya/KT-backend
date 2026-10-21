@@ -515,7 +515,7 @@ exports.getPerformanceByEmployeeId = async (req, res) => {
       { employeeCode: targetSearchId },
       { email: targetSearchId.toString().toLowerCase() },
       ...(isValidObjId ? [{ userId: targetSearchId }, { userID: targetSearchId }] : []),
-    ];
+    ]; 
     const empData = await safeFindOne(Employee, { $or: empOrCond }, "_id userId userID employeeID employeeCode email");
     if (empData) {
       if (!targetEmployeeIds.includes(empData._id.toString())) {

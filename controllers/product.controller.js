@@ -210,8 +210,10 @@ const updateProduct = async (req, res, next) => {
   try {
     const product = req.product; // cached by middleware
     const updates = req.body;
-
-    if ('companyId' in updates) {
+    if (
+      'companyId' in updates &&
+      String(updates.companyId) !== String(product.companyId)
+    ) {
       return res.status(400).json({
         success: false,
         message: 'companyId cannot be modified after creation',

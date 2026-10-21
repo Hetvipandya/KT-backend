@@ -18,7 +18,7 @@ const recalculateTaskProgress = async (task, previousTask = null) => {
 
   await recalculateMilestoneAndProjectProgress(task.milestoneId, task.projectId);
 };
-
+ 
 const getBaseUrl = (req) => {
   if (process.env.BASE_URL) return process.env.BASE_URL.replace(/\/$/, "");
   if (req) {
@@ -222,7 +222,7 @@ const resolveTasksWithEmployees = async (tasks, req) => {
         name: taskData.assignedTeamLeadUser.name || "",
         email: taskData.assignedTeamLeadUser.email || "",
       };
-    }
+    } 
 
     // Format or resolve assignedEmployee
     if (!taskData.assignedEmployee && rawEmpId && employeeCache.has(rawEmpId)) {
