@@ -38,6 +38,8 @@ describe("purchase line item product names", () => {
     expect(result.lineItems[0]).toEqual(
       expect.objectContaining({
         productId,
+        description: "Printed ID Card",
+        itemDescription: "Without Printed",
         productName: "Printed ID Card",
         productCode: "NFC-001",
         hsnCode: "39204900",

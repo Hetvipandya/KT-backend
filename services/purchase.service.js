@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const Purchase = require('../models/Purchase'); const PurchaseOrder = require('../models/PurchaseOrder'); const PurchaseReturn = require('../models/PurchaseReturn'); const Supplier = require('../models/Supplier'); const FinancialYear = require('../models/FinancialYear'); const Tax = require('../models/Tax'); const ChartOfAccount = require('../models/ChartOfAccount'); const journal = require('./journalEntry.service');
+require('../models/Product');
 const EPSILON = 0.01; const id = (value) => { if (!value) return null; if (typeof value === 'object' && value._id) return value._id.toString(); return value.toString(); }; const fail = (message, statusCode = 400, errorCode) => Object.assign(new Error(message), { statusCode, errorCode });
 const validateTotals = (data) => { const sub = data.lineItems.reduce((sum, item) => sum + item.amount, 0); const tax = data.lineItems.reduce((sum, item) => sum + item.taxAmount, 0); if (Math.abs(data.subTotal - sub) > EPSILON || Math.abs(data.taxTotal - tax) > EPSILON || Math.abs(data.grandTotal - (data.subTotal - data.discountTotal + data.taxTotal + data.roundOff)) > EPSILON || data.balanceDue - data.grandTotal > EPSILON) throw fail('Purchase totals are inconsistent', 400, 'INVALID_TOTALS'); for (const line of data.lineItems) if (Math.abs(line.totalAmount - (line.amount + line.taxAmount)) > EPSILON) throw fail('Purchase line total is inconsistent', 400, 'INVALID_LINE_TOTAL'); };
 const validateRefs = async (data) => { const fy = await FinancialYear.findById(data.financialYearId); if (!fy || id(fy.companyId) !== id(data.companyId)) throw fail('Financial year does not belong to the specified company', 400, 'INVALID_FINANCIAL_YEAR_COMPANY'); if (fy.isLocked) throw fail('Cannot create purchase in a locked financial year', 409, 'FINANCIAL_YEAR_LOCKED'); const billDate = new Date(data.billDate); if (billDate < fy.startDate || billDate > fy.endDate) throw fail('billDate must fall within the selected financial year', 400, 'BILL_DATE_OUTSIDE_FINANCIAL_YEAR'); const supplier = await Supplier.findOne({ _id: data.supplierId, companyId: data.companyId, isActive: true }); if (!supplier) throw fail('Supplier not found for this company', 404, 'SUPPLIER_NOT_FOUND'); if (data.purchaseOrderId) { const po = await PurchaseOrder.findOne({ _id: data.purchaseOrderId, companyId: data.companyId, supplierId: data.supplierId }); if (!po) { throw fail('Purchase order not found for this company and supplier.', 404); } if (po.status !== 'APPROVED') { throw fail('This purchase order is pending approval or has been rejected. Purchase bill cannot be created.', 400); } } const taxes = [...new Set(data.lineItems.filter((line) => line.taxRateId).map((line) => line.taxRateId))]; if (taxes.length && await Tax.countDocuments({ _id: { $in: taxes }, companyId: data.companyId, isActive: true }) !== taxes.length) throw fail('One or more tax rates are invalid for this company', 400, 'INVALID_TAX_RATE'); return supplier; };
@@ -50,10 +51,13 @@ const shape = (p, detail = false) => {
       lineItems: (p.lineItems || []).map((line) => {
         const prod = line.productId && typeof line.productId === 'object' ? line.productId : null;
         const taxRateObj = line.taxRateId && typeof line.taxRateId === 'object' ? line.taxRateId : null;
+        const productName = prod?.name || null;
         return {
           ...line,
           productId: prod ? id(prod._id) : id(line.productId),
-          productName: prod?.name || line.description || null,
+          description: productName || line.description || '',
+          itemDescription: line.description || '',
+          productName: productName || line.description || null,
           productCode: prod?.code || null,
           hsnCode: prod?.hsnSacCode || prod?.hsn || prod?.sac || null,
           unit: prod?.unitOfMeasure || prod?.unit || null,
