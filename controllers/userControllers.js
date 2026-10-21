@@ -19,6 +19,7 @@ const {
   buildResetPasswordEmailContent,
 } = require("../services/email.templates");
 const sanitizeUserUpdatePayload = require("../utils/userPayloadSanitizer");
+const { isEmployeeLoginBlocked } = require("../utils/employeeLoginStatus");
 
 const buildLoginLookupQuery = (loginInput) => {
   const normalized = String(loginInput || "").trim();
@@ -1594,6 +1595,13 @@ const loginUser = async (req, res) => {
       return res.status(403).json({
         success: false,
         message: "Your account is inactive",
+      });
+    }
+
+    if (await isEmployeeLoginBlocked(user)) {
+      return res.status(403).json({
+        success: false,
+        message: "Your account is not eligible to log in due to resignation or exit",
       });
     }
 

@@ -8,7 +8,7 @@ const addressSchema = new mongoose.Schema(
     state: { type: String, trim: true, default: '' },
     pincode: { type: String, trim: true, default: '' },
     country: { type: String, trim: true, default: 'India' }
-  },
+  }, 
   { _id: false }
 ); 
  

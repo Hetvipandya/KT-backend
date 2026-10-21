@@ -13,7 +13,7 @@ exports.applyLeave = async (req, res) => {
       leaveType,
       startDate,
       endDate,
-      reason,
+      reason, 
       isHalfDay,
       halfDayType,
     } = req.body;

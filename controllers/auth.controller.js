@@ -19,6 +19,7 @@ const auditLogService = require("../services/auditLog.service");
 const env = require("../config/env");
 const crypto = require("crypto");
 const pino = require("pino");
+const { isEmployeeLoginBlocked } = require("../utils/employeeLoginStatus");
 
 const logger = pino({
   transport:
@@ -197,6 +198,13 @@ const login = async (req, res, next) => {
       return res.status(403).json({
         success: false,
         message: "Your account is inactive",
+      });
+    }
+
+    if (await isEmployeeLoginBlocked(user)) {
+      return res.status(403).json({
+        success: false,
+        message: "Your account is not eligible to log in due to resignation or exit",
       });
     }
 

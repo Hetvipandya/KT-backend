@@ -701,7 +701,7 @@ exports.addEmployee = async (req, res) => {
       const uploadRes = await uploadProfileImage(rawProfileImg, employeeID || email);
       finalProfileImgUrl = uploadRes.secure_url || String(rawProfileImg).trim();
     }
-
+ 
     // ✅ CREATE EMPLOYEE
     const employee = await Employee.create({
       ...req.body,
