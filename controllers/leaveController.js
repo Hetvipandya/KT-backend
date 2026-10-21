@@ -3,6 +3,7 @@ const LeaveBalance = require("../models/LeaveBalance");
 const Holiday = require("../models/Holiday");
 const User = require("../models/User");
 const { calculateWorkingLeaveDays, toDateString } = require("../utils/leaveUtils");
+const { getTeamLeadForUser } = require("../utils/teamLeadLookup");
 
 // ================= APPLY LEAVE =================
 exports.applyLeave = async (req, res) => {
@@ -156,13 +157,22 @@ exports.applyLeave = async (req, res) => {
     }
 
     const applierRole = (req.user && req.user.role) ? req.user.role : user.role;
+    const normalizedRole = String(user.role || applierRole || "")
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, " ");
+    const isEmployeeOrIntern = ["employee", "intern"].includes(normalizedRole);
+    const hasAssignedTeamLead =
+      !isEmployeeOrIntern || Boolean(await getTeamLeadForUser(userId));
 
     const leaveStatus =
       user.role === "team lead" || applierRole === "team lead"
         ? "pending_hr"
-        : user.role === "hr" || applierRole === "hr"
-          ? "pending_admin"
-          : "pending";
+        : isEmployeeOrIntern && !hasAssignedTeamLead
+          ? "pending_hr"
+          : user.role === "hr" || applierRole === "hr"
+            ? "pending_admin"
+            : "pending";
 
     const leave = await Leave.create({
       employeeId: userId,
@@ -177,7 +187,12 @@ exports.applyLeave = async (req, res) => {
       // Team Lead leave goes directly to HR and HR leave goes directly to Admin
       status: leaveStatus,
       teamLeadStatus:
-        user.role === "team lead" || applierRole === "team lead" || user.role === "hr" ? "skipped" : "pending",
+        user.role === "team lead" ||
+        applierRole === "team lead" ||
+        user.role === "hr" ||
+        (isEmployeeOrIntern && !hasAssignedTeamLead)
+          ? "skipped"
+          : "pending",
       hrStatus: "pending",
     });
 
@@ -546,10 +561,10 @@ exports.hrApproval = async (req, res) => {
     else {
       console.log("👤 Employee / Intern Leave");
 
-      if (leave.teamLeadStatus !== "approved") {
+      if (!["approved", "skipped"].includes(leave.teamLeadStatus)) {
         return res.status(400).json({
           success: false,
-          message: "Leave must be approved by Team Lead first",
+          message: "Leave must be approved by Team Lead first unless no Team Lead is assigned",
         });
       }
     }

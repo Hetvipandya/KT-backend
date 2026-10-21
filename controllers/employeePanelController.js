@@ -22,6 +22,7 @@ const {
   isBreakStartActive,
 } = require("../utils/geofence");
 const { calculateWorkingLeaveDays, toDateString } = require("../utils/leaveUtils");
+const { getTeamLeadForUser } = require("../utils/teamLeadLookup");
 const { calculateBreakTimerState } = require("./attendanceController");
 const { buildAttendanceTimeline } = require("../utils/attendanceTimeline");
 
@@ -1346,6 +1347,14 @@ exports.applyEmployeeLeaveRequest = async (req, res) => {
       });
     }
 
+    const normalizedRole = String(user.role || "")
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, " ");
+    const isEmployeeOrIntern = ["employee", "intern"].includes(normalizedRole);
+    const hasAssignedTeamLead =
+      !isEmployeeOrIntern || Boolean(await getTeamLeadForUser(userId));
+
     const leave = await Leave.create({
       employeeId: userId,
       applicantRole: user.role,
@@ -1357,8 +1366,16 @@ exports.applyEmployeeLeaveRequest = async (req, res) => {
       halfDayType: normalizedHalfDayType,
       reason: reason || req.body.remark || "",
       attachment: attachment || "",
-      status: user.role === "team lead" ? "pending_hr" : "pending",
-      teamLeadStatus: user.role === "team lead" ? "skipped" : "pending",
+      status:
+        user.role === "team lead" ||
+        (isEmployeeOrIntern && !hasAssignedTeamLead)
+          ? "pending_hr"
+          : "pending",
+      teamLeadStatus:
+        user.role === "team lead" ||
+        (isEmployeeOrIntern && !hasAssignedTeamLead)
+          ? "skipped"
+          : "pending",
       hrStatus: "pending",
     });
 
