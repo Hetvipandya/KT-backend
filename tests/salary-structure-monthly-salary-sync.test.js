@@ -1,10 +1,12 @@
 const mongoose = require("mongoose");
+const express = require("express");
+const request = require("supertest");
 const { MongoMemoryServer } = require("mongodb-memory-server");
 const SalaryStructure = require("../models/SalaryStructure");
 const MonthlySalary = require("../models/MonthlySalary");
 const Payslip = require("../models/Payslip");
 const User = require("../models/User");
-const salaryStructureController = require("../controllers/salaryStructureController");
+const payrollRoutes = require("../routes/payrollRoutes");
 
 let mongoServer;
 
@@ -27,7 +29,7 @@ describe("SalaryStructure update propagation to MonthlySalary and Payslip", () =
     await User.deleteMany({});
   });
 
-  test("editing HRA or other fields in SalaryStructure immediately reflects in MonthlySalary and Payslip", async () => {
+  test("updating any salary structure field through payroll API syncs all unpaid monthly salary fields and payslip", async () => {
     const user = await User.create({
       name: "Test Employee",
       email: "test-emp@example.com",
@@ -61,49 +63,67 @@ describe("SalaryStructure update propagation to MonthlySalary and Payslip", () =
       year: 2026,
       salaryStructureId: structure._id,
       basicSalary: 5000,
-      hra: 1000,
+      hra: 2000,
       specialAllowance: 1000,
-      grossSalary: 7000,
-      netSalary: 7000,
+      grossSalary: 8000,
+      netSalary: 8000,
       status: "Generated",
     });
+    const paidMonthlySalary = await MonthlySalary.create({
+      userId: user._id,
+      employeeId: user._id,
+      month: 9,
+      year: 2026,
+      salaryStructureId: structure._id,
+      basicSalary: 5000,
+      hra: 2000,
+      specialAllowance: 1000,
+      grossSalary: 8000,
+      netSalary: 8000,
+      status: "Paid",
+    });
 
-    expect(monthlySalary.hra).toBe(1000);
-    expect(monthlySalary.grossSalary).toBe(7000);
+    expect(monthlySalary.hra).toBe(2000);
+    expect(monthlySalary.grossSalary).toBe(8000);
 
-    // 3. Edit HRA in SalaryStructure from 1000 to 2500 using controller update
-    const req = {
-      params: { id: structure._id.toString() },
-      body: { hra: 2500 },
-      user: { _id: user._id },
-    };
-    const res = {
-      status: jest.fn().mockReturnThis(),
-      json: jest.fn(),
-    };
+    const app = express();
+    app.use(express.json());
+    app.use((req, res, next) => {
+      req.user = { _id: user._id, role: "admin" };
+      next();
+    });
+    app.use("/api/payroll", payrollRoutes);
 
-    await salaryStructureController.updateSalaryStructure(req, res);
+    const res = await request(app)
+      .put(`/api/payroll/update-salary/${structure._id}`)
+      .send({ basicSalary: 5500 });
 
-    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.status).toBe(200);
 
     // 4. Verify SalaryStructure updated
     const updatedStructure = await SalaryStructure.findById(structure._id);
-    expect(updatedStructure.hra).toBe(2500);
-    expect(updatedStructure.grossSalary).toBe(8500); // 5000 + 2500 + 1000
+    expect(updatedStructure.basicSalary).toBe(5500);
+    expect(updatedStructure.hra).toBe(1000);
+    expect(updatedStructure.grossSalary).toBe(7500);
 
-    // 5. Verify MonthlySalary was automatically updated with new HRA & grossSalary
+    // 5. Verify MonthlySalary reflects both the changed and unchanged structure values
     const updatedMonthlySalary = await MonthlySalary.findById(monthlySalary._id);
-    expect(updatedMonthlySalary.hra).toBe(2500);
-    expect(updatedMonthlySalary.grossSalary).toBe(8500);
-    expect(updatedMonthlySalary.netSalary).toBe(8500);
+    expect(updatedMonthlySalary.basicSalary).toBe(5500);
+    expect(updatedMonthlySalary.hra).toBe(1000);
+    expect(updatedMonthlySalary.grossSalary).toBe(7500);
+    expect(updatedMonthlySalary.netSalary).toBe(7500);
+    const unchangedPaidSalary = await MonthlySalary.findById(paidMonthlySalary._id);
+    expect(unchangedPaidSalary.hra).toBe(2000);
+    expect(unchangedPaidSalary.basicSalary).toBe(5000);
 
     // 6. Verify Payslip was also updated
     const payslipDoc = await Payslip.findOne({ payrollId: monthlySalary._id });
     expect(payslipDoc).toBeDefined();
     expect(payslipDoc).not.toBeNull();
-    expect(payslipDoc.hra).toBe(2500);
-    expect(payslipDoc.grossSalary).toBe(8500);
-    expect(payslipDoc.netSalary).toBe(8500);
+    expect(payslipDoc.basicSalary).toBe(5500);
+    expect(payslipDoc.hra).toBe(1000);
+    expect(payslipDoc.grossSalary).toBe(7500);
+    expect(payslipDoc.netSalary).toBe(7500);
   });
 
   test("editing basicSalary in SalaryStructure propagates to MonthlySalary and recalculates statutory deductions", async () => {

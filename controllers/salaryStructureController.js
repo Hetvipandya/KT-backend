@@ -652,11 +652,6 @@ const updateSalaryStructure = async (req, res) => {
 
       await newStructure.save();
 
-      try {
-        const { syncSalaryStructureToMonthlySalaries } = require("../models/SalaryStructure");
-        await syncSalaryStructureToMonthlySalaries(newStructure);
-      } catch (_) {}
-
       let populatedNew = await SalaryStructure.findById(newStructure._id);
       if (populatedNew && typeof populatedNew.populate === "function") {
         populatedNew = await populatedNew.populate(
@@ -698,11 +693,6 @@ const updateSalaryStructure = async (req, res) => {
     if (req.user) existingStructure.updatedBy = req.user._id;
 
     await existingStructure.save();
-
-    try {
-      const { syncSalaryStructureToMonthlySalaries } = require("../models/SalaryStructure");
-      await syncSalaryStructureToMonthlySalaries(existingStructure);
-    } catch (_) {}
 
     let populatedUpdated = await SalaryStructure.findById(existingStructure._id);
     if (populatedUpdated && typeof populatedUpdated.populate === "function") {

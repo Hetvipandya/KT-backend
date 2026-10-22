@@ -8,7 +8,7 @@ const {
   getSalaryStructureByUserId,
   updateSalaryStructure, 
   processPayroll,
-  approvePayroll,
+  approvePayroll, 
   approveMonthlySalary,
   generatePayslip,  
   getPayroll, 

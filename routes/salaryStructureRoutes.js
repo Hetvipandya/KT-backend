@@ -4,7 +4,7 @@ const { protect } = require("../middleware/authMiddleware");
 const { authorizeRoles } = require("../middleware/roleMiddleware");
 
 const {
-  createSalaryStructure,
+  createSalaryStructure, 
   getAllSalaryStructures,
   getSalaryStructureById,
   updateSalaryStructure, 
