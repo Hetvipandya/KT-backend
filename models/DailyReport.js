@@ -17,7 +17,7 @@ const parseHoursWorked = (val) => {
     return isNaN(num) ? val : Math.round(num * 100) / 100;
   }
   return val;
-};
+}; 
 
 const dailyReportSchema =
   new mongoose.Schema(
@@ -76,12 +76,6 @@ const dailyReportSchema =
 
       remarks: {
         type: String,
-      },
-
-      status: {
-        type: String,
-        enum: ["Pending", "Under Review", "Approved", "Rejected"],
-        default: "Pending",
       },
 
       reviewedBy: {

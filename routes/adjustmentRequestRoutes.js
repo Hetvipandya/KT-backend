@@ -9,7 +9,7 @@ const {
 } = require("../controllers/adjustmentRequestController");
 
 
-// Partial update
+// Partial update 
 router.patch("/update/:employeeId/:date", patchAttendanceAdjustment);
 router.patch("/update", patchAttendanceAdjustment);
 
