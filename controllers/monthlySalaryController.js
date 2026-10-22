@@ -38,7 +38,7 @@ const generateMonthlySalary = async (req, res) => {
       extraBonus = 0,
       extraDeduction = 0,
       remarks = "",
-    } = req.body;
+    } = req.body; 
 
     if (!month || !year) {
       return res.status(400).json({

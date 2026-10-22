@@ -15,7 +15,7 @@ const createSalaryStructure = async (req, res) => {
       employeeId,
       userId,
       companyId, 
-      branchId,
+      branchId, 
       financialYearId,
       effectiveFrom,
       basicSalary,

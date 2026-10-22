@@ -147,6 +147,79 @@ describe("SalaryStructure update propagation to MonthlySalary and Payslip", () =
     expect(payslipDoc.netSalary).toBe(7500);
   });
 
+  test("syncs paid monthly payroll calculations to the selected structure, including bonus and statutory deductions", async () => {
+    const user = await User.create({
+      name: "Payroll Calculation Employee",
+      email: "payroll-calculation@example.com",
+      phoneNumber: "9876543222",
+      password: "Password123!",
+      role: "employee",
+    });
+    const structure = await SalaryStructure.create({
+      userId: user._id,
+      employeeId: user._id,
+      basicSalary: 5000,
+      hra: 1000,
+      fixedBonus: 1000,
+      autoCalculateStatutory: true,
+      isActive: true,
+    });
+    const monthlySalary = await MonthlySalary.create({
+      userId: user._id,
+      employeeId: user._id,
+      month: 9,
+      year: 2026,
+      salaryStructureId: structure._id,
+      basicSalary: 5000,
+      hra: 1000,
+      fixedBonus: 500,
+      grossSalary: 6500,
+      basicForPf: 5000,
+      pfDeduction: 600,
+      esicDeduction: 49,
+      totalDeduction: 649,
+      netSalary: 5851,
+      totalDays: 30,
+      lopDays: 0,
+      perDaySalary: 250,
+      status: "Paid",
+      paidAt: new Date(),
+    });
+
+    const app = express();
+    app.use(express.json());
+    app.use((req, res, next) => {
+      req.user = { _id: user._id, role: "admin" };
+      next();
+    });
+    app.use("/api/payroll", payrollRoutes);
+
+    const response = await request(app)
+      .put(`/api/payroll/update-salary/${structure._id}`)
+      .send({
+        fixedBonus: 1000,
+        monthlySalaryId: monthlySalary._id.toString(),
+      });
+
+    expect(response.status).toBe(200);
+
+    const syncedSalary = await MonthlySalary.findById(monthlySalary._id);
+    expect(syncedSalary.fixedBonus).toBe(1000);
+    expect(syncedSalary.grossSalary).toBe(7000);
+    expect(syncedSalary.pfDeduction).toBe(600);
+    expect(syncedSalary.esicDeduction).toBe(53);
+    expect(syncedSalary.totalDeduction).toBe(653);
+    expect(syncedSalary.netSalary).toBe(6347);
+    expect(syncedSalary.perDaySalary).toBe(233.33);
+    expect(syncedSalary.status).toBe("Paid");
+
+    const payslip = await Payslip.findOne({ payrollId: monthlySalary._id });
+    expect(payslip.fixedBonus).toBe(1000);
+    expect(payslip.grossSalary).toBe(7000);
+    expect(payslip.esicDeduction).toBe(53);
+    expect(payslip.netSalary).toBe(6347);
+  });
+
   test("editing basicSalary in SalaryStructure propagates to MonthlySalary and recalculates statutory deductions", async () => {
     const user = await User.create({
       name: "Statutory Employee",
