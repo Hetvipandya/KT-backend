@@ -93,6 +93,54 @@ describe('Team Lead Employee Feedback & Restricted Performance Access', () => {
     expect(res.body.data.evaluatorRole).toBe('team lead');
   });
 
+  it('updates all performance fields including feedback and remarks', async () => {
+    const performanceId = new mongoose.Types.ObjectId();
+    const updatedPerformance = {
+      _id: performanceId,
+      performancePercentage: 0,
+      rating: 0,
+      feedback: 'Updated feedback',
+      remarks: 'Updated remarks',
+    };
+    jest.spyOn(EmployeePerformance, 'findByIdAndUpdate').mockResolvedValue(updatedPerformance);
+
+    app = express();
+    app.use(express.json());
+    app.use((req, res, next) => {
+      req.user = hrUser;
+      next();
+    });
+    app.use('/api/performance', performanceRoutes);
+
+    const res = await request(app)
+      .put(`/api/performance/update/${performanceId}`)
+      .send({
+        performancePercentage: 0,
+        rating: 0,
+        feedback: 'Updated feedback',
+        remarks: 'Updated remarks',
+      });
+
+    expect(res.status).toBe(200);
+      expect(res.body.data).toMatchObject({
+        performancePercentage: 0,
+        rating: 0,
+        feedback: 'Updated feedback',
+        remarks: 'Updated remarks',
+      });
+      expect(res.body.data._id).toBe(performanceId.toString());
+    expect(EmployeePerformance.findByIdAndUpdate).toHaveBeenCalledWith(
+      performanceId.toString(),
+      {
+        performancePercentage: 0,
+        rating: 0,
+        feedback: 'Updated feedback',
+        remarks: 'Updated remarks',
+      },
+      { new: true, runValidators: true },
+    );
+  });
+
   it('allows HR and Admin to view performance feedback', async () => {
     const mockQuery = {
       populate: jest.fn().mockReturnThis(),

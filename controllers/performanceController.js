@@ -644,16 +644,16 @@ exports.getPerformanceByEmployeeId = async (req, res) => {
 // Update Performance
 // =============================
 exports.updatePerformance = async (req, res) => {
+
   try {
     const {
       performancePercentage,
+      rating,
+      feedback,
       remarks,
     } = req.body;
 
-    // ==========================================
-    // Validate Performance Percentage
-    // ==========================================
-    let updateData = {};
+    const updateData = {};
 
     if (
       performancePercentage !== undefined &&
@@ -677,16 +677,33 @@ exports.updatePerformance = async (req, res) => {
       updateData.performancePercentage = percentage;
     }
 
-    // ==========================================
-    // Update Remarks
-    // ==========================================
-    if (remarks !== undefined) {
-      updateData.remarks = remarks;
+    if (rating !== undefined && rating !== null && rating !== "") {
+      const numericRating = Number(rating);
+      if (Number.isNaN(numericRating) || numericRating < 0 || numericRating > 10) {
+        return res.status(400).json({
+          success: false,
+          message: "Rating must be between 0 and 10.",
+        });
+      }
+      updateData.rating = numericRating;
     }
 
-    // ==========================================
-    // Update Performance
-    // ==========================================
+    if (feedback !== undefined) {
+      updateData.feedback = feedback;
+      if (remarks === undefined) updateData.remarks = feedback;
+    }
+    if (remarks !== undefined) {
+      updateData.remarks = remarks;
+      if (feedback === undefined) updateData.feedback = remarks;
+    }
+
+    if (Object.keys(updateData).length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "At least one performance field must be provided.",
+      });
+    }
+
     const performance =
       await EmployeePerformance.findByIdAndUpdate(
         req.params.id,
