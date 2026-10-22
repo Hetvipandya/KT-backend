@@ -83,6 +83,20 @@ describe("SalaryStructure update propagation to MonthlySalary and Payslip", () =
       status: "Generated",
       paidAt: new Date(),
     });
+    const otherPaidMonthlySalary = await MonthlySalary.create({
+      userId: user._id,
+      employeeId: user._id,
+      month: 8,
+      year: 2026,
+      salaryStructureId: structure._id,
+      basicSalary: 5000,
+      hra: 3000,
+      specialAllowance: 1000,
+      grossSalary: 9000,
+      netSalary: 9000,
+      status: "Paid",
+      paidAt: new Date(),
+    });
 
     expect(monthlySalary.hra).toBe(2000);
     expect(monthlySalary.grossSalary).toBe(8000);
@@ -97,7 +111,10 @@ describe("SalaryStructure update propagation to MonthlySalary and Payslip", () =
 
     const res = await request(app)
       .put(`/api/payroll/update-salary/${structure._id}`)
-      .send({ basicSalary: 5500 });
+      .send({
+        basicSalary: 5500,
+        monthlySalaryId: paidMonthlySalary._id.toString(),
+      });
 
     expect(res.status).toBe(200);
 
@@ -113,9 +130,12 @@ describe("SalaryStructure update propagation to MonthlySalary and Payslip", () =
     expect(updatedMonthlySalary.hra).toBe(1000);
     expect(updatedMonthlySalary.grossSalary).toBe(7500);
     expect(updatedMonthlySalary.netSalary).toBe(7500);
-    const unchangedPaidSalary = await MonthlySalary.findById(paidMonthlySalary._id);
-    expect(unchangedPaidSalary.hra).toBe(2000);
-    expect(unchangedPaidSalary.basicSalary).toBe(5000);
+    const explicitlyUpdatedPaidSalary = await MonthlySalary.findById(paidMonthlySalary._id);
+    expect(explicitlyUpdatedPaidSalary.hra).toBe(1000);
+    expect(explicitlyUpdatedPaidSalary.basicSalary).toBe(5500);
+    const unchangedOtherPaidSalary = await MonthlySalary.findById(otherPaidMonthlySalary._id);
+    expect(unchangedOtherPaidSalary.hra).toBe(3000);
+    expect(unchangedOtherPaidSalary.basicSalary).toBe(5000);
 
     // 6. Verify Payslip was also updated
     const payslipDoc = await Payslip.findOne({ payrollId: monthlySalary._id });

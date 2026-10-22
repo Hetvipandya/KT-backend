@@ -1,5 +1,6 @@
 const mongoose = require("mongoose");
 const SalaryStructure = require("../models/SalaryStructure");
+const { syncSalaryStructureToMonthlySalaries } = require("../models/SalaryStructure");
 const User = require("../models/User");
 const Employee = require("../models/Employee");
 const Company = require("../models/Company");
@@ -592,6 +593,7 @@ const updateSalaryStructure = async (req, res) => {
 
     const {
       createNewVersion = false,
+      monthlySalaryId,
       effectiveFrom,
       basicSalary,
       hra,
@@ -615,6 +617,13 @@ const updateSalaryStructure = async (req, res) => {
       autoCalculateStatutory,
       isActive,
     } = req.body;
+
+    if (monthlySalaryId && !mongoose.Types.ObjectId.isValid(monthlySalaryId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid monthlySalaryId",
+      });
+    }
 
     if (createNewVersion && existingStructure.isActive) {
       existingStructure.isActive = false;
@@ -651,6 +660,11 @@ const updateSalaryStructure = async (req, res) => {
       });
 
       await newStructure.save();
+      if (monthlySalaryId) {
+        await syncSalaryStructureToMonthlySalaries(newStructure, {
+          includePaidSalaryId: monthlySalaryId,
+        });
+      }
 
       let populatedNew = await SalaryStructure.findById(newStructure._id);
       if (populatedNew && typeof populatedNew.populate === "function") {
@@ -693,6 +707,11 @@ const updateSalaryStructure = async (req, res) => {
     if (req.user) existingStructure.updatedBy = req.user._id;
 
     await existingStructure.save();
+    if (monthlySalaryId) {
+      await syncSalaryStructureToMonthlySalaries(existingStructure, {
+        includePaidSalaryId: monthlySalaryId,
+      });
+    }
 
     let populatedUpdated = await SalaryStructure.findById(existingStructure._id);
     if (populatedUpdated && typeof populatedUpdated.populate === "function") {

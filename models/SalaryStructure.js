@@ -261,7 +261,7 @@ salaryStructureSchema.pre("save", async function () {
 /**
  * Sync changes from SalaryStructure to any un-paid MonthlySalary records for this employee
  */
-const syncSalaryStructureToMonthlySalaries = async (structure) => {
+const syncSalaryStructureToMonthlySalaries = async (structure, options = {}) => {
   if (!structure?._id) {
     throw new Error("Cannot sync MonthlySalary without a saved SalaryStructure.");
   }
@@ -276,7 +276,7 @@ const syncSalaryStructureToMonthlySalaries = async (structure) => {
     throw new Error("Cannot sync MonthlySalary without a SalaryStructure employee.");
   }
 
-  const query = {
+  const employeeSalaryQuery = {
     $or: [
       { salaryStructureId: structure._id },
       ...targetEmployeeIds.flatMap((employeeId) => [
@@ -284,8 +284,10 @@ const syncSalaryStructureToMonthlySalaries = async (structure) => {
         { employeeId },
       ]),
     ],
-    status: { $nin: ["Paid", "paid", "PAID"] },
+  };
+  const unpaidSalaryQuery = {
     $and: [
+      { status: { $nin: ["Paid", "paid", "PAID"] } },
       {
         $or: [
           { paidAt: null },
@@ -293,6 +295,17 @@ const syncSalaryStructureToMonthlySalaries = async (structure) => {
         ],
       },
     ],
+  };
+  const eligibleSalaryQuery = options.includePaidSalaryId
+    ? {
+        $or: [
+          unpaidSalaryQuery,
+          { _id: options.includePaidSalaryId },
+        ],
+      }
+    : unpaidSalaryQuery;
+  const query = {
+    $and: [employeeSalaryQuery, eligibleSalaryQuery],
   };
 
   const matchingSalaries = await MonthlySalary.find(query);
