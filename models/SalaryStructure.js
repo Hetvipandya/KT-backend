@@ -285,6 +285,14 @@ const syncSalaryStructureToMonthlySalaries = async (structure) => {
       ]),
     ],
     status: { $nin: ["Paid", "paid", "PAID"] },
+    $and: [
+      {
+        $or: [
+          { paidAt: null },
+          { paidAt: { $exists: false } },
+        ],
+      },
+    ],
   };
 
   const matchingSalaries = await MonthlySalary.find(query);

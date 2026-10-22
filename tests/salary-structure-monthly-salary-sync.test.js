@@ -80,7 +80,8 @@ describe("SalaryStructure update propagation to MonthlySalary and Payslip", () =
       specialAllowance: 1000,
       grossSalary: 8000,
       netSalary: 8000,
-      status: "Paid",
+      status: "Generated",
+      paidAt: new Date(),
     });
 
     expect(monthlySalary.hra).toBe(2000);
