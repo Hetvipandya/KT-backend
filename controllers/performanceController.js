@@ -704,6 +704,75 @@ exports.updatePerformance = async (req, res) => {
       });
     }
 
+    const existingPerformance = await EmployeePerformance.findById(req.params.id);
+    if (!existingPerformance) {
+      return res.status(404).json({
+        success: false,
+        message: "Performance not found",
+      });
+    }
+
+    const userRole = (req.user?.role || "").toLowerCase().replace(/[_\s]+/g, "");
+    if (userRole === "teamlead" || userRole === "teamleader") {
+      const user = req.user;
+      const ownIdentifiers = [
+        user?._id,
+        user?.id,
+        user?.employeeID,
+        user?.employeeId,
+        user?.uniqueID,
+      ]
+        .filter(Boolean)
+        .map((identifier) => identifier.toString().toLowerCase());
+      const ownEmails = user?.email ? [user.email.toLowerCase()] : [];
+      const employeeLookup = [];
+
+      if (user?._id) {
+        employeeLookup.push({ userId: user._id }, { userID: user._id });
+      }
+      if (user?.email) employeeLookup.push({ email: user.email.toLowerCase() });
+      if (user?.uniqueID) {
+        employeeLookup.push(
+          { employeeID: user.uniqueID },
+          { employeeCode: user.uniqueID },
+        );
+      }
+
+      const performanceEmployeeId = existingPerformance.employeeID?._id ||
+        existingPerformance.employeeID;
+      const performanceEmployeeIdValue = performanceEmployeeId
+        ? performanceEmployeeId.toString().toLowerCase()
+        : null;
+      let isOwnPerformance = ownIdentifiers.includes(performanceEmployeeIdValue) ||
+        ownEmails.includes((existingPerformance.employeeEmail || "").toLowerCase());
+
+      if (!isOwnPerformance && employeeLookup.length > 0) {
+        const linkedEmployee = await Employee.findOne({
+          $or: employeeLookup,
+        }).select("_id employeeID employeeCode userId userID email");
+
+        if (linkedEmployee) {
+          const linkedIdentifiers = [
+            linkedEmployee._id,
+            linkedEmployee.employeeID,
+            linkedEmployee.employeeCode,
+            linkedEmployee.userId,
+            linkedEmployee.userID,
+          ]
+            .filter(Boolean)
+            .map((identifier) => identifier.toString().toLowerCase());
+          isOwnPerformance = linkedIdentifiers.includes(performanceEmployeeIdValue);
+        }
+      }
+
+      if (isOwnPerformance) {
+        return res.status(403).json({
+          success: false,
+          message: "Team Leads cannot edit their own performance.",
+        });
+      }
+    }
+
     const performance =
       await EmployeePerformance.findByIdAndUpdate(
         req.params.id,

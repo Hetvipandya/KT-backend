@@ -14,7 +14,7 @@ const employeePerformanceSchema = new mongoose.Schema(
       default: "employee",
     },
 
-    employeeName: {
+    employeeName: { 
       type: String,
       default: "",
     },

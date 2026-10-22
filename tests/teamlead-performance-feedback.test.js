@@ -103,6 +103,7 @@ describe('Team Lead Employee Feedback & Restricted Performance Access', () => {
       remarks: 'Updated remarks',
     };
     jest.spyOn(EmployeePerformance, 'findByIdAndUpdate').mockResolvedValue(updatedPerformance);
+    jest.spyOn(EmployeePerformance, 'findById').mockResolvedValue(updatedPerformance);
 
     app = express();
     app.use(express.json());
@@ -122,13 +123,13 @@ describe('Team Lead Employee Feedback & Restricted Performance Access', () => {
       });
 
     expect(res.status).toBe(200);
-      expect(res.body.data).toMatchObject({
-        performancePercentage: 0,
-        rating: 0,
-        feedback: 'Updated feedback',
-        remarks: 'Updated remarks',
-      });
-      expect(res.body.data._id).toBe(performanceId.toString());
+    expect(res.body.data).toMatchObject({
+      performancePercentage: 0,
+      rating: 0,
+      feedback: 'Updated feedback',
+      remarks: 'Updated remarks',
+    });
+    expect(res.body.data._id).toBe(performanceId.toString());
     expect(EmployeePerformance.findByIdAndUpdate).toHaveBeenCalledWith(
       performanceId.toString(),
       {
@@ -139,6 +140,101 @@ describe('Team Lead Employee Feedback & Restricted Performance Access', () => {
       },
       { new: true, runValidators: true },
     );
+  });
+
+  it('prevents Team Leads from editing their own performance', async () => {
+    const performanceId = new mongoose.Types.ObjectId();
+    jest.spyOn(EmployeePerformance, 'findById').mockResolvedValue({
+      _id: performanceId,
+      employeeID: teamLeadUser._id,
+      employeeEmail: teamLeadUser.email,
+    });
+    const updateSpy = jest.spyOn(EmployeePerformance, 'findByIdAndUpdate');
+
+    app = express();
+    app.use(express.json());
+    app.use((req, res, next) => {
+      req.user = teamLeadUser;
+      next();
+    });
+    app.use('/api/performance', performanceRoutes);
+
+    const res = await request(app)
+      .put(`/api/performance/update/${performanceId}`)
+      .send({ feedback: 'Trying to edit own feedback' });
+
+    expect(res.status).toBe(403);
+    expect(res.body.message).toBe('Team Leads cannot edit their own performance.');
+    expect(updateSpy).not.toHaveBeenCalled();
+  });
+
+  it('prevents Team Leads from editing performance linked to their employee profile', async () => {
+    const performanceId = new mongoose.Types.ObjectId();
+    const linkedEmployeeId = new mongoose.Types.ObjectId();
+    jest.spyOn(EmployeePerformance, 'findById').mockResolvedValue({
+      _id: performanceId,
+      employeeID: linkedEmployeeId,
+    });
+    jest.spyOn(Employee, 'findOne').mockReturnValue({
+      select: jest.fn().mockResolvedValue({
+        _id: linkedEmployeeId,
+        userId: teamLeadUser._id,
+        email: teamLeadUser.email,
+      }),
+    });
+    const updateSpy = jest.spyOn(EmployeePerformance, 'findByIdAndUpdate');
+
+    app = express();
+    app.use(express.json());
+    app.use((req, res, next) => {
+      req.user = teamLeadUser;
+      next();
+    });
+    app.use('/api/performance', performanceRoutes);
+
+    const res = await request(app)
+      .put(`/api/performance/update/${performanceId}`)
+      .send({ feedback: 'Trying to edit linked own feedback' });
+
+    expect(res.status).toBe(403);
+    expect(updateSpy).not.toHaveBeenCalled();
+  });
+
+  it('allows Team Leads to edit another employee performance', async () => {
+    const performanceId = new mongoose.Types.ObjectId();
+    const otherEmployeeId = new mongoose.Types.ObjectId();
+    const updatedPerformance = {
+      _id: performanceId,
+      employeeID: otherEmployeeId,
+      employeeEmail: 'employee@kevalon.com',
+      feedback: 'Updated employee feedback',
+      remarks: 'Updated employee feedback',
+    };
+    jest.spyOn(EmployeePerformance, 'findById').mockResolvedValue({
+      _id: performanceId,
+      employeeID: otherEmployeeId,
+      employeeEmail: 'employee@kevalon.com',
+    });
+    jest.spyOn(Employee, 'findOne').mockReturnValue({
+      select: jest.fn().mockResolvedValue(null),
+    });
+    jest.spyOn(EmployeePerformance, 'findByIdAndUpdate').mockResolvedValue(updatedPerformance);
+
+    app = express();
+    app.use(express.json());
+    app.use((req, res, next) => {
+      req.user = teamLeadUser;
+      next();
+    });
+    app.use('/api/performance', performanceRoutes);
+
+    const res = await request(app)
+      .put(`/api/performance/update/${performanceId}`)
+      .send({ feedback: 'Updated employee feedback' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.feedback).toBe('Updated employee feedback');
+    expect(EmployeePerformance.findByIdAndUpdate).toHaveBeenCalled();
   });
 
   it('allows HR and Admin to view performance feedback', async () => {
