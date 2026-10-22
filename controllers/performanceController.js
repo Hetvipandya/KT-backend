@@ -5,17 +5,20 @@ const User = require("../models/User");
 const TeamLead = require("../models/Team");
 const TeamLeadActivity = require("../models/TeamLeadActivity");
 
-const getPerformancePeriod = (monthValue, yearValue, defaultToCurrent = false) => {
+const getPerformancePeriod = (monthValue, yearValue) => {
   const hasMonth = monthValue !== undefined && monthValue !== null && monthValue !== "";
   const hasYear = yearValue !== undefined && yearValue !== null && yearValue !== "";
 
-  if (!hasMonth && !hasYear && !defaultToCurrent) {
+  if (!hasMonth && !hasYear) {
     return { month: null, year: null };
   }
 
-  const now = new Date();
-  const month = hasMonth ? Number(monthValue) : now.getMonth() + 1;
-  const year = hasYear ? Number(yearValue) : now.getFullYear();
+  if (!hasMonth || !hasYear) {
+    return { error: "Both month and year are required." };
+  }
+
+  const month = Number(monthValue);
+  const year = Number(yearValue);
 
   if (!Number.isInteger(month) || month < 1 || month > 12) {
     return { error: "Month must be an integer between 1 and 12." };
@@ -74,11 +77,17 @@ exports.createPerformance = async (req, res) => {
       year: requestedYear,
     } = req.body;
 
-    const period = getPerformancePeriod(requestedMonth, requestedYear, true);
+    const period = getPerformancePeriod(requestedMonth, requestedYear);
     if (period.error) {
       return res.status(400).json({
         success: false,
         message: period.error,
+      });
+    }
+    if (!period.month || !period.year) {
+      return res.status(400).json({
+        success: false,
+        message: "Month and year are required to add performance.",
       });
     }
 

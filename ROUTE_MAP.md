@@ -42,7 +42,7 @@
 | `POST/GET` | `/api/leave/*` | KT | Leave applications, balance calculation, approvals |
 | `POST/GET` | `/api/payroll/*` | KT | Salary structures, payslip generation, disbursements |
 | `POST/GET` | `/api/employee-panel/*` | KT | Employee portal dashboard, profile, documents |
-| `POST/GET` | `/api/performance/*` | KT | Monthly performance reviews; submit with optional `month` (1-12) and `year` (defaults to current period), and filter reads with `?month=&year=` |
+| `POST/GET` | `/api/performance/*` | KT | Monthly performance reviews; submission requires `month` (1-12) and `year`, and reads can be filtered with `?month=&year=` |
 | `POST/GET` | `/api/adjustment/*` | KT | Attendance and time adjustments |
 | `POST/GET` | `/api/holiday/*` | KT | Organization holiday calendar |
 | `POST/GET` | `/api/student/*` | KT | Student training and intern management |

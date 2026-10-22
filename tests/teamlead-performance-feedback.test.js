@@ -105,6 +105,32 @@ describe('Team Lead Employee Feedback & Restricted Performance Access', () => {
     expect(performanceLookup.$or).toContainEqual({ month: 4, year: 2026 });
   });
 
+  it('requires both month and year before adding performance', async () => {
+    const createSpy = jest.spyOn(EmployeePerformance, 'create');
+
+    app = express();
+    app.use(express.json());
+    app.use((req, res, next) => {
+      req.user = teamLeadUser;
+      next();
+    });
+    app.use('/api/performance', performanceRoutes);
+
+    const requests = [
+      { employeeID: employeeId.toString() },
+      { employeeID: employeeId.toString(), month: 4 },
+      { employeeID: employeeId.toString(), year: 2026 },
+    ];
+
+    for (const body of requests) {
+      const res = await request(app).post('/api/performance/feedback').send(body);
+      expect(res.status).toBe(400);
+      expect(res.body.success).toBe(false);
+    }
+
+    expect(createSpy).not.toHaveBeenCalled();
+  });
+
   it('updates all performance fields including feedback and remarks', async () => {
     const performanceId = new mongoose.Types.ObjectId();
     const updatedPerformance = {
