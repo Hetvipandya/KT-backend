@@ -7,6 +7,18 @@ const employeePerformanceSchema = new mongoose.Schema(
       required: true,
       ref: "Employee",
     },
+
+    month: {
+      type: Number,
+      min: 1,
+      max: 12,
+    },
+
+    year: {
+      type: Number,
+      min: 1900,
+      max: 9999,
+    },
  
     employeeType: {
       type: String,
@@ -14,7 +26,7 @@ const employeePerformanceSchema = new mongoose.Schema(
       default: "employee",
     },
 
-    employeeName: { 
+    employeeName: {
       type: String,
       default: "",
     },
@@ -72,6 +84,7 @@ const employeePerformanceSchema = new mongoose.Schema(
 
 // Add index for better query performance
 employeePerformanceSchema.index({ employeeID: 1 });
+employeePerformanceSchema.index({ employeeID: 1, year: 1, month: 1 });
 employeePerformanceSchema.index({ createdAt: -1 });
 
 module.exports = mongoose.model(

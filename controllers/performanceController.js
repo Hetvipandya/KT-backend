@@ -5,6 +5,55 @@ const User = require("../models/User");
 const TeamLead = require("../models/Team");
 const TeamLeadActivity = require("../models/TeamLeadActivity");
 
+const getPerformancePeriod = (monthValue, yearValue, defaultToCurrent = false) => {
+  const hasMonth = monthValue !== undefined && monthValue !== null && monthValue !== "";
+  const hasYear = yearValue !== undefined && yearValue !== null && yearValue !== "";
+
+  if (!hasMonth && !hasYear && !defaultToCurrent) {
+    return { month: null, year: null };
+  }
+
+  const now = new Date();
+  const month = hasMonth ? Number(monthValue) : now.getMonth() + 1;
+  const year = hasYear ? Number(yearValue) : now.getFullYear();
+
+  if (!Number.isInteger(month) || month < 1 || month > 12) {
+    return { error: "Month must be an integer between 1 and 12." };
+  }
+  if (!Number.isInteger(year) || year < 1900 || year > 9999) {
+    return { error: "Year must be an integer between 1900 and 9999." };
+  }
+
+  return { month, year };
+};
+
+const getPerformancePeriodQuery = (month, year) => {
+  const periodStart = new Date(year, month - 1, 1);
+  const periodEnd = new Date(year, month, 1);
+
+  return {
+    $or: [
+      { month, year },
+      {
+        month: { $exists: false },
+        year: { $exists: false },
+        createdAt: { $gte: periodStart, $lt: periodEnd },
+      },
+    ],
+  };
+};
+
+const inferLegacyPerformancePeriods = (performances) => {
+  for (const performance of performances || []) {
+    if (performance?.createdAt && (!performance.month || !performance.year)) {
+      const createdAt = new Date(performance.createdAt);
+      performance.month = createdAt.getMonth() + 1;
+      performance.year = createdAt.getFullYear();
+    }
+  }
+  return performances;
+};
+
 // =============================
 // Create Performance / Team Lead Feedback
 // =============================
@@ -21,7 +70,17 @@ exports.createPerformance = async (req, res) => {
       remarks,
       feedback,
       rating,
+      month: requestedMonth,
+      year: requestedYear,
     } = req.body;
+
+    const period = getPerformancePeriod(requestedMonth, requestedYear, true);
+    if (period.error) {
+      return res.status(400).json({
+        success: false,
+        message: period.error,
+      });
+    }
 
     // ============================================================
     // 1. Validate Employee ID
@@ -59,12 +118,16 @@ exports.createPerformance = async (req, res) => {
     let numericRating = 0;
     if (rating !== undefined && rating !== null && rating !== "") {
       numericRating = Number(rating);
-      if (Number.isNaN(numericRating) || numericRating < 0 || numericRating > 10) {
-        numericRating = 0;
+      if (!Number.isFinite(numericRating) || numericRating < 0 || numericRating > 10) {
+        return res.status(400).json({
+          success: false,
+          message: "Rating must be between 0 and 10.",
+        });
       }
     }
 
-    const feedbackText = feedback || remarks || "";
+    const feedbackText = feedback !== undefined ? feedback : (remarks || "");
+    const remarksText = remarks !== undefined ? remarks : feedbackText;
 
     // ============================================================
     // 3. Find Employee / Intern / Team Lead
@@ -186,19 +249,35 @@ exports.createPerformance = async (req, res) => {
     // ============================================================
     // 5. Create or Update Performance Record
     // ============================================================
+    const employeeIds = Array.from(new Map([
+      realEmployeeID,
+      ...(isValidObjId ? [rawEmployeeID] : []),
+    ].map((employeeId) => [employeeId.toString(), employeeId])).values());
     let performance = await EmployeePerformance.findOne({
-      $or: [
-        { employeeID: realEmployeeID },
-        ...(isValidObjId ? [{ employeeID: rawEmployeeID }] : []),
-      ],
+      employeeID: { $in: employeeIds },
+      ...getPerformancePeriodQuery(period.month, period.year),
     });
 
     if (performance) {
-      if (percentage > 0) performance.performancePercentage = percentage;
-      if (numericRating > 0) performance.rating = numericRating;
-      if (feedbackText) {
-        performance.feedback = feedbackText;
-        performance.remarks = feedbackText;
+      performance.month = period.month;
+      performance.year = period.year;
+      if (
+        performancePercentage !== undefined &&
+        performancePercentage !== null &&
+        performancePercentage !== ""
+      ) {
+        performance.performancePercentage = percentage;
+      }
+      if (rating !== undefined && rating !== null && rating !== "") {
+        performance.rating = numericRating;
+      }
+      if (feedback !== undefined) {
+        performance.feedback = feedback;
+        if (remarks === undefined) performance.remarks = feedback;
+      }
+      if (remarks !== undefined) {
+        performance.remarks = remarks;
+        if (feedback === undefined) performance.feedback = remarks;
       }
       performance.submittedBy = submittedBy || performance.submittedBy;
       performance.evaluatorName = evaluatorName || performance.evaluatorName;
@@ -208,12 +287,14 @@ exports.createPerformance = async (req, res) => {
     } else {
       performance = await EmployeePerformance.create({
         employeeID: realEmployeeID,
+        month: period.month,
+        year: period.year,
         employeeType: employeeType || "employee",
         employeeName,
         employeeEmail,
         performancePercentage: percentage,
         rating: numericRating,
-        remarks: feedbackText,
+        remarks: remarksText,
         feedback: feedbackText,
         submittedBy,
         evaluatorName,
@@ -231,7 +312,7 @@ exports.createPerformance = async (req, res) => {
           activityType: "performance_monitoring",
           referenceId: performance._id,
           status: "completed",
-          remarks: feedbackText,
+          remarks: remarks !== undefined ? remarks : feedbackText,
         });
       } catch (actErr) {
         console.error("TeamLeadActivity creation warning:", actErr.message);
@@ -268,7 +349,18 @@ exports.getAllPerformance = async (req, res) => {
       });
     }
 
-    const performances = await EmployeePerformance.find()
+    const period = getPerformancePeriod(req.query.month, req.query.year);
+    if (period.error) {
+      return res.status(400).json({
+        success: false,
+        message: period.error,
+      });
+    }
+
+    const query = period.month
+      ? getPerformancePeriodQuery(period.month, period.year)
+      : {};
+    const performances = await EmployeePerformance.find(query)
       .populate(
         "employeeID",
         "name email department firstName lastName"
@@ -278,6 +370,7 @@ exports.getAllPerformance = async (req, res) => {
         "name email role"
       )
       .sort({ createdAt: -1 });
+    inferLegacyPerformancePeriods(performances);
 
     res.json({
       success: true,
@@ -610,6 +703,19 @@ exports.getPerformanceByEmployeeId = async (req, res) => {
       };
     }
 
+    const period = getPerformancePeriod(req.query?.month, req.query?.year);
+    if (period.error) {
+      return res.status(400).json({
+        success: false,
+        message: period.error,
+      });
+    }
+    if (period.month) {
+      query = {
+        $and: [query, getPerformancePeriodQuery(period.month, period.year)],
+      };
+    }
+
     const performances = await EmployeePerformance.find(query)
       .populate(
         "employeeID",
@@ -620,6 +726,7 @@ exports.getPerformanceByEmployeeId = async (req, res) => {
         "name email role"
       )
       .sort({ createdAt: -1 });
+    inferLegacyPerformancePeriods(performances);
 
     const latestPerformance = performances && performances.length > 0 ? performances[0] : null;
 

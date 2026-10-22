@@ -61,8 +61,8 @@ describe('Team Lead Employee Feedback & Restricted Performance Access', () => {
       }),
     });
 
-    jest.spyOn(EmployeePerformance, 'findOne').mockResolvedValue(null);
-    jest.spyOn(EmployeePerformance, 'create').mockImplementation(async (data) => ({
+    const findPerformanceSpy = jest.spyOn(EmployeePerformance, 'findOne').mockResolvedValue(null);
+    const createPerformanceSpy = jest.spyOn(EmployeePerformance, 'create').mockImplementation(async (data) => ({
       _id: new mongoose.Types.ObjectId(),
       ...data,
       createdAt: new Date(),
@@ -81,6 +81,8 @@ describe('Team Lead Employee Feedback & Restricted Performance Access', () => {
       .post('/api/performance/feedback')
       .send({
         employeeID: employeeId.toString(),
+        month: 4,
+        year: 2026,
         performancePercentage: 85,
         rating: 9,
         feedback: 'Great teamwork and problem-solving skills this month.',
@@ -91,6 +93,16 @@ describe('Team Lead Employee Feedback & Restricted Performance Access', () => {
     expect(res.body.data.employeeName).toBe('John Doe');
     expect(res.body.data.feedback).toBe('Great teamwork and problem-solving skills this month.');
     expect(res.body.data.evaluatorRole).toBe('team lead');
+    expect(res.body.data.month).toBe(4);
+    expect(res.body.data.year).toBe(2026);
+    expect(createPerformanceSpy).toHaveBeenCalledWith(expect.objectContaining({
+      employeeID: employeeId,
+      month: 4,
+      year: 2026,
+    }));
+    const performanceLookup = findPerformanceSpy.mock.calls[0][0];
+    expect(performanceLookup.employeeID.$in.map(String)).toContain(employeeId.toString());
+    expect(performanceLookup.$or).toContainEqual({ month: 4, year: 2026 });
   });
 
   it('updates all performance fields including feedback and remarks', async () => {
@@ -295,13 +307,22 @@ describe('Team Lead Employee Feedback & Restricted Performance Access', () => {
     });
     app.use('/api/performance', performanceRoutes);
 
-    const res = await request(app).get(`/api/performance/employee/${employeeId}`);
+    const res = await request(app).get(`/api/performance/employee/${employeeId}?month=4&year=2026`);
 
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
     expect(res.body.count).toBe(1);
     expect(res.body.data[0].feedback).toBe('Great teamwork');
-    expect(EmployeePerformance.find).toHaveBeenCalledWith({ employeeID: employeeId.toString() });
+    expect(EmployeePerformance.find).toHaveBeenCalledWith({
+      $and: [
+        { employeeID: employeeId.toString() },
+        expect.objectContaining({
+          $or: expect.arrayContaining([
+            { month: 4, year: 2026 },
+          ]),
+        }),
+      ],
+    });
   });
 
   it('gets a performance record from the ID route by employee ID', async () => {
