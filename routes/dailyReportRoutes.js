@@ -112,7 +112,7 @@ router.get(
   protect,
   authorizeRoles("team lead"),
   getTeamLeadDailyReports
-);
+); 
 
 // Update report status
 router.put(

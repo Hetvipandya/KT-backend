@@ -11,7 +11,10 @@ const EmployeePerformance = require("../models/EmployeePerformance");
 const User = require("../models/User");
 const Team = require("../models/Team");
 const TeamMember = require("../models/TeamMember");
-const { syncEmployeeToUser } = require("../utils/userEmployeeSync");
+const {
+  syncEmployeeToUser,
+  syncEmployeeActiveStatus,
+} = require("../utils/userEmployeeSync");
 const sanitizeUserUpdatePayload = require("../utils/userPayloadSanitizer");
 const generateEmployeeID = require("../utils/employeeId");
 const { cascadeDeleteUser } = require("../utils/userCascadeDelete");
@@ -996,9 +999,14 @@ exports.updateEmployeeLifecycle = async (req, res) => {
 
     if (req.body.employeeStatus) {
       employee.employeeStatus = req.body.employeeStatus;
+    } else if (
+      String(req.body.status || "").trim().toLowerCase() === "inactive"
+    ) {
+      employee.employeeStatus = "Inactive";
     }
 
     await employee.save();
+    await syncEmployeeActiveStatus(employee);
 
     const historyMessage =
       req.body.message ||
@@ -1107,6 +1115,7 @@ exports.updateEmployee = async (req, res) => {
       updateData,
       { new: true, runValidators: true }
     );
+    await syncEmployeeActiveStatus(updatedEmployee);
 
     const rawUpdateRole = req.body.role ? String(req.body.role).trim().toLowerCase().replace(/[_\s]+/g, "") : "";
     let roleValue = null;

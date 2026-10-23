@@ -47,6 +47,36 @@ const formatDob = (value) => {
   return "";
 };
 
+const isEmployeeInactive = (employee) =>
+  [employee?.employeeStatus, employee?.status].some(
+    (status) =>
+      String(status || "")
+        .trim()
+        .toLowerCase() === "inactive",
+  );
+
+exports.syncEmployeeActiveStatus = async (employee) => {
+  if (!employee || !isEmployeeInactive(employee)) {
+    return null;
+  }
+
+  let user = null;
+  const userId = employee.userID || employee.userId;
+  if (userId) {
+    user = await User.findById(userId);
+  }
+  if (!user && employee.email) {
+    user = await User.findOne({ email: employee.email });
+  }
+  if (!user || user.isActive === false) {
+    return user;
+  }
+
+  user.isActive = false;
+  await user.save();
+  return user;
+};
+
 exports.syncEmployeeToUser = async ({ employee, role, userData = {} }) => {
   let user = null;
 
@@ -113,7 +143,7 @@ exports.syncEmployeeToUser = async ({ employee, role, userData = {} }) => {
     role: finalRole,
     isApproved: userData.isApproved ?? true,
     isFirstLogin: userData.isFirstLogin ?? false,
-    isActive: userData.isActive ?? true,
+    isActive: userData.isActive ?? !isEmployeeInactive(employee),
   };
 
   if (uniqueIDVal) {
@@ -186,5 +216,4 @@ exports.syncEmployeeToUser = async ({ employee, role, userData = {} }) => {
 
   return user;
 };
-
 
