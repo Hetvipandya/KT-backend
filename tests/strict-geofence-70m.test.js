@@ -661,16 +661,15 @@ describe("Strict 20-Meter Office Geofencing Attendance System - 10 Core Scenario
   /**
    * Test getGeofenceConfig returns exact office coordinates and 20m radius
    */
-  test("getGeofenceConfig returns exact coordinates (23.057808, 72.538926) and 20-meter radius", async () => {
+  test("getGeofenceConfig returns exact coordinates (23.058290, 72.539190) and 20-meter radius", async () => {
     const req = {};
     const res = createMockRes();
     await attendanceController.getGeofenceConfig(req, res);
 
     expect(res.statusCode).toBe(200);
     expect(res.body.success).toBe(true);
-    expect(res.body.data.latitude).toBe(23.057808);
-    expect(res.body.data.longitude).toBe(72.538926);
+    expect(res.body.data.latitude).toBe(23.058290);
+    expect(res.body.data.longitude).toBe(72.539190);
     expect(res.body.data.radiusMeters).toBe(20);
   });
 });
-

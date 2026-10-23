@@ -359,6 +359,36 @@ describe("Geofence 20m Auto Check-Out & Break-Start Skip", () => {
     expect(updatedAtt.autoCheckedOut).toBe(true);
   });
 
+  test("5f. Pending outside-geofence checkout resumes after a server restart", async () => {
+    const user = await User.create({
+      name: "Pooja Restart",
+      email: "pooja.restart@example.com",
+      password: "Password123",
+      role: "employee",
+    });
+
+    const attendance = await Attendance.create({
+      userId: user._id,
+      userType: "employee",
+      date: getToday(),
+      checkInTime: new Date(Date.now() - 2 * 60 * 60 * 1000),
+      outsideGeofenceAt: new Date(Date.now() - 11 * 1000),
+      outsideGeofenceCountdown: 10,
+      status: "present",
+      approvalStatus: "approved",
+    });
+
+    const restoredCount =
+      await attendanceController.restorePendingGeofenceCheckouts();
+    expect(restoredCount).toBe(1);
+
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    const updatedAttendance = await Attendance.findById(attendance._id);
+    expect(updatedAttendance.checkOutTime).not.toBeNull();
+    expect(updatedAttendance.autoCheckedOut).toBe(true);
+  });
+
   test("5e. Outside 20m: auto check-out triggers immediately when immediate: true is provided", async () => {
     const user = await User.create({
       name: "Pooja Immediate",

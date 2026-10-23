@@ -20,6 +20,7 @@ const {
 } = require("../services/email.templates");
 const sanitizeUserUpdatePayload = require("../utils/userPayloadSanitizer");
 const { isEmployeeLoginBlocked } = require("../utils/employeeLoginStatus");
+const { getTeamLeadForUser } = require("../utils/teamLeadLookup");
 
 const buildLoginLookupQuery = (loginInput) => {
   const normalized = String(loginInput || "").trim();
@@ -236,7 +237,7 @@ const generateEmployeeID = async () => {
 // BUILD USER RESPONSE
 // ============================================================
 
-const buildUserResponse = (user) => {
+const buildUserResponse = (user, teamLead) => {
   if (!user) {
     return null;
   }
@@ -357,6 +358,9 @@ const buildUserResponse = (user) => {
     createdAt: user.createdAt,
 
     updatedAt: user.updatedAt,
+    ...(teamLead !== undefined
+      ? { teamLead, teamLeadName: teamLead?.name || null }
+      : {}),
   };
 };
 
@@ -759,7 +763,7 @@ const updateProfile = async (req, res) => {
 
     const employee = await syncUserToEmployee(user);
 
-    return res.status(200).json({
+    return res.status(200).json({ 
       success: true,
 
       message: "Profile updated successfully",
@@ -1278,10 +1282,17 @@ const getAllUsers = async (req, res) => {
         createdAt: -1,
       });
 
+    const usersWithTeamLeads = await Promise.all(
+      users.map(async (user) => {
+        const teamLead = await getTeamLeadForUser(user._id);
+        return buildUserResponse(user, teamLead);
+      }),
+    );
+
     return res.status(200).json({
       success: true,
       totalUsers: users.length,
-      users: users.map((user) => buildUserResponse(user)),
+      users: usersWithTeamLeads,
     });
   } catch (error) {
     return res.status(500).json({

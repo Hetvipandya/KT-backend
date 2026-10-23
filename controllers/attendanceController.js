@@ -1252,7 +1252,7 @@ const getDateWiseAttendance =
         updatedAtDisplay:
           data.updatedAtDisplay ||
           null,
-
+ 
         lateCutoffTime:
           data.lateCutoffTime ||
           DEFAULT_LATE_CUTOFF,
@@ -4312,6 +4312,72 @@ const executeAutoCheckout = async ({
   }
 };
 
+const schedulePendingGeofenceCheckout = ({
+  attendanceId,
+  userId,
+  location,
+  deviceType,
+  breachTime,
+  delaySeconds,
+}) => {
+  const key = userId.toString();
+  if (pendingGeofenceCheckouts.has(key)) {
+    return;
+  }
+
+  const breachTimestamp = new Date(breachTime).getTime();
+  const delayMs = Math.max(0, Number(delaySeconds) * 1000);
+  const remainingMs = Math.max(0, breachTimestamp + delayMs - Date.now());
+  const timer = setTimeout(async () => {
+    try {
+      await executeAutoCheckout({
+        attendanceId,
+        userId,
+        location,
+        deviceType,
+        breachTime,
+        reason: "10_second_geofence_timeout",
+      });
+    } catch (timerErr) {
+      console.error("Auto-checkout background execution error:", timerErr);
+    }
+  }, remainingMs);
+
+  pendingGeofenceCheckouts.set(key, {
+    timer,
+    breachTime,
+    attendanceId,
+    userId,
+    deviceType,
+    location,
+  });
+};
+
+exports.restorePendingGeofenceCheckouts = async () => {
+  const pendingAttendances = await Attendance.find({
+    checkInTime: { $ne: null },
+    checkOutTime: null,
+    outsideGeofenceAt: { $ne: null },
+  })
+    .select("_id userId outsideGeofenceAt outsideGeofenceCountdown")
+    .lean();
+
+  for (const attendance of pendingAttendances) {
+    schedulePendingGeofenceCheckout({
+      attendanceId: attendance._id,
+      userId: attendance.userId,
+      breachTime: attendance.outsideGeofenceAt,
+      delaySeconds:
+        attendance.outsideGeofenceCountdown ||
+        GEOFENCE_AUTO_CHECKOUT_DELAY_SECONDS,
+      deviceType: "device",
+      location: null,
+    });
+  }
+
+  return pendingAttendances.length;
+};
+
 // ============================================================
 // CHECK LOCATION GEOFENCE & 10-SECOND AUTO CHECKOUT
 //
@@ -4586,36 +4652,17 @@ exports.checkLocationGeofence = async (req, res) => {
 
     // Start background timer if not already running
     if (!existingPending) {
-      const timer = setTimeout(async () => {
-        try {
-          await executeAutoCheckout({
-            attendanceId: attendance._id,
-            userId,
-            location: {
-              latitude: geofenceResult.latitude,
-              longitude: geofenceResult.longitude,
-              distanceFromOffice: geofenceResult.distance,
-            },
-            deviceType,
-            breachTime,
-            reason: "10_second_geofence_timeout",
-          });
-        } catch (timerErr) {
-          console.error("10s Auto-checkout background execution error:", timerErr);
-        }
-      }, remainingMs);
-
-      if (typeof timer.unref === "function") {
-        timer.unref();
-      }
-
-      pendingGeofenceCheckouts.set(userId.toString(), {
-        timer,
-        breachTime,
+      schedulePendingGeofenceCheckout({
         attendanceId: attendance._id,
         userId,
+        location: {
+          latitude: geofenceResult.latitude,
+          longitude: geofenceResult.longitude,
+          distanceFromOffice: geofenceResult.distance,
+        },
         deviceType,
-        location: geofenceResult,
+        breachTime,
+        delaySeconds,
       });
     }
 

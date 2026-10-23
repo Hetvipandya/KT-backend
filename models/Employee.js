@@ -300,4 +300,4 @@ employeeSchema.set('toObject', {
 
 const Employee = mongoose.models.Employee || mongoose.model('Employee', employeeSchema);
 
-module.exports = Employee;
+module.exports = Employee; 

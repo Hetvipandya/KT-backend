@@ -312,6 +312,13 @@ const startServer = async () => {
     // 1. Connect to single shared MongoDB
     await connectDB();
 
+    // Resume geofence checkouts that were pending before a server restart.
+    const restoredGeofenceCheckouts =
+      await require('./controllers/attendanceController').restorePendingGeofenceCheckouts();
+    if (restoredGeofenceCheckouts > 0) {
+      logger.info(`Resumed ${restoredGeofenceCheckouts} pending geofence checkout(s).`);
+    }
+
     // 2. Reconcile any orphaned user references & ensure payslip collection sync
     try {
       await cleanupAllOrphanedUsers();
