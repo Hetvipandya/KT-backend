@@ -12,6 +12,9 @@ const OFFICE_LOCATION = {
   radiusMeters: parseFloat(process.env.OFFICE_RADIUS_METERS) || 20,
 };
 
+const CHECK_IN_RADIUS_METERS =
+  parseFloat(process.env.CHECK_IN_RADIUS_METERS) || 70;
+
 const GEOFENCE_AUTO_CHECKOUT_DELAY_SECONDS =
   parseInt(process.env.GEOFENCE_AUTO_CHECKOUT_DELAY_SECONDS, 10) || 10;
 
@@ -48,7 +51,7 @@ function calculateDistanceMeters(lat1, lon1, lat2, lon2) {
  * @param {object} body - Request payload containing latitude/longitude
  * @returns {{ isInside: boolean, distance: number|null, latitude: number|null, longitude: number|null, error: string|null }}
  */
-function validateAttendanceGeofence(body) {
+function validateAttendanceGeofence(body, allowedRadius = OFFICE_LOCATION.radiusMeters) {
   if (!body) {
     return {
       isInside: false,
@@ -119,7 +122,7 @@ function validateAttendanceGeofence(body) {
     !Number.isNaN(directDistance)
   ) {
     const roundedDist = Math.round(directDistance);
-    const isInside = roundedDist <= OFFICE_LOCATION.radiusMeters;
+    const isInside = roundedDist <= allowedRadius;
     return {
       isInside,
       distance: roundedDist,
@@ -127,7 +130,7 @@ function validateAttendanceGeofence(body) {
       longitude: null,
       error: isInside
         ? null
-        : `You are outside the office location (${roundedDist}m away). Attendance can only be marked within ${OFFICE_LOCATION.radiusMeters} meters of the office.`,
+        : `You are outside the office location (${roundedDist}m away). Attendance can only be marked within ${allowedRadius} meters of the office.`,
     };
   }
 
@@ -188,14 +191,14 @@ function validateAttendanceGeofence(body) {
 
   const roundedDistance = Math.round(distance);
 
-  // Strict 20m rule: distance <= 20m is inside, distance > 20m is outside. Exactly 20m is inside.
-  if (roundedDistance > OFFICE_LOCATION.radiusMeters) {
+  // Exactly the configured radius is inside.
+  if (roundedDistance > allowedRadius) {
     return {
       isInside: false,
       distance: roundedDistance,
       latitude: lat,
       longitude: lon,
-      error: `You are outside the office location (${roundedDistance}m away). Attendance can only be marked within ${OFFICE_LOCATION.radiusMeters} meters of the office.`,
+      error: `You are outside the office location (${roundedDistance}m away). Attendance can only be marked within ${allowedRadius} meters of the office.`,
     };
   }
 
@@ -277,6 +280,7 @@ function isBreakStartActive(attendance, session = null, body = {}) {
 
 module.exports = {
   OFFICE_LOCATION,
+  CHECK_IN_RADIUS_METERS,
   GEOFENCE_AUTO_CHECKOUT_DELAY_SECONDS,
   LOCATION_FETCH_INTERVAL_SECONDS,
   calculateDistanceMeters,

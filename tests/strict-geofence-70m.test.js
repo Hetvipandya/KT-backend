@@ -4,8 +4,10 @@ const Attendance = require("../models/Attendance");
 const User = require("../models/User");
 const Session = require("../models/Session");
 const attendanceController = require("../controllers/attendanceController");
+const employeePanelController = require("../controllers/employeePanelController");
 const {
   OFFICE_LOCATION,
+  CHECK_IN_RADIUS_METERS,
   calculateDistanceMeters,
   validateAttendanceGeofence,
 } = require("../utils/geofence");
@@ -70,9 +72,9 @@ afterEach(async () => {
   attendanceController.clearAllGeofenceTimers?.();
 });
 
-describe("Strict 20-Meter Office Geofencing Attendance System - 10 Core Scenarios", () => {
+describe("70m check-in and 20m auto-checkout geofencing", () => {
   /**
-   * Scenario 1: Check-in inside 20m
+   * Scenario 1: Check-in inside the 70m check-in radius
    * Distance = 15m -> Check-in ALLOWED
    */
   test("Test 1 — Check-in inside 20m: Distance = 15m -> Check-in ALLOWED", async () => {
@@ -116,8 +118,58 @@ describe("Strict 20-Meter Office Geofencing Attendance System - 10 Core Scenario
     expect(att.checkInLocation.distanceFromOffice).toBeLessThanOrEqual(20);
   });
 
+  test("Check-in at 60m is allowed, while the 20m geofence remains outside", async () => {
+    const user = await User.create({
+      name: "Test User 60m",
+      email: "user60m@example.com",
+      password: "Password123",
+      role: "employee",
+      isApproved: true,
+    });
+
+    const coords60m = getCoordsAtDistanceNorth(60);
+    const checkInRes = createMockRes();
+    await attendanceController.checkIn(
+      {
+        user: { _id: user._id },
+        body: { userId: user._id.toString(), ...coords60m },
+      },
+      checkInRes
+    );
+
+    expect(CHECK_IN_RADIUS_METERS).toBe(70);
+    expect(checkInRes.statusCode).toBe(201);
+    expect(checkInRes.body.success).toBe(true);
+    expect(
+      validateAttendanceGeofence(coords60m).isInside
+    ).toBe(false);
+  });
+
+  test("Employee attendance session can start at 60m from the office", async () => {
+    const user = await User.create({
+      name: "Test Session User 60m",
+      email: "session60m@example.com",
+      password: "Password123",
+      role: "employee",
+      isApproved: true,
+    });
+    const res = createMockRes();
+
+    await employeePanelController.startAttendanceSession(
+      {
+        user: { _id: user._id },
+        body: getCoordsAtDistanceNorth(60),
+      },
+      res
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.message).toBe("Attendance session started");
+  });
+
   /**
-   * Scenario 2: Check-in outside 20m
+   * Scenario 2: Check-in outside the 70m check-in radius
    * Distance = 100m -> Check-in REJECTED
    */
   test("Test 2 — Check-in outside 20m: Distance = 100m -> Check-in REJECTED", async () => {
@@ -671,5 +723,6 @@ describe("Strict 20-Meter Office Geofencing Attendance System - 10 Core Scenario
     expect(res.body.data.latitude).toBe(23.058290);
     expect(res.body.data.longitude).toBe(72.539190);
     expect(res.body.data.radiusMeters).toBe(20);
+    expect(res.body.data.checkInRadiusMeters).toBe(70);
   });
 });

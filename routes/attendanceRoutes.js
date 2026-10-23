@@ -53,7 +53,7 @@ router.post(
 router.post(
   "/geofence-check",
   protect,
-  checkLocationGeofence
+  checkLocationGeofence 
 );
 
 router.get(

@@ -17,6 +17,7 @@ const { sanitizeTaskWithAttachments } = require("./taskManagementController");
 const {
   validateAttendanceGeofence,
   OFFICE_LOCATION,
+  CHECK_IN_RADIUS_METERS,
   GEOFENCE_AUTO_CHECKOUT_DELAY_SECONDS,
   LOCATION_FETCH_INTERVAL_SECONDS,
   isBreakStartActive,
@@ -403,7 +404,10 @@ exports.startAttendanceSession = async (req, res) => {
       req.body.lat !== undefined ||
       req.body.location
     ) {
-      const geofenceResult = validateAttendanceGeofence(req.body);
+      const geofenceResult = validateAttendanceGeofence(
+        req.body,
+        CHECK_IN_RADIUS_METERS
+      );
       if (!geofenceResult.isInside) {
         return res.status(400).json({
           success: false,
@@ -411,6 +415,7 @@ exports.startAttendanceSession = async (req, res) => {
             geofenceResult.error ||
             "You are outside the office location. Please reach the office to continue.",
           distance: geofenceResult.distance,
+          allowedRadius: CHECK_IN_RADIUS_METERS,
         });
       }
     }

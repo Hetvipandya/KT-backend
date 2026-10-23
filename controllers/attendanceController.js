@@ -4,6 +4,7 @@ const { buildAttendanceTimeline } = require("../utils/attendanceTimeline");
 const User = require("../models/User");
 const {
   OFFICE_LOCATION,
+  CHECK_IN_RADIUS_METERS,
   GEOFENCE_AUTO_CHECKOUT_DELAY_SECONDS,
   LOCATION_FETCH_INTERVAL_SECONDS,
   validateAttendanceGeofence,
@@ -1296,7 +1297,10 @@ exports.checkIn = async (
     // ========================================================
     // GPS GEOFENCING VALIDATION
     // ========================================================
-    const geofenceResult = validateAttendanceGeofence(req.body);
+    const geofenceResult = validateAttendanceGeofence(
+      req.body,
+      CHECK_IN_RADIUS_METERS
+    );
     if (!geofenceResult.isInside) {
       return res.status(400).json({
         success: false,
@@ -1304,7 +1308,7 @@ exports.checkIn = async (
           geofenceResult.error ||
           "You are outside the office location. Please reach the office to continue.",
         distance: geofenceResult.distance,
-        allowedRadius: OFFICE_LOCATION.radiusMeters,
+        allowedRadius: CHECK_IN_RADIUS_METERS,
       });
     }
 
@@ -4711,6 +4715,7 @@ exports.getGeofenceConfig = async (req, res) => {
         latitude: OFFICE_LOCATION.latitude,
         longitude: OFFICE_LOCATION.longitude,
         radiusMeters: OFFICE_LOCATION.radiusMeters,
+        checkInRadiusMeters: CHECK_IN_RADIUS_METERS,
         autoCheckoutDelaySeconds: GEOFENCE_AUTO_CHECKOUT_DELAY_SECONDS,
         fetchIntervalSeconds: LOCATION_FETCH_INTERVAL_SECONDS,
       },
