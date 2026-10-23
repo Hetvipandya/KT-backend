@@ -1,4 +1,6 @@
 const FinanceUser = require('../models/FinanceUser');
+const User = require('../models/User');
+const Employee = require('../models/Employee');
 const Company = require('../models/Company');
 const userService = require('../services/user.service');
 const { inviteUserSchema, updateUserSchema } = require('../validators/user.validators');
@@ -425,7 +427,24 @@ const revokeAccess = async (req, res, next) => {
 
     // Soft revoke — preserve the user and their history
     accessEntry.isActive = false;
-    await financeUser.save();
+    const [user, employee] = await Promise.all([
+      User.findById(targetUserId),
+      Employee.findOne({
+        $or: [{ userID: targetUserId }, { userId: targetUserId }]
+      })
+    ]);
+
+    const saves = [financeUser.save()];
+    if (user) {
+      user.isActive = false;
+      saves.push(user.save());
+    }
+    if (employee) {
+      employee.employeeStatus = 'Inactive';
+      employee.status = 'INACTIVE';
+      saves.push(employee.save());
+    }
+    await Promise.all(saves);
 
     return res.status(200).json({
       success: true,
