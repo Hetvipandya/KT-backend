@@ -1,6 +1,8 @@
 const mongoose = require("mongoose");
 const User = require("../models/User");
 const Employee = require("../models/Employee");
+const Team = require("../models/Team");
+const TeamMember = require("../models/TeamMember");
 const Company = require("../models/Company");
 const Branch = require("../models/Branch");
 const SalaryStructure = require("../models/SalaryStructure");
@@ -614,7 +616,7 @@ const updateProfile = async (req, res) => {
       if (existingPhone) {
         return res.status(400).json({
           success: false,
-          message: "Phone number already exists",
+          message: "Phone number already exists", 
         });
       }
     }
@@ -1528,6 +1530,41 @@ const rejectEmployee = async (req, res) => {
     const employee = await Employee.findOne({
       $or: [{ userID: user._id }, { userId: user._id }],
     });
+
+    const teamLeadIds = [
+      user._id,
+      employee?._id,
+      employee?.userID,
+      employee?.userId,
+    ].filter(
+      (id, index, ids) =>
+        id && ids.findIndex((candidate) => String(candidate) === String(id)) === index,
+    );
+    const teamLeadIdentifiers = [
+      user.uniqueID,
+      employee?.employeeID,
+      employee?.employeeCode,
+    ].filter(
+      (identifier, index, identifiers) =>
+        identifier && identifiers.indexOf(identifier) === index,
+    );
+
+    const teamLeadQuery = [
+      { teamLeadUser: user._id },
+      ...(employee?._id ? [{ teamLeadEmployee: employee._id }] : []),
+      ...(teamLeadIdentifiers.length
+        ? [{ teamLeadId: { $in: teamLeadIdentifiers } }]
+        : []),
+    ];
+
+    await Promise.all([
+      Team.deleteMany({ $or: teamLeadQuery }),
+      TeamMember.deleteMany({
+        userId: { $in: teamLeadIds },
+        role: "Team Lead",
+      }),
+    ]);
+
     await syncEmployeeStatus(employee, user.isActive);
 
     return res.json({
