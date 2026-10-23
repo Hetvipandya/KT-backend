@@ -33,7 +33,12 @@ const dailyReportSchema =
         type:
           mongoose.Schema.Types.ObjectId,
         ref: "Project",
-        required: true,
+        default: null,
+      },
+
+      otherProjectName: {
+        type: String,
+        trim: true,
       },
 
       todaysWork: {

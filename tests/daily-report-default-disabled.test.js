@@ -100,4 +100,89 @@ describe("daily report creation safety", () => {
     expect(res.statusCode).toBe(201);
     expect(await DailyReport.countDocuments()).toBe(1);
   });
+
+  it("creates a report with a custom project name when Other is selected", async () => {
+    const user = await User.create({
+      name: "Riya Patel",
+      email: "riya@example.com",
+      password: "StrongPass123",
+      role: "employee",
+      isApproved: true,
+    });
+
+    const res = {
+      statusCode: null,
+      body: null,
+      status(code) {
+        this.statusCode = code;
+        return this;
+      },
+      json(payload) {
+        this.body = payload;
+        return this;
+      },
+    };
+
+    await dailyReportController.createDailyReport(
+      {
+        body: {
+          employeeId: user._id.toString(),
+          projectId: "Other",
+          otherProjectName: "Internal Training",
+          todaysWork: "Prepared the training material",
+          hoursWorked: 3,
+          submit: true,
+        },
+      },
+      res,
+    );
+
+    expect(res.statusCode).toBe(201);
+    expect(res.body.data.projectId).toBeNull();
+    expect(res.body.data.otherProjectName).toBe("Internal Training");
+
+    const savedReport = await DailyReport.findById(res.body.data._id);
+    expect(savedReport.projectId).toBeNull();
+    expect(savedReport.otherProjectName).toBe("Internal Training");
+  });
+
+  it("requires a custom project name when Other is selected", async () => {
+    const user = await User.create({
+      name: "Kiran Shah",
+      email: "kiran@example.com",
+      password: "StrongPass123",
+      role: "employee",
+      isApproved: true,
+    });
+
+    const res = {
+      statusCode: null,
+      body: null,
+      status(code) {
+        this.statusCode = code;
+        return this;
+      },
+      json(payload) {
+        this.body = payload;
+        return this;
+      },
+    };
+
+    await dailyReportController.createDailyReport(
+      {
+        body: {
+          employeeId: user._id.toString(),
+          projectId: "Other",
+          todaysWork: "Worked on an unassigned task",
+          hoursWorked: 2,
+          submit: true,
+        },
+      },
+      res,
+    );
+
+    expect(res.statusCode).toBe(400);
+    expect(res.body.message).toMatch(/otherProjectName/);
+    expect(await DailyReport.countDocuments()).toBe(0);
+  });
 });

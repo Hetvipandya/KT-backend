@@ -10,7 +10,7 @@ const parseHoursWorked = (val) => {
   if (val === undefined || val === null || val === "") return null;
   if (typeof val === "number") {
     return isNaN(val) ? null : Math.round(val * 100) / 100;
-  }
+  } 
   if (typeof val === "string") {
     const trimmed = val.trim().replace(",", ".");
     if (trimmed.includes(":")) {
@@ -41,6 +41,7 @@ exports.createDailyReport =
       const {
         employeeId,
         projectId,
+        otherProjectName,
         todaysWork,
         pendingWork,
         tomorrowPlan,
@@ -120,25 +121,38 @@ exports.createDailyReport =
       }
 
       const parsedHours = parseHoursWorked(hoursWorked);
+      const isOtherProject =
+        String(projectId || "").trim().toLowerCase() === "other" ||
+        (!projectId && Boolean(String(otherProjectName || "").trim()));
+      const normalizedOtherProjectName = String(otherProjectName || "").trim();
+      const hasProjectId = Boolean(projectId) && !isOtherProject;
 
       if (
         !employeeId ||
-        !projectId ||
         !todaysWork ||
         parsedHours === null ||
-        isNaN(parsedHours)
+        isNaN(parsedHours) ||
+        (!hasProjectId && (!isOtherProject || !normalizedOtherProjectName))
       ) {
         return res.status(400).json({
           success: false,
           message:
-            "employeeId, projectId, todaysWork and hoursWorked are required",
+            "employeeId, project (or otherProjectName), todaysWork and hoursWorked are required",
+        });
+      }
+
+      if (hasProjectId && !mongoose.Types.ObjectId.isValid(projectId)) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid projectId",
         });
       }
 
       const report =
         await DailyReport.create({
           employeeId,
-          projectId,
+          projectId: hasProjectId ? projectId : null,
+          otherProjectName: isOtherProject ? normalizedOtherProjectName : undefined,
           todaysWork,
           pendingWork,
           tomorrowPlan,
@@ -738,6 +752,7 @@ exports.updateDailyReport = async (req, res) => {
       remarks,
       status,
       projectId,
+      otherProjectName,
       reportDate,
     } = req.body;
 
@@ -747,7 +762,32 @@ exports.updateDailyReport = async (req, res) => {
     if (issuesFaced !== undefined) report.issuesFaced = issuesFaced;
     if (remarks !== undefined) report.remarks = remarks;
     if (status !== undefined) report.status = status;
-    if (projectId !== undefined) report.projectId = projectId;
+    if (projectId !== undefined || otherProjectName !== undefined) {
+      const isOtherProject =
+        String(projectId || "").trim().toLowerCase() === "other" ||
+        (!projectId && otherProjectName !== undefined);
+      const normalizedOtherProjectName = String(otherProjectName || "").trim();
+
+      if (isOtherProject) {
+        if (!normalizedOtherProjectName) {
+          return res.status(400).json({
+            success: false,
+            message: "otherProjectName is required when project is Other",
+          });
+        }
+        report.projectId = null;
+        report.otherProjectName = normalizedOtherProjectName;
+      } else {
+        if (!projectId || !mongoose.Types.ObjectId.isValid(projectId)) {
+          return res.status(400).json({
+            success: false,
+            message: "A valid projectId is required",
+          });
+        }
+        report.projectId = projectId;
+        report.otherProjectName = undefined;
+      }
+    }
     if (taskReferences !== undefined) report.taskReferences = taskReferences;
     if (reportDate !== undefined) report.reportDate = reportDate;
 
