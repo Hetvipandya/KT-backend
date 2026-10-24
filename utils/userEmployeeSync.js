@@ -56,7 +56,7 @@ const isEmployeeInactive = (employee) =>
   );
 
 exports.syncEmployeeActiveStatus = async (employee) => {
-  if (!employee || !isEmployeeInactive(employee)) {
+  if (!employee) {
     return null;
   }
 
@@ -68,12 +68,23 @@ exports.syncEmployeeActiveStatus = async (employee) => {
   if (!user && employee.email) {
     user = await User.findOne({ email: employee.email });
   }
-  if (!user || user.isActive === false) {
+
+  if (isEmployeeInactive(employee)) {
+    if (user && user.isActive !== false) {
+      user.isActive = false;
+      await user.save();
+    }
     return user;
   }
 
-  user.isActive = false;
-  await user.save();
+  if (user?.isActive === false) {
+    Object.assign(employee, {
+      employeeStatus: "Inactive",
+      status: "INACTIVE",
+    });
+    await employee.save();
+  }
+
   return user;
 };
 
@@ -86,6 +97,20 @@ exports.syncEmployeeToUser = async ({ employee, role, userData = {} }) => {
 
   if (!user && (userData.email || employee.email)) {
     user = await User.findOne({ email: userData.email || employee.email });
+  }
+
+  const shouldBeInactive =
+    isEmployeeInactive(employee) ||
+    user?.isActive === false ||
+    userData.isActive === false;
+  const employeeStatusModified =
+    shouldBeInactive && !isEmployeeInactive(employee);
+
+  if (employeeStatusModified) {
+    Object.assign(employee, {
+      employeeStatus: "Inactive",
+      status: "INACTIVE",
+    });
   }
 
   const name =
@@ -141,9 +166,11 @@ exports.syncEmployeeToUser = async ({ employee, role, userData = {} }) => {
     gender: safeUserData.gender || employee.gender || "",
     bloodGroup: safeUserData.bloodGroup || employee.bloodGroup || "",
     role: finalRole,
-    isApproved: userData.isApproved ?? true,
+    isApproved: shouldBeInactive
+      ? user?.isApproved ?? false
+      : userData.isApproved ?? user?.isApproved ?? true,
     isFirstLogin: userData.isFirstLogin ?? false,
-    isActive: userData.isActive ?? !isEmployeeInactive(employee),
+    isActive: !shouldBeInactive && (userData.isActive ?? user?.isActive ?? true),
   };
 
   if (uniqueIDVal) {
@@ -182,7 +209,7 @@ exports.syncEmployeeToUser = async ({ employee, role, userData = {} }) => {
   }
 
   if (employee) {
-    let employeeModified = false;
+    let employeeModified = employeeStatusModified;
     if (employee.role !== finalRole) {
       employee.role = finalRole;
       employeeModified = true;
@@ -216,4 +243,3 @@ exports.syncEmployeeToUser = async ({ employee, role, userData = {} }) => {
 
   return user;
 };
-

@@ -70,6 +70,22 @@ describe("user and employee active status synchronization", () => {
     expect(user.save).toHaveBeenCalledTimes(1);
   });
 
+  it("marks the employee inactive when the linked user is inactive", async () => {
+    const employee = {
+      userID: "user-id",
+      employeeStatus: "Active",
+      status: "ACTIVE",
+      save: jest.fn().mockResolvedValue(undefined),
+    };
+    jest.spyOn(User, "findById").mockResolvedValue({ isActive: false });
+
+    await syncEmployeeActiveStatus(employee);
+
+    expect(employee.employeeStatus).toBe("Inactive");
+    expect(employee.status).toBe("INACTIVE");
+    expect(employee.save).toHaveBeenCalledTimes(1);
+  });
+
   it("does not reactivate an inactive employee during employee-to-user sync", async () => {
     const user = {
       role: "employee",
@@ -98,5 +114,41 @@ describe("user and employee active status synchronization", () => {
     });
 
     expect(user.isActive).toBe(false);
+  });
+
+  it("does not reactivate an inactive user during employee-to-user sync", async () => {
+    const user = {
+      role: "employee",
+      designation: "Employee",
+      passwordHash: "existing-password-hash",
+      isActive: false,
+      isApproved: true,
+      save: jest.fn().mockResolvedValue(undefined),
+    };
+    const employee = {
+      _id: "employee-id",
+      userID: "user-id",
+      firstName: "Test",
+      lastName: "Employee",
+      email: "employee@example.com",
+      role: "employee",
+      designation: "Employee",
+      employeeStatus: "Active",
+      status: "ACTIVE",
+      save: jest.fn().mockResolvedValue(undefined),
+    };
+    jest.spyOn(User, "findById").mockResolvedValue(user);
+    jest.spyOn(User, "findByIdAndUpdate").mockResolvedValue(user);
+
+    await syncEmployeeToUser({
+      employee,
+      role: "employee",
+      userData: { role: "employee" },
+    });
+
+    expect(user.isActive).toBe(false);
+    expect(employee.employeeStatus).toBe("Inactive");
+    expect(employee.status).toBe("INACTIVE");
+    expect(employee.save).toHaveBeenCalledTimes(1);
   });
 });
