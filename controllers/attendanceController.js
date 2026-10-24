@@ -1,6 +1,7 @@
 const mongoose = require("mongoose");
 const Attendance = require("../models/Attendance");
 const { buildAttendanceTimeline } = require("../utils/attendanceTimeline");
+const { notifyAutoCheckoutSuccess } = require("../utils/attendanceNotifications");
 const User = require("../models/User");
 const {
   OFFICE_LOCATION,
@@ -4298,6 +4299,7 @@ const executeAutoCheckout = async ({
     }
 
     await attendance.save();
+    await notifyAutoCheckoutSuccess(attendance);
 
     // Close session for web/laptop
     try {

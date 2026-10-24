@@ -3,6 +3,7 @@ const { MongoMemoryServer } = require("mongodb-memory-server");
 const Attendance = require("../models/Attendance");
 const User = require("../models/User");
 const Session = require("../models/Session");
+const Notification = require("../models/notification");
 const attendanceController = require("../controllers/attendanceController");
 const employeePanelController = require("../controllers/employeePanelController");
 const {
@@ -55,6 +56,7 @@ beforeEach(async () => {
   await Attendance.deleteMany({});
   await User.deleteMany({});
   await Session.deleteMany({});
+  await Notification.deleteMany({});
 });
 
 afterEach(async () => {
@@ -213,6 +215,7 @@ describe("Geofence 20m Auto Check-Out & Break-Start Skip", () => {
     const unchangedAtt = await Attendance.findById(attendance._id);
     expect(unchangedAtt.checkOutTime).toBeFalsy();
     expect(unchangedAtt.outsideGeofenceAt).not.toBeNull();
+    expect(await Notification.countDocuments({ userId: user._id })).toBe(0);
   });
 
   test("5b. Outside 20m: auto check-out TRIGGERS after 10 seconds outside 20m radius", async () => {
@@ -266,6 +269,13 @@ describe("Geofence 20m Auto Check-Out & Break-Start Skip", () => {
 
     const updatedSession = await Session.findById(session._id);
     expect(updatedSession.status).toBe("auto_checkout");
+
+    const notification = await Notification.findOne({ userId: user._id });
+    expect(notification).toMatchObject({
+      type: "ATTENDANCE_AUTO_CHECKOUT",
+      title: "Automatic checkout complete",
+      read: false,
+    });
   });
 
   test("5c. Outside 20m: auto check-out CANCELS if user returns inside 20m within 10 seconds", async () => {

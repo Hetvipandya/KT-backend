@@ -11,6 +11,7 @@ const Leave = require("../models/Leave");
 const LeaveBalance = require("../models/LeaveBalance");
 const Holiday = require("../models/Holiday");
 const Notification = require("../models/notification");
+const { notifyAutoCheckoutSuccess } = require("../utils/attendanceNotifications");
 const Project = require("../models/Project");
 const crypto = require("crypto");
 const { sanitizeTaskWithAttachments } = require("./taskManagementController");
@@ -610,6 +611,7 @@ exports.sessionHeartbeat = async (req, res) => {
             else attendance.status = "absent";
 
             await attendance.save();
+            await notifyAutoCheckoutSuccess(attendance);
 
             return res.status(200).json({
               success: true,

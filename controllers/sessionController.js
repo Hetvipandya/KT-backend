@@ -2,6 +2,7 @@ const mongoose = require("mongoose");
 const Session = require("../models/Session");
 const User = require("../models/User");
 const Attendance = require("../models/Attendance");
+const { notifyAutoCheckoutSuccess } = require("../utils/attendanceNotifications");
 const {
   validateAttendanceGeofence,
   OFFICE_LOCATION,
@@ -237,6 +238,7 @@ exports.updateSessionStatus = async (req, res) => {
             else attendance.status = "absent";
 
             await attendance.save();
+            await notifyAutoCheckoutSuccess(attendance);
 
             return res.status(200).json({
               success: true,
