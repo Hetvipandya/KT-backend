@@ -52,6 +52,18 @@ describe("rejectEmployee team lead cleanup", () => {
     });
     expect(user.isApproved).toBe(false);
     expect(user.isActive).toBe(false);
+    expect(user.status).toBe("rejected");
     expect(employee.status).toBe("INACTIVE");
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          userId: "user-id",
+          isApproved: false,
+          isActive: false,
+          status: "rejected",
+          employeeStatus: "Inactive",
+        }),
+      }),
+    );
   });
 });

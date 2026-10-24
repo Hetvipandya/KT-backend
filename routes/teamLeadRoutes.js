@@ -23,7 +23,7 @@ router.get(
   protect,
   authorizeRoles(
     "team lead",
-    "admin"
+    "admin" 
   ),
   getDashboard
 );

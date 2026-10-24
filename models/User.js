@@ -260,6 +260,12 @@ const userSchema =
         default: false,
       },
 
+      status: {
+        type: String,
+        default: null,
+        trim: true,
+      },
+
       // ================= JWT =================
       refreshToken: {
         type: String,

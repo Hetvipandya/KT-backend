@@ -1,4 +1,5 @@
 const {
+  buildUserResponse,
   __test__getEmployeeStatus,
   __test__syncEmployeeStatus,
 } = require("../controllers/userControllers");
@@ -25,6 +26,17 @@ describe("user and employee active status synchronization", () => {
       employeeStatus: "Active",
       status: "ACTIVE",
     });
+  });
+
+  it("returns a persisted rejection status in user responses", () => {
+    expect(
+      buildUserResponse({
+        _id: "user-id",
+        isApproved: false,
+        isActive: false,
+        status: "rejected",
+      }).status,
+    ).toBe("rejected");
   });
 
   it("persists both inactive employee status fields together", async () => {

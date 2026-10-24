@@ -333,6 +333,7 @@ const buildUserResponse = (user, teamLead) => {
     isFirstLogin: user.isFirstLogin,
     mustChangePassword: user.mustChangePassword,
     isActive: user.isActive,
+    status: user.status || (user.isActive ? "Active" : "Inactive"),
 
     companyId: resolvedCompanyId,
     companyName: resolvedCompanyName,
@@ -1503,7 +1504,8 @@ const approveEmployee = async (req, res) => {
 
 const rejectEmployee = async (req, res) => {
   try {
-    const { userId } = req.body;
+    const userId =
+      (req.body && (req.body.userId || req.body.id || req.body._id)) || null;
 
     if (!userId) {
       return res.status(400).json({
@@ -1523,7 +1525,7 @@ const rejectEmployee = async (req, res) => {
 
     user.isApproved = false;
     user.isActive = false;
-    user.status = "Inactive";
+    user.status = "rejected";
 
     await user.save();
 
@@ -1569,8 +1571,14 @@ const rejectEmployee = async (req, res) => {
 
     return res.json({
       success: true,
-
       message: "Employee rejected successfully",
+      data: {
+        userId: user._id,
+        isApproved: user.isApproved,
+        isActive: user.isActive,
+        status: user.status,
+        employeeStatus: employee?.employeeStatus || "Inactive",
+      },
     });
   } catch (error) {
     return res.status(500).json({
