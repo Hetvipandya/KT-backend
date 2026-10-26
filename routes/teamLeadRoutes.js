@@ -9,7 +9,7 @@ const {
   createOrUpdateTeam,
   removeTeamLead,
 } = require("../controllers/teamLeadController");
-
+ 
 const {  
   protect,
 } = require("../middleware/authMiddleware");
@@ -41,6 +41,7 @@ router.get(
   protect,
   authorizeRoles(
     "team lead",
+    "employee",
     "admin"
   ), 
   getMyTeam
