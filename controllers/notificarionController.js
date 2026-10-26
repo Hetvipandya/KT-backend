@@ -4,7 +4,7 @@ const Leave = require("../models/Leave");
 const Attendance = require("../models/Attendance");
 const AdjustmentRequest = require("../models/AdjustmentRequest");
 const User = require("../models/User");
-const { notify } = require("../utils/sendNotification");
+const { sendPushNotification } = require("../services/fcm.service");
 
 // ===============================
 // CREATE NOTIFICATION
@@ -372,14 +372,34 @@ exports.deleteAnnouncement = async (req, res) => {
 exports.getUserNotifications = async (req, res) => {
   try {
     const { userId } = req.params;
+    const user = await User.findById(userId).select("role");
 
     const notifications = await Notification.find({
-      $or: [{ userId }, { userId: null }],
+      $or: [
+        { userId },
+        { userId: null, type: "ANNOUNCEMENT" },
+      ],
     }).sort({ createdAt: -1 });
+
+    const normalizedRole = String(user?.role || "").toLowerCase().replace(/[\s_-]+/g, "");
+    const seenAnnouncements = new Set();
+    const visibleNotifications = notifications.filter((notification) => {
+      if (notification.type !== "ANNOUNCEMENT") return true;
+      const meta = notification.meta || notification.metaData || {};
+      const announcementId = meta.announcementId || notification._id;
+      if (seenAnnouncements.has(String(announcementId))) return false;
+      seenAnnouncements.add(String(announcementId));
+
+      if (notification.userId) return true;
+
+      const targetRole = String(meta.targetRole || "ALL").toLowerCase().replace(/[\s_-]+/g, "");
+      if (targetRole !== "all" && targetRole !== normalizedRole) return false;
+      return true;
+    });
 
     return res.status(200).json({
       success: true,
-      data: notifications,
+      data: visibleNotifications,
     });
   } catch (error) {
     return res.status(500).json({
@@ -395,30 +415,50 @@ exports.getUserNotifications = async (req, res) => {
 exports.createAnnouncement = async (req, res) => {
   try {
     const announcement = await Announcement.create(req.body);
-
-    // Send a separate in-app notification to each account matching the target role.
-    const targetRole = String(announcement.targetRole || "").trim();
-    const users = await User.find({});
+    const targetRole = String(announcement.targetRole || "ALL").trim();
     const normalizedTarget = targetRole.toLowerCase().replace(/[\s_-]+/g, "");
+    const users = await User.find({}).select("_id role deviceToken");
     const recipients = !normalizedTarget || normalizedTarget === "all"
       ? users
       : users.filter((user) =>
           String(user.role || "").toLowerCase().replace(/[\s_-]+/g, "") === normalizedTarget
         );
 
-    await Promise.all(recipients.map((user) => notify({
-      userId: user._id,
-      companyId: user.companyId,
+    await Notification.create({
+      userId: null,
+      companyId: announcement.companyId || req.body.companyId || null,
       type: "ANNOUNCEMENT",
       channel: "IN_APP",
       title: announcement.title,
       message: announcement.message,
+      read: false,
       meta: {
         announcementId: announcement._id.toString(),
         status: announcement.isActive === false ? "inactive" : "published",
         targetRole: announcement.targetRole || "ALL",
       },
-    })));
+    });
+
+    const pushResults = await Promise.allSettled(
+      recipients
+        .filter((user) => user.deviceToken)
+        .map((user) =>
+          sendPushNotification({
+            deviceToken: user.deviceToken,
+            title: announcement.title,
+            body: announcement.message,
+            data: {
+              type: "ANNOUNCEMENT",
+              announcementId: announcement._id.toString(),
+            },
+          })
+        )
+    );
+    pushResults.forEach((result) => {
+      if (result.status === "rejected") {
+        console.error("[Announcement Push Error]:", result.reason.message);
+      }
+    });
 
     return res.status(201).json({
       success: true,
