@@ -20,6 +20,7 @@ const {
   "../controllers/taskManagementController"
 );
 const upload = require("../middleware/uploadMiddleware");
+const authenticate = require("../middleware/authenticate");
 
  
 
@@ -30,9 +31,9 @@ router.post("/create", upload.array("attachments"), createTask);
 
 // Get All Tasks
 router.get("/all", getAllTasks); 
-
+ 
 // Update Task
-router.put("/update/:id", upload.array("attachments"), updateTask);
+router.put("/update/:id", authenticate, upload.array("attachments"), updateTask);
 
 // Task Status Routes
 router.put("/status/:id", updateTaskStatus);

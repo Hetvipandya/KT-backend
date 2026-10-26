@@ -15,7 +15,7 @@ const recalculateTaskProgress = async (task, previousTask = null) => {
       previousTask.projectId
     );
   }
-
+ 
   await recalculateMilestoneAndProjectProgress(task.milestoneId, task.projectId);
 };
  
@@ -675,6 +675,20 @@ exports.updateTask =
         return res.status(404).json({
           success: false,
           message: "Task not found",
+        });
+      }
+
+      const nextStatus = req.body.status || previousTask.status;
+      const nextDueDate = req.body.dueDate || previousTask.dueDate;
+      const isDelayedTask =
+        normalizeTaskStatus(previousTask.status) === "delayed" ||
+        normalizeTaskStatus(nextStatus) === "delayed" ||
+        (isTaskOverdue(nextDueDate) && !isCompletedStatus(nextStatus));
+      const userRole = String(req.user?.role || "").trim().toLowerCase();
+      if (isDelayedTask && userRole !== "admin") {
+        return res.status(403).json({
+          success: false,
+          message: "Only admins can update delayed tasks",
         });
       }
 

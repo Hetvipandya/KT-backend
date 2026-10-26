@@ -16,7 +16,7 @@ const projectSchema = new mongoose.Schema(
     clientName: {
       type: String,
       required: true,
-      trim: true,
+      trim: true, 
     },
 
     clientEmail: {

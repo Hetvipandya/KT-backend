@@ -336,6 +336,55 @@ describe("task management milestone handling", () => {
     expect(persisted.progress).toBe(100);
   });
 
+  it("allows only admins to update delayed tasks", async () => {
+    const task = await TaskManagement.create({
+      projectId: new mongoose.Types.ObjectId(),
+      taskTitle: "Delayed task",
+      assignedEmployee: new mongoose.Types.ObjectId(),
+      assignedBy: new mongoose.Types.ObjectId(),
+      dueDate: new Date(Date.now() - 86400000),
+      status: "delayed",
+    });
+    const makeResponse = () => ({
+      statusCode: null,
+      body: null,
+      status(code) {
+        this.statusCode = code;
+        return this;
+      },
+      json(payload) {
+        this.body = payload;
+        return this;
+      },
+    });
+
+    const employeeResponse = makeResponse();
+    await taskManagementController.updateTask(
+      {
+        params: { id: task._id.toString() },
+        body: { taskTitle: "Employee edit" },
+        user: { role: "employee" },
+      },
+      employeeResponse,
+    );
+
+    expect(employeeResponse.statusCode).toBe(403);
+    expect((await TaskManagement.findById(task._id)).taskTitle).toBe("Delayed task");
+
+    const adminResponse = makeResponse();
+    await taskManagementController.updateTask(
+      {
+        params: { id: task._id.toString() },
+        body: { taskTitle: "Admin edit" },
+        user: { role: "admin" },
+      },
+      adminResponse,
+    );
+
+    expect(adminResponse.statusCode).toBe(200);
+    expect((await TaskManagement.findById(task._id)).taskTitle).toBe("Admin edit");
+  });
+
   it("recalculates project progress as the average of its task progress", async () => {
     const project = await Project.create({
       projectName: "Progress tracking",
