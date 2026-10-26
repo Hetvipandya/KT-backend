@@ -5,6 +5,7 @@ const { MongoMemoryServer } = require("mongodb-memory-server");
 const Attendance = require("../models/Attendance");
 const User = require("../models/User");
 const Session = require("../models/Session");
+const Notification = require("../models/notification");
 const AdjustmentRequest = require("../models/AdjustmentRequest");
 const attendanceController = require("../controllers/attendanceController");
 const attendanceRoutes = require("../routes/attendanceRoutes");
@@ -56,6 +57,7 @@ beforeEach(async () => {
   await User.deleteMany({});
   await Session.deleteMany({});
   await AdjustmentRequest.deleteMany({});
+  await Notification.deleteMany({});
 });
 
 describe("Attendance approval counts", () => {
@@ -159,6 +161,11 @@ describe("Attendance break-time adjustments", () => {
     const history = await AdjustmentRequest.findOne({ userId: user._id });
     expect(history.totalBreakTime).toBe(150);
     expect(history.totalWorkTime).toBe(7.5);
+    const notice = await Notification.findOne({ userId: user._id, type: "ATTENDANCE_ADJUSTED" });
+    expect(notice).toBeTruthy();
+    expect(notice.channel).toBe("IN_APP");
+    expect(notice.meta.status).toBe("approved");
+    expect(notice.meta.adjustmentId).toBe(history._id.toString());
   });
 
   test("rejects a break adjustment with only one endpoint", async () => {
@@ -231,6 +238,9 @@ describe("Attendance break-time adjustments", () => {
     expect(history.breakEnd).toBe("14:00");
     expect(history.totalBreakTime).toBe(60);
     expect(history.totalWorkTime).toBe(8);
+    const notice = await Notification.findOne({ userId: user._id, type: "ATTENDANCE_ADJUSTED" });
+    expect(notice).toBeTruthy();
+    expect(notice.meta.attendanceId).toBe(attendance._id.toString());
 
     // Verify getAdjustmentHistory returns breakStart and breakEnd
     const histRes = createMockRes();
@@ -395,6 +405,9 @@ describe("Attendance approval authorization", () => {
     expect(approval.body.success).toBe(true);
     const approvedAttendance = await Attendance.findById(approvalRecord._id);
     expect(approvedAttendance.approvedBy.toString()).toBe(admin._id.toString());
+    const approvedNotice = await Notification.findOne({ userId: employee._id, type: "ATTENDANCE_APPROVED" });
+    expect(approvedNotice.meta).toMatchObject({ attendanceId: approvalRecord._id.toString(), status: "approved" });
+    expect(await Notification.countDocuments({ userId: admin._id, type: "ATTENDANCE_APPROVED" })).toBe(0);
     const unchangedPriyaAttendance = await Attendance.findById(priyaAttendance._id);
     expect(unchangedPriyaAttendance.approvalStatus).toBe("pending");
     expect(unchangedPriyaAttendance.approvedBy).toBeUndefined();
@@ -408,6 +421,8 @@ describe("Attendance approval authorization", () => {
       });
     expect(rejection.status).toBe(200);
     expect(rejection.body.data.approvalStatus).toBe("rejected");
+    const rejectedNotice = await Notification.findOne({ userId: employee._id, type: "ATTENDANCE_REJECTED" });
+    expect(rejectedNotice.meta).toMatchObject({ attendanceId: rejectionRecord._id.toString(), status: "rejected", reason: "Incorrect check-in details" });
   });
 });
 
@@ -465,6 +480,9 @@ describe("Attendance request ownership", () => {
     expect(checkInRes.body.data.approvalStatus).toBe("pending");
     expect(await Attendance.countDocuments({ date: getToday() })).toBe(1);
     expect(await Attendance.findOne({ userId: priya._id, date: getToday() })).toBeNull();
+    const checkInNotice = await Notification.findOne({ userId: kuresh._id, type: "ATTENDANCE_CHECK_IN" });
+    expect(checkInNotice.meta.status).toBe("pending");
+    expect(await Notification.countDocuments({ userId: priya._id })).toBe(0);
   });
 });
 
@@ -575,6 +593,8 @@ describe("Complete Attendance Flow (Check-In, Break-In, Break-Out, Check-Out, 1h
     const finalAtt = await Attendance.findOne({ userId: user._id, date: getToday() });
     expect(finalAtt.checkOutTime).not.toBeNull();
     expect(finalAtt.isBreakOverdue).toBe(true);
+    const checkOutNotice = await Notification.findOne({ userId: user._id, type: "ATTENDANCE_CHECK_OUT" });
+    expect(checkOutNotice.meta).toMatchObject({ attendanceId: finalAtt._id.toString(), status: finalAtt.status });
   });
 
   test("2. Flow validations: prevents double check-in, duplicate break-in, and break-out without break", async () => {

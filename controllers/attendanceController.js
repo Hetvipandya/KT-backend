@@ -2,6 +2,7 @@ const mongoose = require("mongoose");
 const Attendance = require("../models/Attendance");
 const { buildAttendanceTimeline } = require("../utils/attendanceTimeline");
 const { notifyAutoCheckoutSuccess } = require("../utils/attendanceNotifications");
+const { notify } = require("../utils/sendNotification");
 const User = require("../models/User");
 const {
   OFFICE_LOCATION,
@@ -1512,6 +1513,13 @@ exports.checkIn = async (
       "pending";
 
     await attendance.save();
+    await notify({
+      userId: attendance.userId,
+      type: "ATTENDANCE_CHECK_IN",
+      title: "Check-in recorded",
+      message: "Your check-in request is awaiting approval.",
+      meta: { attendanceId: attendance._id.toString(), status: attendance.approvalStatus },
+    });
 
     // ========================================================
     // MESSAGE
@@ -1833,6 +1841,13 @@ exports.approveAttendance =
         attendanceStatus.status;
 
       await attendance.save();
+      await notify({
+        userId: attendance.userId,
+        type: "ATTENDANCE_APPROVED",
+        title: "Attendance approved",
+        message: "Your attendance check-in has been approved.",
+        meta: { attendanceId: attendance._id.toString(), status: attendance.approvalStatus },
+      });
 
       // ======================================================
       // MESSAGE
@@ -2076,6 +2091,13 @@ exports.checkOut = async (req, res) => {
     }
 
     await attendance.save();
+    await notify({
+      userId: attendance.userId,
+      type: "ATTENDANCE_CHECK_OUT",
+      title: "Check-out recorded",
+      message: "Your check-out has been recorded successfully.",
+      meta: { attendanceId: attendance._id.toString(), status: attendance.status },
+    });
 
     // Terminate active sessions for user
     try {
@@ -2643,6 +2665,13 @@ exports.rejectAttendance =
       attendance.approvedCheckInTime = null;
 
       await attendance.save();
+      await notify({
+        userId: attendance.userId,
+        type: "ATTENDANCE_REJECTED",
+        title: "Attendance rejected",
+        message: "Your attendance check-in was rejected.",
+        meta: { attendanceId: attendance._id.toString(), status: attendance.approvalStatus, reason: rejectionText },
+      });
 
       return res.status(200).json({
         success: true,

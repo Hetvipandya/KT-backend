@@ -4,6 +4,25 @@ const Holiday = require("../models/Holiday");
 const User = require("../models/User");
 const { calculateWorkingLeaveDays, toDateString } = require("../utils/leaveUtils");
 const { getTeamLeadForUser } = require("../utils/teamLeadLookup");
+const { notify } = require("../utils/sendNotification");
+
+const notifyLeaveDecision = (leave, stage, status, remark) => {
+  const employee = leave.employeeId;
+  const userId = employee?.userId || employee?._id || employee?.id || employee;
+  const decision = status.toUpperCase();
+  return notify({
+    userId,
+    type: `LEAVE_${stage.toUpperCase()}_${decision}`,
+    title: `Leave ${status} by ${stage}`,
+    message: `Your leave request was ${status} by ${stage}.`,
+    meta: {
+      leaveId: leave._id.toString(),
+      status,
+      stage: stage.toLowerCase(),
+      reason: remark,
+    },
+  });
+};
 
 // ================= APPLY LEAVE =================
 exports.applyLeave = async (req, res) => {
@@ -457,6 +476,7 @@ exports.teamLeadApproval = async (req, res) => {
     }
 
     await leave.save();
+    await notifyLeaveDecision(leave, "TEAM_LEAD", status, remarkText);
 
     res.status(200).json({
       success: true,
@@ -589,6 +609,7 @@ exports.hrApproval = async (req, res) => {
     }
 
     await leave.save();
+    await notifyLeaveDecision(leave, "HR", status, remarkText);
 
     return res.status(200).json({
       success: true,
@@ -711,6 +732,7 @@ exports.adminApproval = async (req, res) => {
     leave.adminApprovedAt = new Date();
 
     await leave.save();
+    await notifyLeaveDecision(leave, "ADMIN", status, remarkText);
 
     return res.status(200).json({
       success: true,

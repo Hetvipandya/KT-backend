@@ -2,7 +2,8 @@ const Attendance = require("../models/Attendance");
 const Employee = require("../models/Employee");
 const User = require("../models/User");
 const TeamLead = require("../models/Team");
-const AdjustmentRequest = require("../models/AdjustmentRequest"); 
+const AdjustmentRequest = require("../models/AdjustmentRequest");
+const { notify } = require("../utils/sendNotification");
 
 const normalizeAttendanceDate = (value) => {
   if (!value) return null;
@@ -528,9 +529,12 @@ exports.patchAttendanceAdjustment = async (req, res) => {
     let userObj = await User.findById(employeeId);
     if (!userObj) {
       const empObj = await Employee.findById(employeeId);
-      if (empObj && empObj.userID) {
-        targetUserId = empObj.userID;
+      if (empObj && (empObj.userID || empObj.userId)) {
+        targetUserId = empObj.userID || empObj.userId;
         userObj = await User.findById(targetUserId);
+      } else if (empObj && empObj.email) {
+        userObj = await User.findOne({ email: empObj.email });
+        if (userObj) targetUserId = userObj._id;
       }
     }
 
@@ -741,6 +745,17 @@ exports.patchAttendanceAdjustment = async (req, res) => {
     });
 
     const employeeName = await getEmployeeName(employeeId);
+    if (userObj && userObj._id) {
+      await notify({
+        userId: userObj._id,
+        companyId: userObj.companyId,
+        type: "ATTENDANCE_ADJUSTED",
+        channel: "IN_APP",
+        title: "Attendance Adjusted",
+        message: `Your attendance for ${attendanceDate} was adjusted and approved.`,
+        meta: { adjustmentId: adjustment && adjustment._id ? adjustment._id.toString() : null, attendanceId: attendance._id ? attendance._id.toString() : null, status: "approved", date: attendanceDate },
+      });
+    }
 
     return res.status(200).json({
       success: true,
@@ -863,9 +878,12 @@ exports.putAttendanceAdjustment = async (req, res) => {
     let userObj = await User.findById(employeeId);
     if (!userObj) {
       const empObj = await Employee.findById(employeeId);
-      if (empObj && empObj.userID) {
-        targetUserId = empObj.userID;
+      if (empObj && (empObj.userID || empObj.userId)) {
+        targetUserId = empObj.userID || empObj.userId;
         userObj = await User.findById(targetUserId);
+      } else if (empObj && empObj.email) {
+        userObj = await User.findOne({ email: empObj.email });
+        if (userObj) targetUserId = userObj._id;
       }
     }
 
@@ -1010,6 +1028,17 @@ exports.putAttendanceAdjustment = async (req, res) => {
     });
 
     const employeeName = await getEmployeeName(employeeId);
+    if (userObj && userObj._id) {
+      await notify({
+        userId: userObj._id,
+        companyId: userObj.companyId,
+        type: "ATTENDANCE_ADJUSTED",
+        channel: "IN_APP",
+        title: "Attendance Adjusted",
+        message: `Your attendance for ${attendanceDate} was adjusted and approved.`,
+        meta: { adjustmentId: adjustment && adjustment._id ? adjustment._id.toString() : null, attendanceId: attendance._id ? attendance._id.toString() : null, status: "approved", date: attendanceDate },
+      });
+    }
 
     return res.status(200).json({
       success: true,

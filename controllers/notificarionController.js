@@ -4,6 +4,7 @@ const Leave = require("../models/Leave");
 const Attendance = require("../models/Attendance");
 const AdjustmentRequest = require("../models/AdjustmentRequest");
 const User = require("../models/User");
+const { notify } = require("../utils/sendNotification");
 
 // ===============================
 // CREATE NOTIFICATION
@@ -333,13 +334,29 @@ exports.createAnnouncement = async (req, res) => {
   try {
     const announcement = await Announcement.create(req.body);
 
-    // also push as system notification
-    await Notification.create({
+    // Send a separate in-app notification to each account matching the target role.
+    const targetRole = String(announcement.targetRole || "").trim();
+    const users = await User.find({});
+    const normalizedTarget = targetRole.toLowerCase().replace(/[\s_-]+/g, "");
+    const recipients = !normalizedTarget || normalizedTarget === "all"
+      ? users
+      : users.filter((user) =>
+          String(user.role || "").toLowerCase().replace(/[\s_-]+/g, "") === normalizedTarget
+        );
+
+    await Promise.all(recipients.map((user) => notify({
+      userId: user._id,
+      companyId: user.companyId,
+      type: "ANNOUNCEMENT",
+      channel: "IN_APP",
       title: announcement.title,
       message: announcement.message,
-      type: "ANNOUNCEMENT",
-      userId: null,
-    });
+      meta: {
+        announcementId: announcement._id.toString(),
+        status: announcement.isActive === false ? "inactive" : "published",
+        targetRole: announcement.targetRole || "ALL",
+      },
+    })));
 
     return res.status(201).json({
       success: true,

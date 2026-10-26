@@ -19,6 +19,7 @@ const Team =
   require("../models/Team");
 
 const { ensureTeamLeadUniqueID } = require("../utils/teamLeadId");
+const { notifyNewAssignments } = require("../utils/assignmentNotifications");
 
 /*
 =========================
@@ -423,6 +424,12 @@ exports.createOrUpdateTeam = async (req, res) => {
         { teamLeadEmployee: teamLeadEmployee },
       ],
     });
+    const previouslyAssignedLead = team ? [
+      ...(team.teamLeadUser ? [{ id: team.teamLeadUser, kind: "user" }] : []),
+      ...(team.teamLeadEmployee ? [{ id: team.teamLeadEmployee, kind: "employee" }] : []),
+    ] : [];
+    const previouslyAssignedEmployees = (team?.employees || []).map((id) => ({ id, kind: "employee" }));
+    const previouslyAssignedInterns = (team?.interns || []).map((id) => ({ id, kind: "user" }));
 
     // ===========================
     // STEP 3: Prepare team members
@@ -569,6 +576,17 @@ exports.createOrUpdateTeam = async (req, res) => {
       await team.save();
       console.log("✅ Team updated successfully:", team._id);
 
+      await notifyNewAssignments({
+        before: previouslyAssignedLead,
+        after: [
+          ...(team.teamLeadUser ? [{ id: team.teamLeadUser, kind: "user" }] : []),
+          ...(team.teamLeadEmployee ? [{ id: team.teamLeadEmployee, kind: "employee" }] : []),
+        ],
+        action: "TEAM_LEAD_ASSIGNED", entityType: "Team", recordId: team._id, recordName: team.name,
+      });
+      await notifyNewAssignments({ before: previouslyAssignedEmployees, after: employeeIds.map((id) => ({ id, kind: "employee" })), action: "TEAM_EMPLOYEE_ASSIGNED", entityType: "Team", recordId: team._id, recordName: team.name });
+      await notifyNewAssignments({ before: previouslyAssignedInterns, after: internIds.map((id) => ({ id, kind: "user" })), action: "TEAM_INTERN_ASSIGNED", entityType: "Team", recordId: team._id, recordName: team.name });
+
       // Populate for response
       const populatedTeam = await Team.findById(team._id)
         .populate('teamLeadUser', 'name email role uniqueID')
@@ -596,6 +614,16 @@ exports.createOrUpdateTeam = async (req, res) => {
     });
 
     console.log("✅ Team created successfully:", newTeam._id);
+
+    await notifyNewAssignments({
+      after: [
+        ...(teamLeadUser ? [{ id: teamLeadUser, kind: "user" }] : []),
+        ...(teamLeadEmployee ? [{ id: teamLeadEmployee, kind: "employee" }] : []),
+      ],
+      action: "TEAM_LEAD_ASSIGNED", entityType: "Team", recordId: newTeam._id, recordName: newTeam.name,
+    });
+    await notifyNewAssignments({ after: employeeIds.map((id) => ({ id, kind: "employee" })), action: "TEAM_EMPLOYEE_ASSIGNED", entityType: "Team", recordId: newTeam._id, recordName: newTeam.name });
+    await notifyNewAssignments({ after: internIds.map((id) => ({ id, kind: "user" })), action: "TEAM_INTERN_ASSIGNED", entityType: "Team", recordId: newTeam._id, recordName: newTeam.name });
 
     // Populate for response
     const populatedTeam = await Team.findById(newTeam._id)

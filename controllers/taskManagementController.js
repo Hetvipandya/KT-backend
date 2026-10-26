@@ -3,6 +3,7 @@ const Employee = require("../models/Employee");
 const User = require("../models/User");
 const Project = require("../models/projectModel");
 const recalculateMilestoneAndProjectProgress = require("../utils/recalculateMilestoneAndProjectProgress");
+const { notifyNewAssignments } = require("../utils/assignmentNotifications");
 
 const recalculateTaskProgress = async (task, previousTask = null) => {
   if (
@@ -572,6 +573,15 @@ const taskPayload = applyDelayedStatus(
 
 const createdTask = await TaskManagement.create(taskPayload);
 await recalculateTaskProgress(createdTask);
+await notifyNewAssignments({
+  after: [
+    ...(createdTask.assignedEmployee ? [{ id: createdTask.assignedEmployee, kind: "employee" }] : []),
+    ...(createdTask.assignedIntern ? [{ id: createdTask.assignedIntern, kind: "user" }] : []),
+    ...(createdTask.assignedTeamLeadUser ? [{ id: createdTask.assignedTeamLeadUser, kind: "user" }] : []),
+    ...(createdTask.assignedTeamLeadEmployee ? [{ id: createdTask.assignedTeamLeadEmployee, kind: "employee" }] : []),
+  ],
+  action: "TASK_ASSIGNED", entityType: "Task", recordId: createdTask._id, recordName: createdTask.taskTitle,
+});
 const [resolvedTask] = await resolveTasksWithEmployees([createdTask], req);
 
     return res.status(201).json({
@@ -693,6 +703,30 @@ exports.updateTask =
       }
 
       let updatePayload = { ...req.body };
+      if (updatePayload.assignedTo && !updatePayload.assignedEmployee && !updatePayload.assignedIntern) {
+        const targetId = updatePayload.assignedTo;
+        const employee = await Employee.findById(targetId);
+        if (employee) {
+          updatePayload.assignedEmployee = employee.userID || employee.userId || employee._id;
+        } else {
+          const user = await User.findById(targetId);
+          if (user) {
+            if (String(user.role || "").toLowerCase().includes("intern")) updatePayload.assignedIntern = user._id;
+            else updatePayload.assignedEmployee = user._id;
+          }
+        }
+        delete updatePayload.assignedTo;
+      }
+      if (updatePayload.assignedEmployee) {
+        const employee = await Employee.findById(updatePayload.assignedEmployee).select("userID userId");
+        if (employee?.userID || employee?.userId) updatePayload.assignedEmployee = employee.userID || employee.userId;
+      }
+      if (!updatePayload.assignedTeamLeadUser && (updatePayload.teamLeadUser || updatePayload.teamLeadUserId)) {
+        updatePayload.assignedTeamLeadUser = updatePayload.teamLeadUser || updatePayload.teamLeadUserId;
+      }
+      if (!updatePayload.assignedTeamLeadEmployee && (updatePayload.teamLeadEmployee || updatePayload.teamLeadEmployeeId)) {
+        updatePayload.assignedTeamLeadEmployee = updatePayload.teamLeadEmployee || updatePayload.teamLeadEmployeeId;
+      }
 
       if (req.files && req.files.length > 0) {
         const newAttachments = req.files.map((file) => ({
@@ -751,6 +785,21 @@ exports.updateTask =
 
       const ensuredTask = await ensureDelayedStatusForDocument(task);
       await recalculateTaskProgress(ensuredTask, previousTask);
+      await notifyNewAssignments({
+        before: [
+          ...(previousTask.assignedEmployee ? [{ id: previousTask.assignedEmployee, kind: "employee" }] : []),
+          ...(previousTask.assignedIntern ? [{ id: previousTask.assignedIntern, kind: "user" }] : []),
+          ...(previousTask.assignedTeamLeadUser ? [{ id: previousTask.assignedTeamLeadUser, kind: "user" }] : []),
+          ...(previousTask.assignedTeamLeadEmployee ? [{ id: previousTask.assignedTeamLeadEmployee, kind: "employee" }] : []),
+        ],
+        after: [
+          ...(ensuredTask.assignedEmployee ? [{ id: ensuredTask.assignedEmployee, kind: "employee" }] : []),
+          ...(ensuredTask.assignedIntern ? [{ id: ensuredTask.assignedIntern, kind: "user" }] : []),
+          ...(ensuredTask.assignedTeamLeadUser ? [{ id: ensuredTask.assignedTeamLeadUser, kind: "user" }] : []),
+          ...(ensuredTask.assignedTeamLeadEmployee ? [{ id: ensuredTask.assignedTeamLeadEmployee, kind: "employee" }] : []),
+        ],
+        action: "TASK_REASSIGNED", entityType: "Task", recordId: ensuredTask._id, recordName: ensuredTask.taskTitle,
+      });
       const [resolvedTask] = await resolveTasksWithEmployees([ensuredTask], req);
 
       res.status(200).json({

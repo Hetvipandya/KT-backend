@@ -5,6 +5,8 @@ const EmployeePerformance = require('../models/EmployeePerformance');
 const Employee = require('../models/Employee');
 const User = require('../models/User');
 const performanceRoutes = require('../routes/performanceRoutes');
+jest.mock('../utils/sendNotification', () => ({ notify: jest.fn().mockResolvedValue(undefined) }));
+const { notify } = require('../utils/sendNotification');
 
 describe('Team Lead Employee Feedback & Restricted Performance Access', () => {
   let app;
@@ -40,6 +42,7 @@ describe('Team Lead Employee Feedback & Restricted Performance Access', () => {
 
   beforeEach(() => {
     jest.restoreAllMocks();
+    notify.mockClear();
   });
 
   it('allows Team Lead to submit performance feedback for an employee', async () => {
@@ -56,11 +59,13 @@ describe('Team Lead Employee Feedback & Restricted Performance Access', () => {
         _id: employeeId,
         name: 'John Doe',
         email: 'john@kevalon.com',
+        userID: regularEmpUser._id,
         firstName: 'John',
         lastName: 'Doe',
       }),
     });
 
+    jest.spyOn(User, 'findById').mockResolvedValue(regularEmpUser);
     const findPerformanceSpy = jest.spyOn(EmployeePerformance, 'findOne').mockResolvedValue(null);
     const createPerformanceSpy = jest.spyOn(EmployeePerformance, 'create').mockImplementation(async (data) => ({
       _id: new mongoose.Types.ObjectId(),
@@ -103,6 +108,12 @@ describe('Team Lead Employee Feedback & Restricted Performance Access', () => {
     const performanceLookup = findPerformanceSpy.mock.calls[0][0];
     expect(performanceLookup.employeeID.$in.map(String)).toContain(employeeId.toString());
     expect(performanceLookup.$or).toContainEqual({ month: 4, year: 2026 });
+    expect(notify).toHaveBeenCalledWith(expect.objectContaining({
+      userId: regularEmpUser._id,
+      type: 'PERFORMANCE_CREATED',
+      channel: 'IN_APP',
+      meta: expect.objectContaining({ performanceId: expect.any(String), status: 'created' }),
+    }));
   });
 
   it('requires both month and year before adding performance', async () => {

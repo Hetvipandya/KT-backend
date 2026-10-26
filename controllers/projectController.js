@@ -8,6 +8,7 @@ const Team = require("../models/Team");
 const { sanitizeTaskWithAttachments } = require("./taskManagementController");  
  
 const recalculateMilestoneAndProjectProgress = require("../utils/recalculateMilestoneAndProjectProgress");
+const { notifyNewAssignments } = require("../utils/assignmentNotifications");
 
 // ======================================================
 // HELPER FUNCTIONS FOR TEAM & PROGRESS MANAGEMENT
@@ -463,6 +464,17 @@ exports.createProject = async (req, res) => {
       files: uploadedFiles,
     });
 
+    const projectName = project.projectName || "";
+    await notifyNewAssignments({ after: employees.map((id) => ({ id, kind: "employee" })), action: "PROJECT_EMPLOYEE_ASSIGNED", entityType: "Project", recordId: project._id, recordName: projectName });
+    await notifyNewAssignments({ after: interns.map((id) => ({ id, kind: "user" })), action: "PROJECT_INTERN_ASSIGNED", entityType: "Project", recordId: project._id, recordName: projectName });
+    await notifyNewAssignments({
+      after: [
+        ...(teamLeadUser ? [{ id: teamLeadUser, kind: "user" }] : []),
+        ...(teamLeadEmployee ? [{ id: teamLeadEmployee, kind: "employee" }] : []),
+      ],
+      action: "PROJECT_TEAM_LEAD_ASSIGNED", entityType: "Project", recordId: project._id, recordName: projectName,
+    });
+
     const populatedProject = await Project.findById(project._id)
       .populate("teamLeadUser", "name email")
       .populate("teamLeadEmployee", "firstName lastName email")
@@ -623,6 +635,7 @@ exports.getProjectMembers = async (req, res) => {
 exports.assignTeamLead = async (req, res) => {
   try {
     const { teamLeadId } = req.body;
+    const previousProject = await Project.findById(req.params.id);
 
     let resolvedTeamLeadUser = null;
     let resolvedTeamLeadEmployee = null;
@@ -714,15 +727,32 @@ exports.assignTeamLead = async (req, res) => {
       .populate("employees", "name firstName middleName lastName email employeeID userID")
       .populate("interns", "name email");
 
-    res.status(200).json({
-      success: true,
-      data: project,
-    });
+    if (project) {
+      await notifyNewAssignments({
+        before: (previousProject?.employees || []).map((id) => ({ id, kind: "employee" })),
+        after: (project.employees || []).map((id) => ({ id, kind: "employee" })),
+        action: "PROJECT_EMPLOYEE_ASSIGNED", entityType: "Project", recordId: project._id, recordName: project.projectName,
+      });
+      await notifyNewAssignments({
+        before: (previousProject?.interns || []).map((id) => ({ id, kind: "user" })),
+        after: (project.interns || []).map((id) => ({ id, kind: "user" })),
+        action: "PROJECT_INTERN_ASSIGNED", entityType: "Project", recordId: project._id, recordName: project.projectName,
+      });
+      await notifyNewAssignments({
+        before: [
+          ...(previousProject?.teamLeadUser ? [{ id: previousProject.teamLeadUser, kind: "user" }] : []),
+          ...(previousProject?.teamLeadEmployee ? [{ id: previousProject.teamLeadEmployee, kind: "employee" }] : []),
+        ],
+        after: [
+          ...(project.teamLeadUser ? [{ id: project.teamLeadUser, kind: "user" }] : []),
+          ...(project.teamLeadEmployee ? [{ id: project.teamLeadEmployee, kind: "employee" }] : []),
+        ],
+        action: "PROJECT_TEAM_LEAD_ASSIGNED", entityType: "Project", recordId: project._id, recordName: project.projectName,
+      });
+    }
+    res.status(200).json({ success: true, data: project });
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: error.message,
-    });
+    res.status(500).json({ success: false, message: error.message });
   }
 };
 
@@ -730,6 +760,7 @@ exports.assignTeamLead = async (req, res) => {
 exports.assignEmployees = async (req, res) => {
   try {
     const { employeeIds } = req.body;
+    const previousProject = await Project.findById(req.params.id);
 
     if (!Array.isArray(employeeIds)) {
       return res.status(400).json({
@@ -762,10 +793,12 @@ exports.assignEmployees = async (req, res) => {
       });
     }
 
-    return res.status(200).json({
-      success: true,
-      data: project,
+    await notifyNewAssignments({
+      before: (previousProject?.employees || []).map((id) => ({ id, kind: "employee" })),
+      after: project.employees.map((id) => ({ id, kind: "employee" })),
+      action: "PROJECT_EMPLOYEE_ASSIGNED", entityType: "Project", recordId: project._id, recordName: project.projectName,
     });
+    return res.status(200).json({ success: true, data: project });
   } catch (error) {
     console.error("assignEmployees error:", error);
 
@@ -780,6 +813,7 @@ exports.assignEmployees = async (req, res) => {
 exports.assignInterns = async (req, res) => {
   try {
     const { internIds } = req.body;
+    const previousProject = await Project.findById(req.params.id);
 
     // Empty array is allowed because user may remove all interns
     if (!Array.isArray(internIds)) {
@@ -813,10 +847,12 @@ exports.assignInterns = async (req, res) => {
       });
     }
 
-    return res.status(200).json({
-      success: true,
-      data: project,
+    await notifyNewAssignments({
+      before: (previousProject?.interns || []).map((id) => ({ id, kind: "user" })),
+      after: project.interns.map((id) => ({ id, kind: "user" })),
+      action: "PROJECT_INTERN_ASSIGNED", entityType: "Project", recordId: project._id, recordName: project.projectName,
     });
+    return res.status(200).json({ success: true, data: project });
   } catch (error) {
     console.error("assignInterns error:", error);
 
@@ -1193,6 +1229,15 @@ exports.createTask = async (req, res) => {
     
     // Recalculate milestone and project progress
     await recalculateMilestoneAndProjectProgress(task.milestoneId, task.projectId);
+    await notifyNewAssignments({
+      after: [
+        ...(task.assignedEmployee ? [{ id: task.assignedEmployee, kind: "employee" }] : []),
+        ...(task.assignedIntern ? [{ id: task.assignedIntern, kind: "user" }] : []),
+        ...(task.assignedTeamLeadUser ? [{ id: task.assignedTeamLeadUser, kind: "user" }] : []),
+        ...(task.assignedTeamLeadEmployee ? [{ id: task.assignedTeamLeadEmployee, kind: "employee" }] : []),
+      ],
+      action: "TASK_ASSIGNED", entityType: "Task", recordId: task._id, recordName: task.taskTitle,
+    });
     
     return res.status(201).json({
       success: true,
@@ -1485,6 +1530,7 @@ exports.updateTaskStatus = async (req, res) => {
 // Update Task (General updates)
 exports.updateTask = async (req, res) => {
   try {
+    const previousTask = await Task.findById(req.params.id);
     const updateData = { ...req.body };
     if (!updateData.taskTitle && updateData.title) {
       updateData.taskTitle = updateData.title;
@@ -1494,6 +1540,12 @@ exports.updateTask = async (req, res) => {
     }
     if (updateData.assignedTo && !updateData.assignedEmployee) {
       updateData.assignedEmployee = updateData.assignedTo;
+    }
+    if (updateData.assignedEmployee) {
+      const employee = await Employee.findById(updateData.assignedEmployee).select("userID userId");
+      if (employee?.userID || employee?.userId) {
+        updateData.assignedEmployee = employee.userID || employee.userId;
+      }
     }
 
     if (updateData.progress !== undefined) {
@@ -1574,6 +1626,21 @@ exports.updateTask = async (req, res) => {
     }
 
     await recalculateMilestoneAndProjectProgress(task.milestoneId, task.projectId);
+    await notifyNewAssignments({
+      before: [
+        ...(previousTask?.assignedEmployee ? [{ id: previousTask.assignedEmployee, kind: "employee" }] : []),
+        ...(previousTask?.assignedIntern ? [{ id: previousTask.assignedIntern, kind: "user" }] : []),
+        ...(previousTask?.assignedTeamLeadUser ? [{ id: previousTask.assignedTeamLeadUser, kind: "user" }] : []),
+        ...(previousTask?.assignedTeamLeadEmployee ? [{ id: previousTask.assignedTeamLeadEmployee, kind: "employee" }] : []),
+      ],
+      after: [
+        ...(task.assignedEmployee ? [{ id: task.assignedEmployee, kind: "employee" }] : []),
+        ...(task.assignedIntern ? [{ id: task.assignedIntern, kind: "user" }] : []),
+        ...(task.assignedTeamLeadUser ? [{ id: task.assignedTeamLeadUser, kind: "user" }] : []),
+        ...(task.assignedTeamLeadEmployee ? [{ id: task.assignedTeamLeadEmployee, kind: "employee" }] : []),
+      ],
+      action: "TASK_REASSIGNED", entityType: "Task", recordId: task._id, recordName: task.taskTitle,
+    });
 
     res.status(200).json({
       success: true,

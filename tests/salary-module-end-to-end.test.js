@@ -14,6 +14,8 @@ const monthlySalaryRoutes = require("../routes/monthlySalaryRoutes");
 const salarySlipRoutes = require("../routes/salarySlipRoutes");
 const payrollRoutes = require("../routes/payrollRoutes");
 const salaryRoutes = require("../routes/salary.routes");
+jest.mock("../utils/sendNotification", () => ({ notify: jest.fn().mockResolvedValue(undefined) }));
+const { notify } = require("../utils/sendNotification");
 
 describe("HR Payroll Formula Module Test Suite", () => {
   let app;
@@ -98,6 +100,7 @@ describe("HR Payroll Formula Module Test Suite", () => {
 
   beforeEach(() => {
     jest.restoreAllMocks();
+    notify.mockClear();
   });
 
   describe("1. HR Payroll Formula Auto-Calculations", () => {
@@ -374,9 +377,15 @@ describe("HR Payroll Formula Module Test Suite", () => {
       expect(salaryUpdate.presentDays).toBe(
         salaryUpdate.daysPayable - salaryUpdate.leaveDays - salaryUpdate.lopDays
       );
+      expect(notify).toHaveBeenCalledWith(expect.objectContaining({
+        userId: testUserId,
+        type: "SALARY_GENERATED",
+        meta: expect.objectContaining({ salaryId: monthlySalaryDoc._id.toString(), status: "Generated" }),
+      }));
     });
 
     test("POST /api/salaries/:id/approve - Approves monthly salary and locks status", async () => {
+      jest.spyOn(User, "findById").mockResolvedValue(mockUser);
       jest.spyOn(MonthlySalary, "findById").mockImplementation(() => {
         return {
           populate: jest.fn().mockReturnThis(),
@@ -391,9 +400,15 @@ describe("HR Payroll Formula Module Test Suite", () => {
       expect(res.status).toBe(200);
       expect(res.body.success).toBe(true);
       expect(monthlySalaryDoc.status).toBe("Approved");
+      expect(notify).toHaveBeenCalledWith(expect.objectContaining({
+        userId: testUserId,
+        type: "SALARY_APPROVED",
+        meta: expect.objectContaining({ salaryId: monthlySalaryDoc._id.toString(), status: "Approved" }),
+      }));
     });
 
     test("POST /api/salaries/:id/pay - Marks salary as Paid", async () => {
+      jest.spyOn(User, "findById").mockResolvedValue(mockUser);
       monthlySalaryDoc.status = "Approved";
 
       jest.spyOn(MonthlySalary, "findById").mockImplementation(() => {
@@ -414,6 +429,11 @@ describe("HR Payroll Formula Module Test Suite", () => {
       expect(res.status).toBe(200);
       expect(res.body.success).toBe(true);
       expect(monthlySalaryDoc.status).toBe("Paid");
+      expect(notify).toHaveBeenCalledWith(expect.objectContaining({
+        userId: testUserId,
+        type: "SALARY_PAID",
+        meta: expect.objectContaining({ salaryId: monthlySalaryDoc._id.toString(), status: "Paid" }),
+      }));
     });
 
     test("GET /api/salary-slips/:salaryId - Renders HTML payslip with HR Payroll Formulas", async () => {

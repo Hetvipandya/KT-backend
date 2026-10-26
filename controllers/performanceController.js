@@ -4,6 +4,7 @@ const Employee = require("../models/Employee");
 const User = require("../models/User");
 const TeamLead = require("../models/Team");
 const TeamLeadActivity = require("../models/TeamLeadActivity");
+const { notify } = require("../utils/sendNotification");
 
 const getPerformancePeriod = (monthValue, yearValue) => {
   const hasMonth = monthValue !== undefined && monthValue !== null && monthValue !== "";
@@ -152,7 +153,7 @@ exports.createPerformance = async (req, res) => {
     let empData = null;
     if (isValidObjId) {
       empData = await Employee.findById(rawEmployeeID).select(
-        "name email firstName lastName"
+        "name email firstName lastName userID userId"
       );
     }
     if (!empData) {
@@ -162,7 +163,7 @@ exports.createPerformance = async (req, res) => {
           { employeeCode: rawEmployeeID },
           ...(isValidObjId ? [{ userId: rawEmployeeID }, { userID: rawEmployeeID }] : []),
         ],
-      }).select("name email firstName lastName");
+      }).select("name email firstName lastName userID userId");
     }
 
     if (empData) {
@@ -204,8 +205,8 @@ exports.createPerformance = async (req, res) => {
     }
 
     // 3.3 Check Team Lead
+    let teamLeadData = null;
     if (!realEmployeeID) {
-      let teamLeadData = null;
       if (isValidObjId) {
         teamLeadData = await TeamLead.findOne({
           $or: [
@@ -308,6 +309,32 @@ exports.createPerformance = async (req, res) => {
         submittedBy,
         evaluatorName,
         evaluatorRole,
+      });
+    }
+
+    // Notify the evaluated account only after the performance record is saved.
+    let recipientUser = userData || null;
+    const linkedUserId = empData && (empData.userID || empData.userId);
+    const leadUser = !empData && !userData && employeeType === "teamlead"
+      ? (teamLeadData && (teamLeadData.teamLead || teamLeadData.user))
+      : null;
+    const candidateUserId = linkedUserId || (leadUser && (leadUser._id || leadUser.id)) || null;
+    if (!recipientUser && candidateUserId) {
+      try {
+        recipientUser = await User.findById(candidateUserId);
+      } catch (error) {
+        console.error("[Performance Notification] Recipient lookup failed:", error.message);
+      }
+    }
+    if (recipientUser && recipientUser._id) {
+      await notify({
+        userId: recipientUser._id,
+        companyId: recipientUser.companyId,
+        type: "PERFORMANCE_CREATED",
+        channel: "IN_APP",
+        title: "Performance Feedback Added",
+        message: `Performance feedback for ${period.month}/${period.year} has been recorded.`,
+        meta: { performanceId: performance._id.toString(), status: "created", month: period.month, year: period.year },
       });
     }
 

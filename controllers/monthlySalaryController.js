@@ -8,6 +8,7 @@ const Company = require("../models/Company");
 const Branch = require("../models/Branch");
 const Employee = require("../models/Employee");
 const { calculateWorkingLeaveDays, toDateString } = require("../utils/leaveUtils");
+const { notify } = require("../utils/sendNotification");
 
 const monthNames = [
   "January", "February", "March", "April", "May", "June",
@@ -16,6 +17,55 @@ const monthNames = [
 
 const getDaysInMonth = (month, year) => {
   return new Date(year, month, 0).getDate(); 
+};
+
+const resolveSalaryRecipient = async (salary) => {
+  const refs = [salary && salary.userId, salary && salary.employeeId];
+  for (const ref of refs) {
+    if (!ref) continue;
+    if (typeof ref === "object" && (ref.email || ref.role) && ref._id) return ref;
+    const refId = (typeof ref === "object" && (ref._id || ref.id)) || ref;
+    if (!mongoose.isValidObjectId(refId)) continue;
+    const user = await User.findById(refId);
+    if (user) return user;
+
+    const employee = await Employee.findById(refId);
+    const linkedId = employee && (employee.userID || employee.userId);
+    if (linkedId && mongoose.isValidObjectId(linkedId)) {
+      const linkedUser = await User.findById(linkedId);
+      if (linkedUser) return linkedUser;
+    }
+    if (employee && employee.email && typeof User.findOne === "function") {
+      const emailUser = await User.findOne({ email: employee.email });
+      if (emailUser) return emailUser;
+    }
+  }
+  return null;
+};
+
+const notifySalaryRecipient = async (salary, event) => {
+  let recipient;
+  try {
+    recipient = await resolveSalaryRecipient(salary);
+  } catch (error) {
+    console.error("[Salary Notification] Recipient lookup failed:", error.message);
+    return;
+  }
+  if (!recipient || !recipient._id) return;
+  const eventDetails = {
+    generated: { type: "SALARY_GENERATED", title: "Salary Generated", message: "Your monthly salary has been generated." },
+    approved: { type: "SALARY_APPROVED", title: "Salary Approved", message: "Your monthly salary has been approved." },
+    paid: { type: "SALARY_PAID", title: "Salary Paid", message: "Your monthly salary has been marked as paid." },
+  }[event];
+  await notify({
+    userId: recipient._id,
+    companyId: recipient.companyId || salary.companyId,
+    type: eventDetails.type,
+    channel: "IN_APP",
+    title: eventDetails.title,
+    message: eventDetails.message,
+    meta: { salaryId: salary._id.toString(), status: salary.status, month: salary.month, year: salary.year },
+  });
 };
  
 // =====================================================
@@ -302,6 +352,7 @@ const generateMonthlySalary = async (req, res) => {
       );
 
       generatedRecords.push(monthlySalary);
+      await notifySalaryRecipient(monthlySalary, "generated");
     }
 
     const populatedRecords = await MonthlySalary.find({
@@ -958,6 +1009,7 @@ const approveMonthlySalary = async (req, res) => {
         .populate("employeeId userId", "name email uniqueID role designation department")
         .populate("companyId", "name companyName")
         .populate("branchId", "branchName");
+      await Promise.all(approvedList.map((record) => notifySalaryRecipient(record, "approved")));
 
       return res.status(200).json({
         success: true,
@@ -1018,6 +1070,7 @@ const approveMonthlySalary = async (req, res) => {
     salary.approvedBy = req.user ? req.user._id : null;
 
     await salary.save();
+    await notifySalaryRecipient(salary, "approved");
 
     let companyDoc = null;
     let branchDoc = null;
@@ -1121,6 +1174,7 @@ const payMonthlySalary = async (req, res) => {
     if (remarks) salary.remarks = remarks;
 
     await salary.save();
+    await notifySalaryRecipient(salary, "paid");
 
     let paidSalary = null;
     try {

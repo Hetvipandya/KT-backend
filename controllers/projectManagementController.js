@@ -1,5 +1,6 @@
 const Project =
   require("../models/Project");
+const { notifyNewAssignments } = require("../utils/assignmentNotifications");
 
 const ProjectMilestone =
   require(
@@ -90,6 +91,18 @@ exports.createProject =
       // Create Project
       const project =
         await Project.create(projectPayload);
+
+      await notifyNewAssignments({ after: (project.employees || []).map((id) => ({ id, kind: "employee" })), action: "PROJECT_EMPLOYEE_ASSIGNED", entityType: "Project", recordId: project._id, recordName: project.projectName });
+      await notifyNewAssignments({ after: (project.teamMembers || []).map((id) => ({ id, kind: "user" })), action: "PROJECT_EMPLOYEE_ASSIGNED", entityType: "Project", recordId: project._id, recordName: project.projectName });
+      await notifyNewAssignments({ after: (project.interns || []).map((id) => ({ id, kind: "user" })), action: "PROJECT_INTERN_ASSIGNED", entityType: "Project", recordId: project._id, recordName: project.projectName });
+      await notifyNewAssignments({
+        after: [
+          ...(project.teamLeadUser ? [{ id: project.teamLeadUser, kind: "user" }] : []),
+          ...(project.teamLeadEmployee ? [{ id: project.teamLeadEmployee, kind: "employee" }] : []),
+          ...(project.teamLead ? [{ id: project.teamLead, kind: "user" }] : []),
+        ],
+        action: "PROJECT_TEAM_LEAD_ASSIGNED", entityType: "Project", recordId: project._id, recordName: project.projectName,
+      });
 
       res.status(201).json({
         success: true,
@@ -185,6 +198,7 @@ exports.updateProject =
   async (req, res) => {
     try {
       const updatePayload = applyProgressFromStatus({ ...req.body });
+      const previousProject = await Project.findById(req.params.id);
 
       const project =
         await Project.findByIdAndUpdate(
@@ -192,6 +206,37 @@ exports.updateProject =
           updatePayload,
           { new: true }
         );
+
+      if (project) {
+        await notifyNewAssignments({
+          before: (previousProject?.employees || []).map((id) => ({ id, kind: "employee" })),
+          after: (project.employees || []).map((id) => ({ id, kind: "employee" })),
+          action: "PROJECT_EMPLOYEE_ASSIGNED", entityType: "Project", recordId: project._id, recordName: project.projectName,
+        });
+        await notifyNewAssignments({
+          before: (previousProject?.teamMembers || []).map((id) => ({ id, kind: "user" })),
+          after: (project.teamMembers || []).map((id) => ({ id, kind: "user" })),
+          action: "PROJECT_EMPLOYEE_ASSIGNED", entityType: "Project", recordId: project._id, recordName: project.projectName,
+        });
+        await notifyNewAssignments({
+          before: (previousProject?.interns || []).map((id) => ({ id, kind: "user" })),
+          after: (project.interns || []).map((id) => ({ id, kind: "user" })),
+          action: "PROJECT_INTERN_ASSIGNED", entityType: "Project", recordId: project._id, recordName: project.projectName,
+        });
+        await notifyNewAssignments({
+          before: [
+            ...(previousProject?.teamLeadUser ? [{ id: previousProject.teamLeadUser, kind: "user" }] : []),
+            ...(previousProject?.teamLeadEmployee ? [{ id: previousProject.teamLeadEmployee, kind: "employee" }] : []),
+            ...(previousProject?.teamLead ? [{ id: previousProject.teamLead, kind: "user" }] : []),
+          ],
+          after: [
+            ...(project.teamLeadUser ? [{ id: project.teamLeadUser, kind: "user" }] : []),
+            ...(project.teamLeadEmployee ? [{ id: project.teamLeadEmployee, kind: "employee" }] : []),
+            ...(project.teamLead ? [{ id: project.teamLead, kind: "user" }] : []),
+          ],
+          action: "PROJECT_TEAM_LEAD_ASSIGNED", entityType: "Project", recordId: project._id, recordName: project.projectName,
+        });
+      }
 
       res.status(200).json({
         success: true,

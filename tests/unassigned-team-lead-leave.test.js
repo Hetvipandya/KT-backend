@@ -6,6 +6,9 @@ const LeaveBalance = require("../models/LeaveBalance");
 const leaveController = require("../controllers/leaveController");
 const employeePanelController = require("../controllers/employeePanelController");
 const { getTeamLeadForUser } = require("../utils/teamLeadLookup");
+const { notify } = require("../utils/sendNotification");
+
+jest.mock("../utils/sendNotification", () => ({ notify: jest.fn().mockResolvedValue(undefined) }));
 
 jest.mock("../utils/teamLeadLookup", () => ({
   getTeamLeadForUser: jest.fn(),
@@ -37,6 +40,7 @@ describe("leave routing when an employee has no assigned Team Lead", () => {
 
   beforeEach(() => {
     jest.restoreAllMocks();
+    notify.mockClear();
     getTeamLeadForUser.mockResolvedValue(null);
 
     app = express();
@@ -136,5 +140,57 @@ describe("leave routing when an employee has no assigned Team Lead", () => {
     expect(leave.status).toBe("approved");
     expect(leave.hrStatus).toBe("approved");
     expect(leave.teamLeadStatus).toBe("skipped");
+    expect(notify).toHaveBeenCalledWith(expect.objectContaining({
+      userId: employee._id,
+      type: "LEAVE_HR_APPROVED",
+      meta: expect.objectContaining({ leaveId: leave._id, status: "approved", stage: "hr", reason: "Approved" }),
+    }));
+  });
+
+  test("notifies only the leave applicant for Team Lead and Admin rejection", async () => {
+    const teamLeadLeave = {
+      _id: "64f000000000000000000010",
+      employeeId: { _id: employee._id },
+      applicantRole: "employee",
+      teamLeadStatus: "pending",
+      save: jest.fn().mockResolvedValue(undefined),
+    };
+    jest.spyOn(Leave, "findById").mockReturnValue({
+      populate: jest.fn().mockResolvedValue(teamLeadLeave),
+    });
+
+    await leaveController.teamLeadApproval({
+      user: { _id: "64f000000000000000000003" },
+      body: { leaveId: teamLeadLeave._id, status: "rejected", remark: "Insufficient details" },
+    }, { status: () => ({ json: jest.fn() }), json: jest.fn() });
+
+    expect(notify).toHaveBeenLastCalledWith(expect.objectContaining({
+      userId: employee._id,
+      type: "LEAVE_TEAM_LEAD_REJECTED",
+      meta: expect.objectContaining({ leaveId: teamLeadLeave._id, status: "rejected", reason: "Insufficient details" }),
+    }));
+
+    notify.mockClear();
+    const adminLeave = {
+      _id: "64f000000000000000000011",
+      employeeId: { _id: employee._id },
+      applicantRole: "employee",
+      status: "pending",
+      save: jest.fn().mockResolvedValue(undefined),
+    };
+    jest.spyOn(Leave, "findById").mockReturnValue({
+      populate: jest.fn().mockResolvedValue(adminLeave),
+    });
+    await leaveController.adminApproval({
+      user: { _id: "64f000000000000000000003" },
+      body: { leaveId: adminLeave._id, status: "rejected", remark: "Dates conflict" },
+    }, { status: () => ({ json: jest.fn() }), json: jest.fn() });
+
+    expect(notify).toHaveBeenCalledWith(expect.objectContaining({
+      userId: employee._id,
+      type: "LEAVE_ADMIN_REJECTED",
+      meta: expect.objectContaining({ leaveId: adminLeave._id, status: "rejected", reason: "Dates conflict" }),
+    }));
+    expect(notify.mock.calls[0][0].userId).not.toBe("64f000000000000000000003");
   });
 });

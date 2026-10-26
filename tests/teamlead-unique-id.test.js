@@ -1,3 +1,5 @@
+jest.mock("../utils/assignmentNotifications", () => ({ notifyNewAssignments: jest.fn().mockResolvedValue(undefined) }));
+
 const assert = require("assert");
 const mongoose = require("mongoose");
 const User = require("../models/User");

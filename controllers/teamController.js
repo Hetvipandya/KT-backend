@@ -5,6 +5,8 @@ const TeamMember =
   require( 
     "../models/TeamMember" 
   );
+const { notifyNewAssignments } = require("../utils/assignmentNotifications");
+const toArray = (value) => Array.isArray(value) ? value : value ? [value] : [];
   
 // =================
 // CREATE TEAM
@@ -49,6 +51,17 @@ exports.createTeam = async (req, res) => {
       });
     }
 
+    await notifyNewAssignments({ after: teamLead ? [{ id: teamLead, kind: "employee" }] : [], action: "TEAM_LEAD_ASSIGNED", entityType: "Team", recordId: team._id, recordName: team.name });
+    await notifyNewAssignments({
+      after: [
+        ...toArray(developers).map((id) => ({ id, kind: "employee" })),
+        ...toArray(designers).map((id) => ({ id, kind: "employee" })),
+        ...toArray(testers).map((id) => ({ id, kind: "employee" })),
+      ],
+      action: "TEAM_EMPLOYEE_ASSIGNED", entityType: "Team", recordId: team._id, recordName: team.name,
+    });
+    await notifyNewAssignments({ after: toArray(interns).map((id) => ({ id, kind: "user" })), action: "TEAM_INTERN_ASSIGNED", entityType: "Team", recordId: team._id, recordName: team.name });
+
     return res.status(201).json({
       success: true,
       message: "Team created successfully",
@@ -88,6 +101,17 @@ exports.assignTeam =
           designers,
           testers,
         });
+
+      await notifyNewAssignments({ after: teamLead ? [{ id: teamLead, kind: "employee" }] : [], action: "TEAM_LEAD_ASSIGNED", entityType: "Team", recordId: team._id, recordName: team.name });
+      await notifyNewAssignments({
+        after: [
+          ...toArray(developers).map((id) => ({ id, kind: "employee" })),
+          ...toArray(designers).map((id) => ({ id, kind: "employee" })),
+          ...toArray(testers).map((id) => ({ id, kind: "employee" })),
+        ],
+        action: "TEAM_EMPLOYEE_ASSIGNED", entityType: "Team", recordId: team._id, recordName: team.name,
+      });
+      await notifyNewAssignments({ after: toArray(interns).map((id) => ({ id, kind: "user" })), action: "TEAM_INTERN_ASSIGNED", entityType: "Team", recordId: team._id, recordName: team.name });
 
       return res
         .status(201)
