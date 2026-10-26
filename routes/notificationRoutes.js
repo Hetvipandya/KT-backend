@@ -16,7 +16,7 @@ router.post("/remove-token", protect, notificationController.removeDeviceToken);
 router.post("/create", notificationController.createNotification);
 
 // Admin Unified Notifications
-router.get("/admin/all", notificationController.getAdminNotifications);
+router.get("/admin/all", notificationController.getAdminNotifications); 
 router.put("/read-all", notificationController.markAllAsRead);
 
 router.get("/user/:userId", notificationController.getUserNotifications);

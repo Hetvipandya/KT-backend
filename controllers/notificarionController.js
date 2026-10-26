@@ -80,8 +80,47 @@ exports.getAdminNotifications = async (req, res) => {
     // Transform into unified notification items
     const feed = [];
 
+    // A broadcast announcement is stored once per recipient so each user has
+    // an independent read state. Show it once in the shared admin feed.
+    const notificationFeedItems = [];
+    const announcementGroups = new Map();
+    dbNotifications.forEach((notification) => {
+      const announcementId =
+        notification.type === "ANNOUNCEMENT" &&
+        (notification.meta?.announcementId || notification.metaData?.announcementId);
+
+      if (!announcementId) {
+        notificationFeedItems.push({
+          notification,
+          recipientCount: 1,
+          allRecipientsRead: Boolean(notification.isRead || notification.read),
+          notificationIds: [notification._id],
+        });
+        return;
+      }
+
+      const key = String(announcementId);
+      const existingGroup = announcementGroups.get(key);
+      if (existingGroup) {
+        existingGroup.recipientCount += 1;
+        existingGroup.allRecipientsRead =
+          existingGroup.allRecipientsRead && Boolean(notification.isRead || notification.read);
+        existingGroup.notificationIds.push(notification._id);
+        return;
+      }
+
+      const group = {
+        notification,
+        recipientCount: 1,
+        allRecipientsRead: Boolean(notification.isRead || notification.read),
+        notificationIds: [notification._id],
+      };
+      announcementGroups.set(key, group);
+      notificationFeedItems.push(group);
+    });
+
     // Add DB notifications
-    dbNotifications.forEach((n) => {
+    notificationFeedItems.forEach(({ notification: n, recipientCount, allRecipientsRead, notificationIds }) => {
       feed.push({
         _id: n._id,
         id: n._id,
@@ -89,9 +128,14 @@ exports.getAdminNotifications = async (req, res) => {
         message: n.message,
         type: n.type || "SYSTEM",
         category: n.type === "ANNOUNCEMENT" ? "announcement" : "system",
-        isRead: n.isRead || false,
+        isRead: allRecipientsRead,
         createdAt: n.createdAt,
-        user: n.userId ? { name: n.userId.name, email: n.userId.email } : null,
+        user: n.type === "ANNOUNCEMENT"
+          ? null
+          : n.userId ? { name: n.userId.name, email: n.userId.email } : null,
+        ...(n.type === "ANNOUNCEMENT" && recipientCount > 1
+          ? { recipientCount, notificationIds }
+          : {}),
         link: n.metaData?.link || "/dashboard",
       });
     });
@@ -181,9 +225,27 @@ exports.markAsRead = async (req, res) => {
     const { id } = req.params;
 
     if (id && !id.startsWith("leave_") && !id.startsWith("checkin_") && !id.startsWith("adj_")) {
-      await Notification.findByIdAndUpdate(id, {
-        isRead: true,
-      });
+      const notification = await Notification.findById(id).select("type meta metaData");
+      const announcementId =
+        notification?.type === "ANNOUNCEMENT" &&
+        (notification.meta?.announcementId || notification.metaData?.announcementId);
+
+      if (announcementId) {
+        await Notification.updateMany(
+          {
+            type: "ANNOUNCEMENT",
+            $or: [
+              { "meta.announcementId": announcementId },
+              { "metaData.announcementId": announcementId },
+            ],
+          },
+          { $set: { read: true, isRead: true, readAt: new Date() } }
+        );
+      } else {
+        await Notification.findByIdAndUpdate(id, {
+          $set: { read: true, isRead: true, readAt: new Date() },
+        });
+      }
     }
 
     return res.status(200).json({
