@@ -7,6 +7,14 @@ const Branch = require('../models/Branch');
  */
 const checkBranchAccess = async (req, res, next) => {
   try {
+    const requestPath = String(req.originalUrl || req.baseUrl || req.path || '').split('?')[0];
+    const isBranchCreate = req.method === 'POST' && /^\/api\/branch\/?$/.test(requestPath);
+
+    if (isBranchCreate) {
+      req.branchId = null;
+      return next();
+    }
+
     const activeCompanyId = req.company?._id?.toString() || req.user?.companyId?.toString();
     const activeAccess = (req.user?.companyAccess || []).find(
       (a) => a.isActive !== false && (activeCompanyId ? a.companyId.toString() === activeCompanyId : true)
