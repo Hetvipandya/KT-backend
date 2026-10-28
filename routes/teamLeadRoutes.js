@@ -5,7 +5,7 @@ const router = express.Router();
 const {  
   getDashboard,
   getMyTeam,
-  getReports, 
+  getReports,  
   createOrUpdateTeam,
   removeTeamLead,
 } = require("../controllers/teamLeadController");
@@ -32,7 +32,7 @@ router.get(
 router.post( 
   "/create-team",
   protect,
-  authorizeRoles("admin"),
+  authorizeRoles("admin", "hr"),
   createOrUpdateTeam
 );
 

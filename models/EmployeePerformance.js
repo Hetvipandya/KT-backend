@@ -9,7 +9,7 @@ const employeePerformanceSchema = new mongoose.Schema(
     },
 
     month: {
-      type: Number,
+      type: Number, 
       min: 1,
       max: 12,
     },
