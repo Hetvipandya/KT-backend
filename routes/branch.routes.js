@@ -10,7 +10,7 @@ const router = express.Router();
 // Apply authentication to all routes
 router.use(authenticate);
 
-/**
+/** 
  * @openapi 
  * /api/branch:
  *   post:
