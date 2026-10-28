@@ -68,7 +68,7 @@ const createCompany = async (req, res, next) => {
         },
         { new: true }
       );
-
+ 
       const FinanceUser = require('../models/FinanceUser');
       await FinanceUser.findOneAndUpdate(
         { userId: req.user._id },

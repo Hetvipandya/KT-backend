@@ -1315,7 +1315,13 @@ const approveEmployee = async (req, res) => {
     const targetUserId =
       (req.body && (req.body.userId || req.body.id || req.body.employeeId)) ||
       (req.params && (req.params.id || req.params.userId));
-    const { companyId, branchId } = req.body || {};
+    const {
+      companyId,
+      branchId,
+      financialYearId: bodyFinancialYearId,
+      financialYear,
+      yearLabel,
+    } = req.body || {};
 
     if (!targetUserId) {
       return res.status(400).json({
@@ -1330,6 +1336,8 @@ const approveEmployee = async (req, res) => {
         message: "Invalid userId",
       });
     }
+
+    const FinancialYear = require("../models/FinancialYear");
 
     let user = await User.findById(targetUserId);
     if (!user) {
@@ -1403,6 +1411,33 @@ const approveEmployee = async (req, res) => {
       } catch (_) {}
     }
 
+    let assignedFinancialYearId = bodyFinancialYearId || financialYear || user.financialYearId || null;
+    if (assignedFinancialYearId && typeof assignedFinancialYearId === "object") {
+      assignedFinancialYearId = assignedFinancialYearId._id || assignedFinancialYearId.id || null;
+    }
+    if (assignedFinancialYearId && !mongoose.Types.ObjectId.isValid(String(assignedFinancialYearId))) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid financialYearId",
+      });
+    }
+
+    if (assignedFinancialYearId) {
+      user.financialYearId = assignedFinancialYearId;
+      if (yearLabel) user.yearLabel = yearLabel;
+      if (mongoose.connection && mongoose.connection.readyState === 1) {
+        try {
+          if (typeof FinancialYear.findById === "function") {
+            const fyDoc = await FinancialYear.findById(assignedFinancialYearId).select("yearLabel financialYearLabel label name year");
+            if (fyDoc && !user.yearLabel) {
+              user.yearLabel =
+                fyDoc.yearLabel || fyDoc.financialYearLabel || fyDoc.label || fyDoc.name || fyDoc.year || user.yearLabel;
+            }
+          }
+        } catch (_) {}
+      }
+    }
+
     // --------------------------------------------------------
     // CREATE EMPLOYEE IF MISSING
     // --------------------------------------------------------
@@ -1422,6 +1457,7 @@ const approveEmployee = async (req, res) => {
     if (employee) {
       if (companyId) employee.companyId = companyId;
       if (branchId) employee.branchId = branchId;
+      if (assignedFinancialYearId) employee.financialYearId = assignedFinancialYearId;
       await employee.save();
     }
 
@@ -1466,6 +1502,36 @@ const approveEmployee = async (req, res) => {
 
     await user.save();
 
+    const FinanceUser = require("../models/FinanceUser");
+    if (companyId || branchId || assignedFinancialYearId) {
+      await FinanceUser.findOneAndUpdate(
+        { userId: user._id },
+        {
+          $set: {
+            companyId: companyId || user.companyId || null,
+            branchId: branchId || user.branchId || null,
+            financialYearId: assignedFinancialYearId || user.financialYearId || null,
+            companyCreated: true,
+            branchCreated: true,
+            financialYearCreated: Boolean(assignedFinancialYearId || user.financialYearId),
+            role: user.role || "employee",
+          },
+          $addToSet: {
+            companyAccess: {
+              companyId: companyId || user.companyId || null,
+              branchId: branchId || user.branchId || null,
+              role: user.role || "employee",
+              isActive: true,
+              invitedAt: new Date(),
+              inviteSent: true,
+              joinedAt: new Date(),
+            },
+          },
+        },
+        { upsert: true, new: true },
+      );
+    }
+
     await syncEmployeeStatus(employee, user.isActive);
 
     return res.status(200).json({
@@ -1481,6 +1547,8 @@ const approveEmployee = async (req, res) => {
         companyName: companyDoc ? (companyDoc.companyName || companyDoc.name) : null,
         branchId: user.branchId || null,
         branchName: branchDoc ? branchDoc.branchName : null,
+        financialYearId: user.financialYearId || null,
+        yearLabel: user.yearLabel || null,
         designation: employee ? employee.designation : user.designation,
         joiningDate: employee ? employee.joiningDate : null,
         isApproved: user.isApproved,
