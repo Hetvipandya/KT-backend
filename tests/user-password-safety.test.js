@@ -5,6 +5,7 @@ const Attendance = require("../models/Attendance");
 const {
   buildLoginLookupQuery,
   __test__applyPasswordUpdate,
+  __test__resolveApprovalPassword,
   __test__applySuccessfulLoginState,
   shouldRequireApproval,
 } = require("../controllers/userControllers");
@@ -66,6 +67,16 @@ describe("password safety for user updates", () => {
 
     expect(user.password).toBe("NewPass456");
     expect(user.plainPassword).toBeUndefined();
+  });
+
+  it("uses plain approval passwords and never accepts a stored bcrypt hash as a login password", () => {
+    expect(__test__resolveApprovalPassword("  EmployeePass123  ")).toBe("EmployeePass123");
+
+    const generatedPassword = __test__resolveApprovalPassword(
+      "$2a$10$2tgpsAIUohfrrN5uzbHyaebtT4amuVFwnNoktAhvxUuAICAKgXwKC",
+    );
+    expect(generatedPassword).toMatch(/^[A-Za-z0-9]{8}$/);
+    expect(generatedPassword).not.toContain("$2a$");
   });
 
   it("ensures passwords are hashed and plainPassword is never exposed in JSON output", async () => {

@@ -59,6 +59,15 @@ const applyPasswordUpdate = (user, newPassword) => {
   return user;
 };
 
+const resolveApprovalPassword = (requestedPassword) => {
+  const normalizedPassword = typeof requestedPassword === "string" ? requestedPassword.trim() : "";
+  if (normalizedPassword && !/^\$2[aby]\$/.test(normalizedPassword)) {
+    return normalizedPassword;
+  }
+
+  return crypto.randomBytes(12).toString("base64").replace(/[^a-zA-Z0-9]/g, "").slice(0, 8).padEnd(8, "A");
+};
+
 const normalizeResetToken = (tokenValue) => {
   const tokenString = String(tokenValue ?? "").trim();
 
@@ -1484,11 +1493,11 @@ const approveEmployee = async (req, res) => {
     user.isActive = true;
     user.status = "Active";
 
-    const plainPassword =
-      (req.body && (req.body.password || req.body.plainPassword || req.body.tempPassword || req.body.temporaryPassword)) ||
-      crypto.randomBytes(6).toString("base64").replace(/[^a-zA-Z0-9]/g, "").slice(0, 8);
+    const requestedPassword =
+      req.body && (req.body.password || req.body.plainPassword || req.body.tempPassword || req.body.temporaryPassword);
+    const plainPassword = resolveApprovalPassword(requestedPassword);
 
-    user.password = plainPassword;
+    applyPasswordUpdate(user, plainPassword);
 
     if (user.email) {
       sendTemporaryPasswordEmail(
@@ -2577,6 +2586,7 @@ module.exports = {
   buildLoginLookupQuery,
   shouldRequireApproval,
   __test__applyPasswordUpdate: applyPasswordUpdate,
+  __test__resolveApprovalPassword: resolveApprovalPassword,
   __test__applySuccessfulLoginState: applySuccessfulLoginState,
   __test__getEmployeeStatus: getEmployeeStatus,
   __test__syncEmployeeStatus: syncEmployeeStatus,
