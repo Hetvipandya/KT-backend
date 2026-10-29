@@ -2,6 +2,15 @@ const { z } = require('zod');
 
 const objectId = z.string().regex(/^[a-fA-F0-9]{24}$/, 'Must be a valid MongoDB ObjectId');
 const amount = z.coerce.number().finite().min(0);
+const roundOffAmount = z.preprocess((value) => {
+  if (value === null || value === undefined || value === '') return 0;
+  if (typeof value === 'string') {
+    const normalized = value.replace(/,/g, '').replace(/[^0-9.+-]/g, '').trim();
+    if (normalized === '') return 0;
+    return normalized;
+  }
+  return value;
+}, z.coerce.number().finite());
 const isoDate = z.string().datetime({ offset: true }).or(z.string().date());
 const statuses = ['DRAFT', 'POSTED', 'PARTIALLY_PAID', 'PAID', 'CANCELLED'];
 
@@ -26,7 +35,7 @@ const invoiceFields = {
   discountTotal: amount.optional().default(0),
   taxTotal: amount,
   grandTotal: amount,
-  roundOff: z.coerce.number().finite().optional().default(0),
+  roundOff: roundOffAmount.optional().default(0),
   notes: z.string().trim().max(5000).optional().default(''),
   meta: z.record(z.unknown()).optional().default({})
 };
@@ -49,7 +58,7 @@ const updateInvoiceSchema = z.object({
   discountTotal: amount.optional(),
   taxTotal: amount.optional(),
   grandTotal: amount.optional(),
-  roundOff: z.coerce.number().finite().optional(),
+  roundOff: roundOffAmount.optional(),
   notes: z.string().trim().max(5000).optional(),
   meta: z.record(z.unknown()).optional()
 }).strict();

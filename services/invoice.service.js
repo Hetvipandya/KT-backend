@@ -14,12 +14,17 @@ const EPSILON = 0.01;
 const fail = (message, statusCode = 400, errorCode) => Object.assign(new Error(message), { statusCode, errorCode });
 const id = (v) => v?.toString();
 
+const roundMoney = (value) => Math.round((Number(value) + Number.EPSILON) * 100) / 100;
+
 const validateTotals = (data) => {
-  const subTotal = data.lineItems.reduce((sum, line) => sum + line.taxableAmount, 0);
-  const taxTotal = data.lineItems.reduce((sum, line) => sum + line.taxAmount, 0);
-  if (Math.abs(data.subTotal - subTotal) > EPSILON) throw fail('subTotal does not match line-item taxable amounts', 400, 'INVALID_TOTALS');
-  if (Math.abs(data.taxTotal - taxTotal) > EPSILON) throw fail('taxTotal does not match line-item tax amounts', 400, 'INVALID_TOTALS');
-  if (Math.abs(data.grandTotal - (data.subTotal - data.discountTotal + data.taxTotal + data.roundOff)) > EPSILON) throw fail('grandTotal is inconsistent with totals', 400, 'INVALID_TOTALS');
+  const roundOff = Number.isFinite(Number(data.roundOff)) ? roundMoney(data.roundOff) : 0;
+  const subTotal = data.lineItems.reduce((sum, line) => sum + Number(line.taxableAmount || 0), 0);
+  const taxTotal = data.lineItems.reduce((sum, line) => sum + Number(line.taxAmount || 0), 0);
+  const discountTotal = roundMoney(data.discountTotal || 0);
+  const calculatedGrandTotal = roundMoney(Number(data.subTotal) - discountTotal + Number(data.taxTotal) + roundOff);
+  if (Math.abs(roundMoney(data.subTotal) - roundMoney(subTotal)) > EPSILON) throw fail('subTotal does not match line-item taxable amounts', 400, 'INVALID_TOTALS');
+  if (Math.abs(roundMoney(data.taxTotal) - roundMoney(taxTotal)) > EPSILON) throw fail('taxTotal does not match line-item tax amounts', 400, 'INVALID_TOTALS');
+  if (Math.abs(roundMoney(data.grandTotal) - calculatedGrandTotal) > EPSILON) throw fail(`grandTotal is inconsistent with totals. Expected ${calculatedGrandTotal}`, 400, 'INVALID_TOTALS');
   if (data.grandTotal <= 0) throw fail('grandTotal must be greater than zero', 400, 'INVALID_TOTALS');
   for (const line of data.lineItems) {
     if (Math.abs(line.totalAmount - (line.taxableAmount + line.taxAmount)) > EPSILON) throw fail('line totalAmount is inconsistent', 400, 'INVALID_LINE_TOTAL');
@@ -162,7 +167,18 @@ const createJournalEntryForInvoice = async (invoice, userId) => {
 };
 
 const createInvoice = async (data, userId) => {
-  validateTotals(data);
+  const roundOff = Number.isFinite(Number(data.roundOff)) ? roundMoney(data.roundOff) : 0;
+  const calculatedGrandTotal = roundMoney(
+    Number(data.subTotal || 0) - Number(data.discountTotal || 0) + Number(data.taxTotal || 0) + roundOff,
+  );
+  const normalizedData = {
+    ...data,
+    roundOff,
+    grandTotal: calculatedGrandTotal,
+  };
+
+  validateTotals(normalizedData);
+  data = normalizedData;
   const { fy, customer } = await validateReferences(data);
 
   for (let attempt = 0; attempt < 3; attempt += 1) {
@@ -287,6 +303,10 @@ const updateInvoice = async (invoice, data, userId) => {
   if (invoice.status === 'CANCELLED') throw fail('Cancelled invoice cannot be edited', 400, 'INVOICE_CANCELLED');
   if (invoice.status === 'PAID' || invoice.status === 'PARTIALLY_PAID' || (invoice.appliedPayments || []).length || (invoice.amountReceived || 0) > 0) throw fail('Invoice cannot be edited after payment.', 400, 'INVOICE_HAS_PAYMENT');
 
+  const hasRoundOff = Object.prototype.hasOwnProperty.call(data, 'roundOff');
+  if (hasRoundOff) {
+    data.roundOff = Number.isFinite(Number(data.roundOff)) ? roundMoney(data.roundOff) : 0;
+  }
   validateTotals(data);
   const { customer } = await validateReferences({ ...data, companyId: id(invoice.companyId), financialYearId: id(invoice.financialYearId), customerId: id(invoice.customerId) });
 
