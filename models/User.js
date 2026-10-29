@@ -563,7 +563,7 @@ userSchema.pre(
       this.bankDetailGiven = hasBankData;
 
       if (this.isModified("password") && this.password) {
-        if (!this.password.startsWith("$2a$") && !this.password.startsWith("$2b$")) {
+        if (!/^\$2[aby]\$/.test(this.password)) {
           const salt = await bcrypt.genSalt(10);
           const hashedPassword = await bcrypt.hash(this.password, salt);
           this.password = hashedPassword;
@@ -605,7 +605,7 @@ userSchema.methods.comparePassword =
 
     for (const candidate of hashCandidates) {
       if (typeof candidate === "string") {
-        if (candidate.startsWith("$2a$") || candidate.startsWith("$2b$")) {
+        if (/^\$2[aby]\$/.test(candidate)) {
           try {
             const isHashMatch = await bcrypt.compare(
               String(enteredPassword),

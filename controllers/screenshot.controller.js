@@ -12,7 +12,7 @@ exports.createScreenshot = async (req, res) => {
 
     if (!userId) {
       return res.status(401).json({ success: false, message: "Authentication required" });
-    }
+    } 
 
     if (typeof sessionId !== "string" || !sessionId.trim() || !imageUrl) {
       return res.status(400).json({

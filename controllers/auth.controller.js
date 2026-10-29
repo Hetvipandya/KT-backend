@@ -179,7 +179,7 @@ const login = async (req, res, next) => {
     const { email, password } = req.body;
 
     const user = await User.findOne({ email }).select(
-      "+passwordHash +refreshTokens",
+      "+password +passwordHash +refreshTokens",
     );
     if (!user) {
       return res.status(401).json({
@@ -219,10 +219,10 @@ const login = async (req, res, next) => {
       });
     }
 
-    const storedPasswordHash = user.passwordHash;
+    const storedPasswordHashes = [...new Set([user.passwordHash, user.password].filter(Boolean))];
 
     // Guard against invited users who haven't completed password setup yet.
-    if (!storedPasswordHash) {
+    if (storedPasswordHashes.length === 0) {
       return res.status(401).json({
         success: false,
         message:
@@ -230,8 +230,16 @@ const login = async (req, res, next) => {
       });
     }
 
-    // Compare passwords
-    const isPasswordValid = await comparePassword(password, storedPasswordHash);
+    // Compare against both legacy-compatible fields; only a bcrypt hash is treated as hash.
+    let isPasswordValid = false;
+    for (const storedPasswordHash of storedPasswordHashes) {
+      if (/^\$2[aby]\$/.test(storedPasswordHash)) {
+        isPasswordValid = await comparePassword(password, storedPasswordHash);
+      } else if (storedPasswordHash === String(password)) {
+        isPasswordValid = true;
+      }
+      if (isPasswordValid) break;
+    }
 
     if (!isPasswordValid) {
       // Increment login attempts
@@ -604,7 +612,7 @@ const changePassword = async (req, res, next) => {
   try {
     const { currentPassword, oldPassword, newPassword, confirmPassword } = req.body;
     const passwordToVerify = oldPassword ?? currentPassword;
-    const user = await User.findById(req.user._id).select("+passwordHash");
+    const user = await User.findById(req.user._id).select("+password +passwordHash");
 
     if (!user) {
       return res.status(404).json({
@@ -621,8 +629,16 @@ const changePassword = async (req, res, next) => {
     }
 
     if (passwordToVerify) {
-      const secretHash = user.passwordHash || user.password;
-      const isCurrentValid = await comparePassword(passwordToVerify, secretHash);
+      const secretCandidates = [...new Set([user.passwordHash, user.password].filter(Boolean))];
+      let isCurrentValid = false;
+      for (const secret of secretCandidates) {
+        if (/^\$2[aby]\$/.test(secret)) {
+          isCurrentValid = await comparePassword(passwordToVerify, secret);
+        } else if (secret === String(passwordToVerify)) {
+          isCurrentValid = true;
+        }
+        if (isCurrentValid) break;
+      }
       if (!isCurrentValid) {
         return res.status(401).json({
           success: false,
@@ -631,8 +647,8 @@ const changePassword = async (req, res, next) => {
       }
     }
 
-    user.passwordHash = await hashPassword(newPassword);
-    user.password = newPassword;
+    user.password = String(newPassword).trim();
+    user.passwordHash = undefined;
     user.mustChangePassword = false;
     user.isFirstLogin = false;
     await user.save();
