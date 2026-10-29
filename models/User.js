@@ -607,9 +607,12 @@ userSchema.methods.comparePassword =
       if (typeof candidate === "string") {
         if (/^\$2[aby]\$/.test(candidate)) {
           try {
+            const normalizedHash = candidate.startsWith("$2y$")
+              ? candidate.replace("$2y$", "$2b$")
+              : candidate;
             const isHashMatch = await bcrypt.compare(
               String(enteredPassword),
-              candidate
+              normalizedHash
             );
             if (isHashMatch) {
               return true;

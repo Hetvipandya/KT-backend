@@ -17,7 +17,10 @@ const hashPassword = async (password) => {
  * @returns {Promise<boolean>}
  */
 const comparePassword = async (password, hash) => {
-  return bcrypt.compare(password, hash);
+  const normalizedHash = typeof hash === "string" && hash.startsWith("$2y$")
+    ? hash.replace("$2y$", "$2b$")
+    : hash;
+  return bcrypt.compare(String(password), normalizedHash);
 };
 
 /**

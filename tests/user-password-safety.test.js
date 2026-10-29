@@ -70,7 +70,7 @@ describe("password safety for user updates", () => {
   });
 
   it("uses plain approval passwords and never accepts a stored bcrypt hash as a login password", () => {
-    expect(__test__resolveApprovalPassword("  EmployeePass123  ")).toBe("EmployeePass123");
+    expect(__test__resolveApprovalPassword("  EmployeePass123  ")).toBe("  EmployeePass123  ");
 
     const generatedPassword = __test__resolveApprovalPassword(
       "$2a$10$2tgpsAIUohfrrN5uzbHyaebtT4amuVFwnNoktAhvxUuAICAKgXwKC",

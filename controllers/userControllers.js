@@ -60,9 +60,9 @@ const applyPasswordUpdate = (user, newPassword) => {
 };
 
 const resolveApprovalPassword = (requestedPassword) => {
-  const normalizedPassword = typeof requestedPassword === "string" ? requestedPassword.trim() : "";
-  if (normalizedPassword && !/^\$2[aby]\$/.test(normalizedPassword)) {
-    return normalizedPassword;
+  const password = typeof requestedPassword === "string" ? requestedPassword : "";
+  if (password && password.trim() && !/^\$2[aby]\$/.test(password)) {
+    return password;
   }
 
   return crypto.randomBytes(12).toString("base64").replace(/[^a-zA-Z0-9]/g, "").slice(0, 8).padEnd(8, "A");
@@ -1494,7 +1494,7 @@ const approveEmployee = async (req, res) => {
     user.status = "Active";
 
     const requestedPassword =
-      req.body && (req.body.password || req.body.plainPassword || req.body.tempPassword || req.body.temporaryPassword);
+      req.body && (req.body.password || req.body.plainPassword || req.body.tempPassword || req.body.temporaryPassword || req.body.generatedPassword || req.body.initialPassword);
     const plainPassword = resolveApprovalPassword(requestedPassword);
 
     applyPasswordUpdate(user, plainPassword);
