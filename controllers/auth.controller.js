@@ -327,12 +327,19 @@ const login = async (req, res, next) => {
       });
     }
 
+    const onboardingData = await buildUserOnboardingResponse(reconciledUser);
     return res.status(200).json({
       success: true,
+      message: "User logged in successfully",
+      token: tokens.accessToken,
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
+      user: onboardingData,
       data: {
+        token: tokens.accessToken,
         accessToken: tokens.accessToken,
         refreshToken: tokens.refreshToken,
-        ...(await buildUserOnboardingResponse(reconciledUser)),
+        ...onboardingData,
         teamLead,
       },
     });

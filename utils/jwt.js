@@ -3,12 +3,18 @@ const crypto = require('crypto');
 const env = require('../config/env');
 
 /**
- * Generate a JWT access token (15 minute expiry)
+ * Generate a JWT access token (7 day expiry)
  * @param {object} payload - { userId, email, role }
  * @returns {string}
  */
 const generateAccessToken = (payload) => {
-  return jwt.sign(payload, env.JWT_ACCESS_SECRET, {
+  const uid = payload.userId || payload.id || payload._id;
+  const normalizedPayload = {
+    ...payload,
+    id: uid,
+    userId: uid,
+  };
+  return jwt.sign(normalizedPayload, env.JWT_ACCESS_SECRET, {
     expiresIn: '7d'
   });
 };
@@ -19,8 +25,9 @@ const generateAccessToken = (payload) => {
  * @returns {string}
  */
 const generateRefreshToken = (payload) => {
+  const uid = payload.userId || payload.id || payload._id;
   return jwt.sign(
-    { ...payload, jti: crypto.randomUUID() }, // jti ensures uniqueness even within same second
+    { ...payload, id: uid, userId: uid, jti: crypto.randomUUID() }, // jti ensures uniqueness even within same second
     env.JWT_REFRESH_SECRET,
     { expiresIn: '30d' }
   );

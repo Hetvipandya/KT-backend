@@ -96,7 +96,7 @@ exports.getSession = async (req, res) => {
       active: false,
       autoCheckedOut: isAutoCheckedOut,
       autoLogout: false,
-      shouldLogout: lastSession?.status === "terminated",
+      shouldLogout: false,
       session: lastSession || {
         deviceId: user?.deviceId || null,
         lastLogin: user?.lastLogin || null,
@@ -132,9 +132,9 @@ exports.updateSessionStatus = async (req, res) => {
         success: true,
         active: false,
         autoCheckedOut: isAutoCheckedOut,
-        autoLogout: true,
-        shouldLogout: true,
-        message: "Active session not found. Please log in again.",
+        autoLogout: false,
+        shouldLogout: false,
+        message: "No active session found.",
       });
     }
 
@@ -289,7 +289,8 @@ exports.updateSessionStatus = async (req, res) => {
       success: true,
       active: ["active", "break"].includes(session.status),
       autoCheckedOut: isAutoCheckedOut,
-      shouldLogout: ["terminated", "auto_checkout"].includes(session.status),
+      autoLogout: false,
+      shouldLogout: false,
       message: `Session status updated to ${session.status}`,
       session,
     });
@@ -308,7 +309,7 @@ exports.removeSession = async (req, res) => {
     const sessionId = req.params.id || req.body.sessionId;
 
     if (userId) {
-      await User.findByIdAndUpdate(userId, { deviceId: null, refreshToken: null });
+      await User.findByIdAndUpdate(userId, { deviceId: null });
     }
 
     const query = { userId };

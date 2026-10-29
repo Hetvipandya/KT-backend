@@ -1,76 +1,5 @@
-
-
-// const jwt = require("jsonwebtoken");
-// const User = require("../models/User");
-
-// exports.protect = async (req, res, next) => {
-//   try {
-//     let token;
-
-//     // 1. Get token from header
-//     if (
-//       req.headers.authorization && 
-//       req.headers.authorization.startsWith("Bearer")
-//     ) {
-//       token = req.headers.authorization.split(" ")[1];
-//     }
-
-//     // 2. If no token
-//     if (!token) {
-//       return res.status(401).json({
-//         success: false,
-//         message: "Unauthorized - No token provided",
-//       });
-//     }
-
-//     // 3. Verify token
-//     let decoded;
-//     try {
-//       decoded = jwt.verify(token, process.env.JWT_SECRET);
-//     } catch (err) {
-//       return res.status(401).json({
-//         success: false,
-//         message: "Token invalid or expired",
-//       });
-//     }
-
-//     // 4. Find user
-//     const user = await User.findById(decoded.id).select("-password");
-
-//     if (!user) {
-//       return res.status(401).json({
-//         success: false,
-//         message: "User not found",
-//       });
-//     }
-
-//     // 5. Optional: check active user (if field exists)
-//     if (user.isActive === false) {
-//       return res.status(403).json({
-//         success: false,
-//         message: "User account disabled",
-//       });
-//     }
-
-//     // 6. Attach user to request
-//     req.user = user;
-
-//     // 7. Debug logs (safe)
-//     console.log("🔐 Logged User ID:", user._id.toString());
-//     console.log("👤 Logged User Role:", user.role);
-
-//     next();
-//   } catch (error) {
-//     console.log("Auth Middleware Error:", error.message);
- 
-//     return res.status(500).json({
-//       success: false,
-//       message: "Server error in authentication",
-//     });
-//   }
-// };
-
 const jwt = require("jsonwebtoken");
+const mongoose = require("mongoose");
 const User = require("../models/User");
 const FinanceUser = require("../models/FinanceUser");
 
@@ -82,20 +11,17 @@ exports.protect = async (req, res, next) => {
     let token;
 
     // ================= GET TOKEN =================
-    if (
-      req.headers.authorization &&
-      req.headers.authorization.startsWith("Bearer ")
-    ) {
-      token = req.headers.authorization.split(" ")[1];
+    if (req.headers.authorization) {
+      const parts = req.headers.authorization.trim().split(/\s+/);
+      if (parts.length === 2 && /^bearer$/i.test(parts[0])) {
+        token = parts[1];
+      } else if (parts.length === 1 && !parts[0].toLowerCase().startsWith("bearer")) {
+        token = parts[0];
+      }
     }
 
-    console.log("======================================");
-    console.log("Authorization Header:", req.headers.authorization);
-    console.log("Received Token:", token);
-    console.log("JWT_SECRET:", process.env.JWT_SECRET);
-
     // ================= TOKEN CHECK =================
-    if (!token) {
+    if (!token || token === "undefined" || token === "null") {
       return res.status(401).json({
         success: false,
         message: "Unauthorized - No token provided",
@@ -108,30 +34,50 @@ exports.protect = async (req, res, next) => {
     try {
       decoded = jwt.verify(
         token,
-        process.env.JWT_SECRET
+        process.env.JWT_SECRET || "kevalonTechnology"
       );
-
-      console.log("Decoded Token:", decoded);
     } catch (err) {
-      console.log("JWT VERIFY ERROR");
-      console.log("Name:", err.name);
-      console.log("Message:", err.message);
+      try {
+        const envConfig = require("../config/env");
+        decoded = jwt.verify(
+          token,
+          envConfig.JWT_ACCESS_SECRET || envConfig.JWT_SECRET || "kevalonTechnology"
+        );
+      } catch (secondErr) {
+        return res.status(401).json({
+          success: false,
+          message: "Token invalid or expired",
+          error: err.message,
+        });
+      }
+    }
 
+    // Support both token payload styles: { id: ... } and { userId: ... }
+    const userId = decoded.id || decoded.userId || decoded._id || decoded.sub;
+
+    if (!userId) {
       return res.status(401).json({
         success: false,
-        message: "Token invalid or expired",
-        error: err.message, // Remove after debugging
+        message: "Unauthorized - Missing user identifier in token",
       });
     }
 
-    console.log("Decoded User ID:", decoded.id);
-
     // ================= FIND USER =================
-    const user = await User.findById(decoded.id).select("-password");
+    let user = null;
+    if (mongoose.Types.ObjectId.isValid(userId)) {
+      user = await User.findById(userId).select("-password");
+    }
+    if (!user) {
+      user = await User.findOne({
+        $or: [
+          { userId: userId },
+          { uniqueID: userId },
+          { email: typeof userId === "string" ? userId.toLowerCase() : userId },
+        ],
+      }).select("-password");
+    }
 
     if (!user) {
-      console.log("User not found in database");
-
       return res.status(401).json({
         success: false,
         message: "User not found",
@@ -139,7 +85,7 @@ exports.protect = async (req, res, next) => {
     }
 
     // ================= ACTIVE CHECK =================
-    if (user.isActive === false) {
+    if (user.isActive === false && user.status === "Inactive") {
       return res.status(403).json({
         success: false,
         message: "User account disabled",
@@ -154,20 +100,8 @@ exports.protect = async (req, res, next) => {
     // ================= ATTACH USER =================
     req.user = user;
 
-    console.log("Authenticated User:", {
-      id: user._id.toString(),
-      name: user.name,
-      email: user.email,
-      role: user.role,
-    });
-
-    console.log("======================================");
-
     next();
   } catch (error) {
-    console.log("AUTH MIDDLEWARE ERROR");
-    console.log(error);
-
     return res.status(500).json({
       success: false,
       message: "Server error in authentication",

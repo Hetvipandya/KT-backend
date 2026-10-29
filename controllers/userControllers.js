@@ -170,11 +170,13 @@ const transporter = nodemailer.createTransport({
 // ============================================================
 
 const generateToken = (userId) => {
+  const uid = userId ? userId.toString() : userId;
   return jwt.sign(
     { 
-      id: userId,
+      id: uid,
+      userId: uid,
     },
-    process.env.JWT_SECRET,
+    process.env.JWT_SECRET || "kevalonTechnology",
     {
       expiresIn: "7d",
     },
@@ -1788,6 +1790,8 @@ const loginUser = async (req, res) => {
 
     await user.save();
 
+    const userResponse = buildUserResponse(user);
+
     return res.status(200).json({
       success: true,
 
@@ -1795,12 +1799,21 @@ const loginUser = async (req, res) => {
 
       token,
 
+      accessToken: token,
+
       refreshToken,
 
       changePassword: user.mustChangePassword || user.isFirstLogin,
       mustChangePassword: user.mustChangePassword || user.isFirstLogin,
 
-      user: buildUserResponse(user),
+      user: userResponse,
+
+      data: {
+        token,
+        accessToken: token,
+        refreshToken,
+        user: userResponse,
+      },
     });
   } catch (error) {
     console.error("Login Error:", error);

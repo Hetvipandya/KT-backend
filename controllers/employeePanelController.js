@@ -518,9 +518,10 @@ exports.sessionHeartbeat = async (req, res) => {
       return res.status(200).json({
         success: true,
         active: false,
-        autoCheckedOut: true,
-        shouldLogout: true,
-        message: "Active session not found. Please log in again.",
+        autoCheckedOut: false,
+        autoLogout: false,
+        shouldLogout: false,
+        message: "No active attendance session.",
       });
     }
 

@@ -271,6 +271,16 @@ const userSchema =
         type: String,
         default: null,
       },
+      refreshTokens: [
+        {
+          tokenHash: { type: String, trim: true },
+          userAgent: { type: String, default: "" },
+          ip: { type: String, default: "" },
+          createdAt: { type: Date, default: Date.now },
+          expiresAt: { type: Date },
+          revoked: { type: Boolean, default: false },
+        },
+      ],
 
       // ================= OTP =================
       otpVerified: {
@@ -451,6 +461,7 @@ const transformUserObject = function (doc, ret) {
   delete ret.password;
   delete ret.passwordHash;
   delete ret.plainPassword;
+  delete ret.refreshTokens;
   const imgUrl = ret.profileImage || ret.profilePhoto || ret.avatar || null;
   ret.profileImage = imgUrl;
   ret.profilePhoto = imgUrl;
