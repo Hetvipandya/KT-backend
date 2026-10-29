@@ -46,7 +46,7 @@ describe("password safety for user updates", () => {
   it("builds a precise user lookup for login without an empty matcher", () => {
     expect(buildLoginLookupQuery("beta@example.com")).toEqual({
       $or: [
-        { email: "beta@example.com" },
+        { email: { $regex: "^beta@example\\.com$", $options: "i" } },
         { phoneNumber: "beta@example.com" },
         { name: "beta@example.com" },
       ],

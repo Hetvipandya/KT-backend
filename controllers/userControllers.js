@@ -33,9 +33,11 @@ const buildLoginLookupQuery = (loginInput) => {
 
   const lower = normalized.toLowerCase();
 
+  const escapedEmail = lower.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
   return {
     $or: [
-      { email: lower },
+      { email: { $regex: `^${escapedEmail}$`, $options: "i" } },
       { phoneNumber: normalized },
       { name: normalized },
     ],
