@@ -14,21 +14,42 @@ const EPSILON = 0.01;
 const fail = (message, statusCode = 400, errorCode) => Object.assign(new Error(message), { statusCode, errorCode });
 const id = (v) => v?.toString();
 
-const roundMoney = (value) => Math.round((Number(value) + Number.EPSILON) * 100) / 100;
+const roundMoney = (value) => {
+  const amount = Number(value) || 0;
+  const factor = 100;
+  return Math.round((amount + Math.sign(amount) * Number.EPSILON) * factor) / factor;
+};
+
+const normalizeInvoiceTotals = (data) => {
+  const lines = (data.lineItems || []).map((line) => {
+    const quantity = Number(line.quantity || 0);
+    const rate = Number(line.rate || 0);
+    const lineDiscount = Number(line.discount || 0);
+    const taxableAmount = roundMoney(quantity * rate - lineDiscount);
+    const taxAmount = roundMoney(Number(line.taxAmount || 0));
+
+    return {
+      ...line,
+      taxableAmount,
+      taxAmount,
+      totalAmount: roundMoney(taxableAmount + taxAmount),
+    };
+  });
+
+  const subTotal = roundMoney(lines.reduce((sum, line) => sum + line.taxableAmount, 0));
+  const taxTotal = roundMoney(lines.reduce((sum, line) => sum + line.taxAmount, 0));
+  const discountTotal = roundMoney(data.discountTotal || 0);
+  const roundOff = roundMoney(data.roundOff || 0);
+  const grandTotal = roundMoney(subTotal - discountTotal + taxTotal + roundOff);
+
+  return { ...data, lineItems: lines, subTotal, discountTotal, taxTotal, roundOff, grandTotal };
+};
 
 const validateTotals = (data) => {
-  const roundOff = Number.isFinite(Number(data.roundOff)) ? roundMoney(data.roundOff) : 0;
-  const subTotal = data.lineItems.reduce((sum, line) => sum + Number(line.taxableAmount || 0), 0);
-  const taxTotal = data.lineItems.reduce((sum, line) => sum + Number(line.taxAmount || 0), 0);
-  const discountTotal = roundMoney(data.discountTotal || 0);
-  const calculatedGrandTotal = roundMoney(Number(data.subTotal) - discountTotal + Number(data.taxTotal) + roundOff);
-  if (Math.abs(roundMoney(data.subTotal) - roundMoney(subTotal)) > EPSILON) throw fail('subTotal does not match line-item taxable amounts', 400, 'INVALID_TOTALS');
-  if (Math.abs(roundMoney(data.taxTotal) - roundMoney(taxTotal)) > EPSILON) throw fail('taxTotal does not match line-item tax amounts', 400, 'INVALID_TOTALS');
-  if (Math.abs(roundMoney(data.grandTotal) - calculatedGrandTotal) > EPSILON) throw fail(`grandTotal is inconsistent with totals. Expected ${calculatedGrandTotal}`, 400, 'INVALID_TOTALS');
-  if (data.grandTotal <= 0) throw fail('grandTotal must be greater than zero', 400, 'INVALID_TOTALS');
-  for (const line of data.lineItems) {
-    if (Math.abs(line.totalAmount - (line.taxableAmount + line.taxAmount)) > EPSILON) throw fail('line totalAmount is inconsistent', 400, 'INVALID_LINE_TOTAL');
+  if (!data.lineItems || data.lineItems.length === 0) {
+    throw fail('At least one line item is required', 400, 'INVALID_TOTALS');
   }
+  if (data.grandTotal <= 0) throw fail('grandTotal must be greater than zero', 400, 'INVALID_TOTALS');
 };
 
 const validateReferences = async (data) => {
@@ -144,7 +165,12 @@ const createJournalEntryForInvoice = async (invoice, userId) => {
     lines.push({ accountId: customerAccount._id, debit: invoice.grandTotal, credit: 0, remarks: 'Sales invoice receivable' });
   }
   if (salesAccount) {
-    lines.push({ accountId: salesAccount._id, debit: 0, credit: invoice.subTotal - invoice.discountTotal, remarks: 'Sales revenue' });
+    lines.push({
+      accountId: salesAccount._id,
+      debit: 0,
+      credit: roundMoney(invoice.subTotal - invoice.discountTotal + (invoice.roundOff || 0)),
+      remarks: 'Sales revenue' + ((invoice.roundOff || 0) !== 0 ? ' including round off' : '')
+    });
   }
   if (gstAccount && invoice.taxTotal > 0) {
     lines.push({ accountId: gstAccount._id, debit: 0, credit: invoice.taxTotal, remarks: 'Output GST' });
@@ -167,18 +193,8 @@ const createJournalEntryForInvoice = async (invoice, userId) => {
 };
 
 const createInvoice = async (data, userId) => {
-  const roundOff = Number.isFinite(Number(data.roundOff)) ? roundMoney(data.roundOff) : 0;
-  const calculatedGrandTotal = roundMoney(
-    Number(data.subTotal || 0) - Number(data.discountTotal || 0) + Number(data.taxTotal || 0) + roundOff,
-  );
-  const normalizedData = {
-    ...data,
-    roundOff,
-    grandTotal: calculatedGrandTotal,
-  };
-
-  validateTotals(normalizedData);
-  data = normalizedData;
+  data = normalizeInvoiceTotals(data);
+  validateTotals(data);
   const { fy, customer } = await validateReferences(data);
 
   for (let attempt = 0; attempt < 3; attempt += 1) {
@@ -303,10 +319,8 @@ const updateInvoice = async (invoice, data, userId) => {
   if (invoice.status === 'CANCELLED') throw fail('Cancelled invoice cannot be edited', 400, 'INVOICE_CANCELLED');
   if (invoice.status === 'PAID' || invoice.status === 'PARTIALLY_PAID' || (invoice.appliedPayments || []).length || (invoice.amountReceived || 0) > 0) throw fail('Invoice cannot be edited after payment.', 400, 'INVOICE_HAS_PAYMENT');
 
-  const hasRoundOff = Object.prototype.hasOwnProperty.call(data, 'roundOff');
-  if (hasRoundOff) {
-    data.roundOff = Number.isFinite(Number(data.roundOff)) ? roundMoney(data.roundOff) : 0;
-  }
+  const existing = typeof invoice.toObject === 'function' ? invoice.toObject() : { ...invoice };
+  data = normalizeInvoiceTotals({ ...existing, ...data });
   validateTotals(data);
   const { customer } = await validateReferences({ ...data, companyId: id(invoice.companyId), financialYearId: id(invoice.financialYearId), customerId: id(invoice.customerId) });
 
