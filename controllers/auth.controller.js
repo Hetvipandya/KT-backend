@@ -519,7 +519,7 @@ const resetPassword = async (req, res, next) => {
       });
     }
 
-    if (confirmPassword && String(requestedPassword).trim() !== String(confirmPassword).trim()) {
+    if (confirmPassword && String(requestedPassword) !== String(confirmPassword)) {
       return res.status(400).json({
         success: false,
         message: "Passwords do not match.",
@@ -564,7 +564,7 @@ const resetPassword = async (req, res, next) => {
     }
 
     // Set new password cleanly so pre-save hook syncs both password and passwordHash
-    user.password = String(requestedPassword).trim();
+    user.password = String(requestedPassword);
     user.passwordHash = undefined;
 
     // Clear reset tokens
@@ -1038,7 +1038,7 @@ const handleResetPasswordWeb = async (req, res, next) => {
       return respondError(400, "Error", "Invalid request parameters.");
     }
 
-    if (confirmPassword && String(requestedPassword).trim() !== String(confirmPassword).trim()) {
+    if (confirmPassword && String(requestedPassword) !== String(confirmPassword)) {
       return respondError(400, "Validation Error", "Passwords do not match.");
     }
 
@@ -1085,7 +1085,7 @@ const handleResetPasswordWeb = async (req, res, next) => {
     }
 
     // Set new password cleanly
-    user.password = String(requestedPassword).trim();
+    user.password = String(requestedPassword);
     user.passwordHash = undefined;
 
     user.passwordResetTokenHash = null;

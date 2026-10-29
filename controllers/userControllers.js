@@ -2019,7 +2019,7 @@ const resetPassword = async (req, res) => {
       });
     }
 
-    if (String(requestedPassword).trim() !== String(confirmPasswordValue).trim()) {
+    if (String(requestedPassword) !== String(confirmPasswordValue)) {
       return res.status(400).json({
         success: false,
         message: "New password and confirm password do not match",

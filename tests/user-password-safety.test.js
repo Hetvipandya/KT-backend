@@ -113,6 +113,26 @@ describe("password safety for user updates", () => {
     expect(jsonOutput.plainPassword).toBeUndefined();
   });
 
+  it("stores temporary and reset passwords as bcrypt hashes that login can verify", async () => {
+    const temporaryUser = new User({
+      name: "Temporary Password User",
+      email: "temporary-password@example.com",
+      password: "nel3atK5",
+      role: "employee",
+    });
+
+    __test__applyPasswordUpdate(temporaryUser, "nel3atK5");
+    expect(temporaryUser.password).toBe("nel3atK5");
+
+    const bcrypt = require("bcryptjs");
+    temporaryUser.password = await bcrypt.hash("nel3atK5", 10);
+    temporaryUser.passwordHash = temporaryUser.password;
+    expect(await temporaryUser.comparePassword("nel3atK5")).toBe(true);
+
+    __test__applyPasswordUpdate(temporaryUser, "123123");
+    expect(temporaryUser.password).toBe("123123");
+  });
+
   it("does not force a password reset on ordinary successful logins for hr and team lead accounts", () => {
     const user = new User({
       name: "Riya Shah",
