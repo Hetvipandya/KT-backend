@@ -30,6 +30,11 @@ const getPerformancePeriod = (monthValue, yearValue) => {
 
   return { month, year };
 };
+
+const isFuturePerformancePeriod = (month, year, now = new Date()) => {
+  return year > now.getFullYear() ||
+    (year === now.getFullYear() && month > now.getMonth() + 1);
+};
  
 const getPerformancePeriodQuery = (month, year) => {
   const periodStart = new Date(year, month - 1, 1);
@@ -89,6 +94,12 @@ exports.createPerformance = async (req, res) => {
       return res.status(400).json({
         success: false,
         message: "Month and year are required to add performance.",
+      });
+    }
+    if (isFuturePerformancePeriod(period.month, period.year)) {
+      return res.status(400).json({
+        success: false,
+        message: "Performance can be added only for the current month or previous months.",
       });
     }
 
