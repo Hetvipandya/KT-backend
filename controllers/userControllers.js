@@ -47,9 +47,9 @@ const applyPasswordUpdate = (user, newPassword) => {
     return user;
   }
 
-  const normalizedPassword = String(newPassword).trim();
+  const normalizedPassword = String(newPassword);
 
-  if (!normalizedPassword) {
+  if (!normalizedPassword.trim()) {
     return user;
   }
 
@@ -1753,7 +1753,7 @@ const loginUser = async (req, res) => {
     // PASSWORD
     // --------------------------------------------------------
 
-    const isMatch = await user.comparePassword(password.trim());
+    const isMatch = await user.comparePassword(String(password));
 
     if (!isMatch) {
       return res.status(400).json({
@@ -1846,7 +1846,7 @@ const changePassword = async (req, res) => {
       });
     }
 
-    if (String(updatedPassword).trim() !== String(confirmPasswordValue).trim()) {
+    if (String(updatedPassword) !== String(confirmPasswordValue)) {
       return res.status(400).json({
         success: false,
         message: "New password and confirm password do not match",
@@ -1865,7 +1865,7 @@ const changePassword = async (req, res) => {
     }
 
     if (passwordToVerify) {
-      const isMatch = await user.comparePassword(String(passwordToVerify).trim());
+      const isMatch = await user.comparePassword(String(passwordToVerify));
 
       if (!isMatch) {
         return res.status(400).json({
