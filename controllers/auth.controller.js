@@ -176,9 +176,18 @@ const register = async (req, res, next) => {
  */
 const login = async (req, res, next) => {
   try {
-    const { email, password } = req.body;
+    const { email, password, login: loginField, username } = req.body;
+    const loginIdentifier = String(email || loginField || username || "").trim();
+    const escapedIdentifier = loginIdentifier.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-    const user = await User.findOne({ email }).select(
+    const user = await User.findOne({
+      $or: [
+        { email: { $regex: `^${escapedIdentifier}$`, $options: "i" } },
+        { phoneNumber: loginIdentifier },
+        { uniqueID: loginIdentifier },
+        { employeeID: loginIdentifier },
+      ],
+    }).select(
       "+password +passwordHash +refreshTokens",
     );
     if (!user) {
@@ -515,11 +524,20 @@ const forgotPassword = async (req, res, next) => {
  */
 const resetPassword = async (req, res, next) => {
   try {
-    const { token, resetToken, tokenHash: bodyTokenHash, newPassword, password, confirmPassword } = req.body;
-    const requestedToken = token || resetToken || bodyTokenHash;
+    const { token, resetToken, tokenHash: bodyTokenHash, newPassword, password, confirmPassword, email, otp } = req.body;
+    const requestedToken = token || resetToken || bodyTokenHash || req.query?.token;
     const requestedPassword = newPassword || password;
+    const emailValue = email || req.body?.emailAddress || req.body?.login;
+    const requestedOtp = otp || req.body?.forgotPasswordOTP;
 
-    if (!requestedToken || !requestedPassword) {
+    if (!requestedPassword) {
+      return res.status(400).json({
+        success: false,
+        message: "Token and newPassword are required.",
+      });
+    }
+
+    if (!requestedToken && !emailValue) {
       return res.status(400).json({
         success: false,
         message: "Token and newPassword are required.",
@@ -563,6 +581,29 @@ const resetPassword = async (req, res, next) => {
       "+passwordResetTokenHash +passwordResetExpires +resetPasswordToken +resetPasswordExpires +refreshTokens +password +passwordHash",
     );
 
+    if (!user && emailValue) {
+      const normEmail = String(emailValue).trim().toLowerCase();
+      const escapedEmail = normEmail.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const candidateUser = await User.findOne({
+        email: { $regex: `^${escapedEmail}$`, $options: "i" },
+      }).select(
+        "+passwordResetTokenHash +passwordResetExpires +resetPasswordToken +resetPasswordExpires +refreshTokens +password +passwordHash +forgotPasswordOTP +otpExpireTime +otpVerified"
+      );
+      if (candidateUser) {
+        if (candidateUser.otpVerified === true) {
+          user = candidateUser;
+        } else if (
+          requestedOtp &&
+          candidateUser.forgotPasswordOTP &&
+          String(candidateUser.forgotPasswordOTP) === String(requestedOtp).trim() &&
+          candidateUser.otpExpireTime &&
+          candidateUser.otpExpireTime > new Date()
+        ) {
+          user = candidateUser;
+        }
+      }
+    }
+
     if (!user) {
       return res.status(400).json({
         success: false,
@@ -581,6 +622,7 @@ const resetPassword = async (req, res, next) => {
     user.resetPasswordExpires = null;
     user.forgotPasswordOTP = null;
     user.otpExpireTime = null;
+    user.otpVerified = false;
 
     user.isFirstLogin = false;
     user.mustChangePassword = false;

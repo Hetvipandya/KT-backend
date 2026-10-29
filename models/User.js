@@ -283,6 +283,16 @@ const userSchema =
       ],
 
       // ================= OTP =================
+      forgotPasswordOTP: {
+        type: String,
+        default: null,
+      },
+
+      otpExpireTime: {
+        type: Date,
+        default: null,
+      },
+
       otpVerified: {
         type: Boolean,
         default: false,
@@ -602,7 +612,12 @@ userSchema.methods.comparePassword =
   async function (
     enteredPassword
   ) {
-    if (!enteredPassword) return false;
+    if (!enteredPassword && enteredPassword !== "") return false;
+    const raw = String(enteredPassword);
+    const trimmed = raw.trim();
+    if (!raw && !trimmed) return false;
+
+    const inputCandidates = Array.from(new Set([raw, trimmed])).filter(Boolean);
 
     const hashCandidates = [
       this.passwordHash,
@@ -621,30 +636,30 @@ userSchema.methods.comparePassword =
             const normalizedHash = candidate.startsWith("$2y$")
               ? candidate.replace("$2y$", "$2b$")
               : candidate;
-            const isHashMatch = await bcrypt.compare(
-              String(enteredPassword),
-              normalizedHash
-            );
-            if (isHashMatch) {
-              return true;
+            for (const input of inputCandidates) {
+              const isHashMatch = await bcrypt.compare(input, normalizedHash);
+              if (isHashMatch) {
+                return true;
+              }
             }
           } catch (error) {
             // Ignore invalid hash values and continue.
           }
-        } else if (candidate === String(enteredPassword)) {
-          // Self-healing migration for legacy unhashed passwords:
-          // Immediately upgrade to bcrypt hash in DB
-          try {
-            const salt = await bcrypt.genSalt(10);
-            const hashedPassword = await bcrypt.hash(String(enteredPassword), salt);
-            this.password = hashedPassword;
-            this.passwordHash = hashedPassword;
-            this.plainPassword = undefined;
-            await this.save();
-          } catch (err) {
-            // ignore save error during auth check
+        } else {
+          for (const input of inputCandidates) {
+            if (candidate === input || candidate.trim() === input) {
+              // Self-healing migration for legacy unhashed passwords:
+              try {
+                const salt = await bcrypt.genSalt(10);
+                const hashedPassword = await bcrypt.hash(input, salt);
+                this.password = hashedPassword;
+                this.passwordHash = hashedPassword;
+                this.plainPassword = undefined;
+                await this.save();
+              } catch (err) {}
+              return true;
+            }
           }
-          return true;
         }
       }
     }

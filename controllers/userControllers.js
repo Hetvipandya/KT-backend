@@ -1676,8 +1676,8 @@ const rejectEmployee = async (req, res) => {
 
 const loginUser = async (req, res) => {
   try {
-    const { login, email, password, deviceId } = req.body;
-    const loginInput = login || email;
+    const { login, email, username, identifier, employeeID, empId, password, deviceId } = req.body;
+    const loginInput = login || email || username || identifier || employeeID || empId;
 
     if (!loginInput || !password) {
       return res.status(400).json({
@@ -1697,9 +1697,15 @@ const loginUser = async (req, res) => {
       });
     }
 
-    const user = await User.findOne(lookup).select(
+    let user = await User.findOne(lookup).select(
       "+password +passwordHash",
     );
+
+    if (!user) {
+      user = await User.findOne({
+        $or: [{ uniqueID: loginValue }, { employeeID: loginValue }],
+      }).select("+password +passwordHash");
+    }
 
     if (!user) {
       return res.status(404).json({
@@ -2007,23 +2013,17 @@ const forgotPassword = async (req, res) => {
 
 const resetPassword = async (req, res) => {
   try {
-    const { email, token, newPassword, password, confirmPassword } = req.body;
-    const requestedToken = token || req.body?.resetToken || req.body?.tokenHash || null;
+    const { email, token, newPassword, password, confirmPassword, otp } = req.body;
+    const requestedToken = token || req.body?.resetToken || req.body?.tokenHash || req.query?.token || null;
     const requestedPassword = newPassword ?? password ?? null;
-    const emailValue = email || req.body?.emailAddress || null;
+    const emailValue = email || req.body?.emailAddress || req.body?.login || req.body?.userEmail || null;
     const confirmPasswordValue = confirmPassword ?? req.body?.confirmPassword ?? requestedPassword;
+    const requestedOtp = otp || req.body?.forgotPasswordOTP || null;
 
     if (!requestedPassword) {
       return res.status(400).json({
         success: false,
         message: "New password is required",
-      });
-    }
-
-    if (!requestedToken) {
-      return res.status(400).json({
-        success: false,
-        message: "Reset token is required",
       });
     }
 
@@ -2041,81 +2041,116 @@ const resetPassword = async (req, res) => {
       });
     }
 
-    let user;
-    const normalizedToken = normalizeResetToken(requestedToken);
-    if (!normalizedToken) {
-      return res.status(400).json({
-        success: false,
-        message: "Reset token is required",
-      });
-    }
+    let user = null;
 
-    const tokenCandidates = Array.from(
-      new Set([normalizedToken.tokenString, normalizedToken.tokenHash]),
-    );
-
-    const tokenQuery = {
-      $or: [
-        { passwordResetTokenHash: { $in: tokenCandidates } },
-        { resetPasswordToken: { $in: tokenCandidates } },
-      ],
-      $and: [
-        {
-          $or: [
-            { passwordResetExpires: { $gt: new Date() } },
-            { resetPasswordExpires: { $gt: new Date() } },
-          ],
-        },
-      ],
-    };
-
-    if (emailValue) {
-      tokenQuery.email = String(emailValue).trim().toLowerCase();
-    }
-
-    user = await User.findOne(tokenQuery).select(
-      "+passwordResetTokenHash +passwordResetExpires +resetPasswordToken +resetPasswordExpires +password +passwordHash",
-    );
-
-    // Fallback: search by token alone if matching with email didn't find user
-    if (!user && emailValue) {
-      const tokenOnlyQuery = {
-        $or: [
-          { passwordResetTokenHash: { $in: tokenCandidates } },
-          { resetPasswordToken: { $in: tokenCandidates } },
-        ],
-        $and: [
-          {
-            $or: [
-              { passwordResetExpires: { $gt: new Date() } },
-              { resetPasswordExpires: { $gt: new Date() } },
-            ],
-          },
-        ],
-      };
-      user = await User.findOne(tokenOnlyQuery).select(
-        "+passwordResetTokenHash +passwordResetExpires +resetPasswordToken +resetPasswordExpires +password +passwordHash",
+    // 1. Authenticated user via Bearer token or req.user
+    if (req.user?._id) {
+      user = await User.findById(req.user._id).select(
+        "+passwordResetTokenHash +passwordResetExpires +resetPasswordToken +resetPasswordExpires +password +passwordHash +forgotPasswordOTP +otpExpireTime +otpVerified"
       );
-    }
-
-    // Fallback: check Bearer token if caller is authenticated user changing password
-    if (!user) {
+    } else {
       const authorization = req.headers.authorization || "";
       if (authorization.startsWith("Bearer ")) {
         const accessToken = authorization.slice(7);
         try {
           const decoded = jwt.verify(accessToken, process.env.JWT_SECRET);
-          user = await User.findById(decoded.id).select("+password +passwordHash");
+          user = await User.findById(decoded.id || decoded.userId).select(
+            "+passwordResetTokenHash +passwordResetExpires +resetPasswordToken +resetPasswordExpires +password +passwordHash +forgotPasswordOTP +otpExpireTime +otpVerified"
+          );
         } catch (error) {
-          // ignore JWT error
+          // ignore JWT error and continue to token/otp lookup
+        }
+      }
+    }
+
+    // 2. Token-based reset (web link or resetToken provided)
+    if (!user && requestedToken) {
+      const normalizedToken = normalizeResetToken(requestedToken);
+      if (normalizedToken) {
+        const tokenCandidates = Array.from(
+          new Set([normalizedToken.tokenString, normalizedToken.tokenHash])
+        );
+
+        const tokenQuery = {
+          $or: [
+            { passwordResetTokenHash: { $in: tokenCandidates } },
+            { resetPasswordToken: { $in: tokenCandidates } },
+          ],
+          $and: [
+            {
+              $or: [
+                { passwordResetExpires: { $gt: new Date() } },
+                { resetPasswordExpires: { $gt: new Date() } },
+              ],
+            },
+          ],
+        };
+
+        if (emailValue) {
+          tokenQuery.email = String(emailValue).trim().toLowerCase();
+        }
+
+        user = await User.findOne(tokenQuery).select(
+          "+passwordResetTokenHash +passwordResetExpires +resetPasswordToken +resetPasswordExpires +password +passwordHash +forgotPasswordOTP +otpExpireTime +otpVerified"
+        );
+
+        if (!user && emailValue) {
+          const tokenOnlyQuery = {
+            $or: [
+              { passwordResetTokenHash: { $in: tokenCandidates } },
+              { resetPasswordToken: { $in: tokenCandidates } },
+            ],
+            $and: [
+              {
+                $or: [
+                  { passwordResetExpires: { $gt: new Date() } },
+                  { resetPasswordExpires: { $gt: new Date() } },
+                ],
+              },
+            ],
+          };
+          user = await User.findOne(tokenOnlyQuery).select(
+            "+passwordResetTokenHash +passwordResetExpires +resetPasswordToken +resetPasswordExpires +password +passwordHash +forgotPasswordOTP +otpExpireTime +otpVerified"
+          );
+        }
+      }
+    }
+
+    // 3. OTP-based reset (mobile app: send-otp -> verify-otp -> reset-password OR passing otp directly)
+    if (!user && emailValue) {
+      const normEmail = String(emailValue).trim().toLowerCase();
+      const escapedEmail = normEmail.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const candidateUser = await User.findOne({
+        email: { $regex: `^${escapedEmail}$`, $options: "i" },
+      }).select(
+        "+passwordResetTokenHash +passwordResetExpires +resetPasswordToken +resetPasswordExpires +password +passwordHash +forgotPasswordOTP +otpExpireTime +otpVerified"
+      );
+
+      if (candidateUser) {
+        if (candidateUser.otpVerified === true) {
+          user = candidateUser;
+        } else if (
+          requestedOtp &&
+          candidateUser.forgotPasswordOTP &&
+          String(candidateUser.forgotPasswordOTP) === String(requestedOtp).trim() &&
+          candidateUser.otpExpireTime &&
+          candidateUser.otpExpireTime > new Date()
+        ) {
+          user = candidateUser;
         }
       }
     }
 
     if (!user) {
+      if (!requestedToken && !emailValue) {
+        return res.status(400).json({
+          success: false,
+          message: "Reset token or verified email is required",
+        });
+      }
       return res.status(400).json({
         success: false,
-        message: "Invalid or expired reset token",
+        message: "Invalid or expired reset token or OTP not verified",
       });
     }
 
@@ -2123,6 +2158,9 @@ const resetPassword = async (req, res) => {
 
     user.isFirstLogin = false;
     user.mustChangePassword = false;
+    user.otpVerified = false;
+    user.forgotPasswordOTP = null;
+    user.otpExpireTime = null;
     clearResetTokenFields(user);
 
     await user.save();

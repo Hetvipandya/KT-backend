@@ -92,11 +92,13 @@ exports.syncEmployeeToUser = async ({ employee, role, userData = {} }) => {
   let user = null;
 
   if (employee.userID) {
-    user = await User.findById(employee.userID);
+    const q = User.findById(employee.userID);
+    user = typeof q?.select === "function" ? await q.select("+password +passwordHash") : await q;
   }
 
   if (!user && (userData.email || employee.email)) {
-    user = await User.findOne({ email: userData.email || employee.email });
+    const q = User.findOne({ email: userData.email || employee.email });
+    user = typeof q?.select === "function" ? await q.select("+password +passwordHash") : await q;
   }
 
   const shouldBeInactive =
@@ -198,10 +200,9 @@ exports.syncEmployeeToUser = async ({ employee, role, userData = {} }) => {
   } else {
     // Never overwrite a user who already has a valid, emailed temp password.
     // Approval and employee sync must not regenerate credentials for an existing account.
-    if (!user.passwordHash && !user.password) {
-      const generatedPassword = Math.random().toString(36).slice(-8);
-      user.password = generatedPassword;
-    }
+    // Existing users must NEVER have their credentials modified or regenerated during employee sync
+    delete payload.password;
+    delete payload.passwordHash;
 
     Object.assign(user, payload);
     await user.save();

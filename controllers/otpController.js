@@ -17,7 +17,9 @@ exports.sendOTP = async (req, res) => {
       });
     }
 
-    const user = await User.findOne({ email });
+    const normEmail = String(email || "").trim().toLowerCase();
+    const escapedEmail = normEmail.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const user = await User.findOne({ email: { $regex: `^${escapedEmail}$`, $options: "i" } });
 
     if (!user) {
       return res.status(404).json({
@@ -71,12 +73,9 @@ exports.verifyOTP =
         otp,
       } = req.body;
 
-      const user =
-        await User.findOne(
-          {
-            email,
-          }
-        );
+      const normEmail = String(email || "").trim().toLowerCase();
+      const escapedEmail = normEmail.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const user = await User.findOne({ email: { $regex: `^${escapedEmail}$`, $options: "i" } });
 
       if (!user) {
         return res
