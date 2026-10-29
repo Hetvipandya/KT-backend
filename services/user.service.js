@@ -32,8 +32,9 @@ const INVITE_TOKEN_EXPIRY_HOURS = parseInt(
  * @param {string} companyId
  * @returns {Object}
  */
-const toCompanyUserView = (user, companyId, branchMap = new Map(), companyMap = new Map(), fyMap = new Map()) => {
-  const access = (user.companyAccess || []).find(
+const toCompanyUserView = (user, companyId, branchMap = new Map(), companyMap = new Map(), fyMap = new Map(), companyAccess = null) => {
+  const accessSource = companyAccess || user.companyAccess || [];
+  const access = accessSource.find(
     (a) => a.companyId && a.companyId.toString() === companyId.toString()
   );
   const isOwner = user.companyCreated && user.companyId && user.companyId.toString() === companyId.toString();

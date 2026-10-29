@@ -281,7 +281,11 @@ const updateUser = async (req, res, next) => {
       accessEntry.branchId = finalBranchId;
       financeUser.branchId = finalBranchId;
     }
-    if (isActive !== undefined) accessEntry.isActive = isActive;
+    if (isActive !== undefined) {
+      accessEntry.isActive = isActive;
+      financeUser.isActive = isActive;
+      targetUser.isActive = isActive;
+    }
 
     // Apply global profile changes
     if (name !== undefined) targetUser.name = name;
@@ -309,7 +313,7 @@ const updateUser = async (req, res, next) => {
 
     return res.status(200).json({
       success: true,
-      data: userService.toCompanyUserView(targetUser, companyId, branchMap)
+      data: userService.toCompanyUserView(targetUser, companyId, branchMap, new Map(), new Map(), financeUser.companyAccess)
     });
   } catch (error) {
     next(error);
@@ -370,7 +374,7 @@ const getUserById = async (req, res, next) => {
 
     return res.status(200).json({
       success: true,
-      data: userService.toCompanyUserView(targetUser, companyId, branchMap)
+      data: userService.toCompanyUserView(targetUser, companyId, branchMap, new Map(), new Map(), financeUser.companyAccess)
     });
   } catch (error) {
     next(error);
