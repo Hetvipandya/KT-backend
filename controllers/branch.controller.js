@@ -5,7 +5,7 @@ const User = require('../models/User');
 const { determineNextStep } = require('../utils/onboarding');
 
 const { invalidateUserCache } = require('../middleware/authenticate');
-
+ 
 /**
  * POST /api/branch
  * Create a new branch for a company

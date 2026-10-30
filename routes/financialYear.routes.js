@@ -62,7 +62,7 @@ router.use(authenticate);
  *         description: Financial year overlaps with an existing range
  */
 router.post('/', validateRequest(createFYSchema), checkCompanyAccess, createFinancialYear);
-
+ 
 /**
  * @openapi
  * /api/financial-year:

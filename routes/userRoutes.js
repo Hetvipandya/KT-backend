@@ -13,7 +13,7 @@ const {
   registerUser,
   approveEmployee,
   rejectEmployee,
-  loginUser,
+  loginUser, 
   changePassword,
   getAllUsers,
   sendOTP,
@@ -29,6 +29,7 @@ const {
 );
 
 const { protect } = require("../middleware/authMiddleware");
+const authenticate = require("../middleware/authenticate");
 const upload = require("../middleware/uploadMiddleware");
 const profileImageUpload = upload.profileImageUpload || upload.single("profileImage");
 
@@ -91,7 +92,7 @@ router.post(
 
 router.get(
   "/profile", 
-  protect,
+  authenticate,
   getMyProfile
 );
 
@@ -268,4 +269,4 @@ router.delete(
 );
 
 module.exports =
-  router;
+  router;

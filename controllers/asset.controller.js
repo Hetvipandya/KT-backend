@@ -11,7 +11,7 @@ const create = async (req, res, next) => {
     next(error);
   }
 };
-
+ 
 const get = async (req, res, next) => {
   try {
     const asset = await service.getAssetDetails(req.params.id);

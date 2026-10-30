@@ -10,9 +10,9 @@ const companySchema = new mongoose.Schema(
     },
 
     // KT field: companyName
-    companyName: {
+    companyName: { 
       type: String,
-      trim: true,
+      trim: true, 
       default: 'KEVALON Technology'
     },
 

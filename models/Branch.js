@@ -4,10 +4,10 @@ const branchSchema = new mongoose.Schema(
   {
     companyId: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: 'Company',
+      ref: 'Company', 
       default: null,
       index: true
-    },
+    }, 
     branchName: {
       type: String,
       required: [true, 'Branch name is required'],

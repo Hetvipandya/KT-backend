@@ -8,7 +8,7 @@ const { createBranchSchema, updateBranchSchema } = require('../validators/compan
 const router = express.Router();
 
 // Apply authentication to all routes
-router.use(authenticate);
+router.use(authenticate); 
 
 /** 
  * @openapi 
