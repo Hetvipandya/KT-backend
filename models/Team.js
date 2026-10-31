@@ -10,7 +10,7 @@ const teamSchema = new mongoose.Schema(
 
     // Team Lead
     teamLeadId: {
-      type: String,
+      type: String, 
       trim: true,
       default: "",
     },

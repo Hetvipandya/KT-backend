@@ -6,7 +6,7 @@ const {
   getAllPerformance, 
   getPerformanceById,
   getPerformanceByEmployeeId, 
-  updatePerformance, 
+  updatePerformance,  
   deletePerformance,
   getPerformanceDropdown,
 } = require("../controllers/performanceController"); 

@@ -84,8 +84,10 @@ exports.protect = async (req, res, next) => {
           ...(mongoose.Types.ObjectId.isValid(userId) ? [{ _id: userId }] : []),
           { employeeID: userId },
           { employeeCode: typeof userId === "string" ? userId.toUpperCase() : userId },
-          { userID: userId },
-          { userId: userId },
+          ...(mongoose.Types.ObjectId.isValid(userId) ? [
+            { userID: userId },
+            { userId: userId },
+          ] : []),
         ],
       };
       const employee = await Employee.findOne(employeeQuery).select("userID userId email");

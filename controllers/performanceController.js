@@ -13,7 +13,7 @@ const getPerformancePeriod = (monthValue, yearValue) => {
   if (!hasMonth && !hasYear) {
     return { month: null, year: null };
   }
-
+ 
   if (!hasMonth || !hasYear) {
     return { error: "Both month and year are required." };
   }

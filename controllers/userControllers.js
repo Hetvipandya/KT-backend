@@ -584,7 +584,11 @@ const updateProfile = async (req, res) => {
 
     const resolvedPhoneNumber = phoneNumber ?? phone ?? null;
 
-    const user = await User.findById(req.user._id);
+    let user = req.user;
+    if (!user || (user.constructor && user.constructor.modelName !== "User")) {
+      const authenticatedUserId = req.user?._id || req.user?.userId || req.user?.userID;
+      user = authenticatedUserId ? await User.findById(authenticatedUserId) : null;
+    }
 
     if (!user) {
       return res.status(404).json({
