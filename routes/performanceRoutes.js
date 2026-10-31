@@ -23,7 +23,7 @@ router.post("/feedback", authorizeRoles("team lead", "admin", "hr"), createPerfo
 router.put("/update/:id", authorizeRoles("team lead", "admin", "hr"), updatePerformance);
 
 // ONLY HR and Admin can view performance records and feedback
-router.get("/all", authorizeRoles("admin", "hr"), getAllPerformance);
+router.get("/all", authorizeRoles("admin", "hr", "team lead"), getAllPerformance);
 router.get("/dropdown", authorizeRoles("admin", "hr", "team lead"), getPerformanceDropdown);
 
 // Root route: /api/performance (supports ?employeeId=..., ?id=..., ?userId=...)
