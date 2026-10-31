@@ -2,6 +2,7 @@ const jwt = require("jsonwebtoken");
 const mongoose = require("mongoose");
 const User = require("../models/User");
 const FinanceUser = require("../models/FinanceUser");
+const Employee = require("../models/Employee");
 
 exports.protect = async (req, res, next) => {
   try {
@@ -75,6 +76,29 @@ exports.protect = async (req, res, next) => {
           { email: typeof userId === "string" ? userId.toLowerCase() : userId },
         ],
       }).select("-password");
+    }
+
+    if (!user) {
+      const employeeQuery = {
+        $or: [
+          ...(mongoose.Types.ObjectId.isValid(userId) ? [{ _id: userId }] : []),
+          { employeeID: userId },
+          { employeeCode: typeof userId === "string" ? userId.toUpperCase() : userId },
+          { userID: userId },
+          { userId: userId },
+        ],
+      };
+      const employee = await Employee.findOne(employeeQuery).select("userID userId email");
+
+      if (employee) {
+        const linkedUserId = employee.userID || employee.userId;
+        if (linkedUserId) {
+          user = await User.findById(linkedUserId).select("-password");
+        }
+        if (!user && employee.email) {
+          user = await User.findOne({ email: employee.email.toLowerCase() }).select("-password");
+        }
+      }
     }
 
     if (!user) {

@@ -80,13 +80,20 @@ const authenticate = async (req, res, next) => {
           const Employee = require('../models/Employee');
           const emp = await Employee.findOne({
             $or: [
-              { _id: mongoose.Types.ObjectId.isValid(userIdStr) ? userIdStr : null },
+              ...(mongoose.Types.ObjectId.isValid(userIdStr) ? [{ _id: userIdStr }] : []),
+              { employeeID: userIdStr },
+              { employeeCode: typeof userIdStr === 'string' ? userIdStr.toUpperCase() : userIdStr },
               { userID: userIdStr },
               { userId: userIdStr }
             ]
           });
-          if (emp && (emp.userID || emp.userId)) {
-            user = await User.findById(emp.userID || emp.userId);
+          if (emp) {
+            if (emp.userID || emp.userId) {
+              user = await User.findById(emp.userID || emp.userId);
+            }
+            if (!user && emp.email) {
+              user = await User.findOne({ email: emp.email.toLowerCase() });
+            }
           }
         } catch (_) {}
       }
