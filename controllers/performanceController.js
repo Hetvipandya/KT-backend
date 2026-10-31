@@ -383,16 +383,16 @@ exports.createPerformance = async (req, res) => {
 };
 
 // =============================
-// Get All Performance (ONLY HR & ADMIN)
+// Get All Performance (HR, ADMIN & TEAM LEAD)
 // =============================
 exports.getAllPerformance = async (req, res) => {
   try {
-    // Restrict access: Only HR and Admin can view performance feedback
+    // Team Leads are permitted to review performance records assigned to their team.
     const userRole = (req.user?.role || "").toLowerCase().replace(/[_\s]+/g, "");
-    if (userRole !== "admin" && userRole !== "hr") {
+    if (userRole !== "admin" && userRole !== "hr" && userRole !== "teamlead") {
       return res.status(403).json({
         success: false,
-        message: "Access restricted. Only HR and Admin can view performance feedback.",
+        message: "Access restricted. Only HR, Admin, and Team Lead can view performance feedback.",
       });
     }
 
