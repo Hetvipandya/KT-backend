@@ -66,7 +66,7 @@ exports.protect = async (req, res, next) => {
     // ================= FIND USER =================
     let user = null;
     if (mongoose.Types.ObjectId.isValid(userId)) {
-      user = await User.findById(userId).select("-password");
+      user = await User.findOne({ _id: userId }).select("-password");
     }
     if (!user) {
       user = await User.findOne({

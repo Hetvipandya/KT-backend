@@ -64,7 +64,7 @@ const authenticate = async (req, res, next) => {
     if (!user) {
       const mongoose = require('mongoose');
       if (mongoose.Types.ObjectId.isValid(userIdStr)) {
-        user = await User.findById(userIdStr);
+        user = await User.findOne({ _id: userIdStr });
       }
       if (!user) {
         user = await User.findOne({

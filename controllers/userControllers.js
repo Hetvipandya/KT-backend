@@ -587,9 +587,16 @@ const updateProfile = async (req, res) => {
     let user = req.user;
     const authenticatedModel = user?.constructor?.modelName;
 
-    if (authenticatedModel === "Employee") {
-      const employee = await Employee.findById(user._id);
+    if (authenticatedModel === "Employee" || (!user || authenticatedModel !== "User")) {
+      const employee =
+        user && mongoose.Types.ObjectId.isValid(user._id)
+          ? await Employee.findOne({ _id: user._id })
+          : user?.email
+            ? await Employee.findOne({ email: user.email.toLowerCase() })
+            : null;
       const linkedUserId = employee?.userID || employee?.userId || user.userID || user.userId;
+      const employeeEmail = employee?.email || user?.email;
+      user = null;
 
       if (linkedUserId) {
         try {
@@ -600,13 +607,11 @@ const updateProfile = async (req, res) => {
           user = null;
         }
       }
-      if (!user && (employee?.email || user.email)) {
+      if (!user && employeeEmail) {
         user = await User.findOne({
-          email: (employee?.email || user.email).toLowerCase(),
+          email: employeeEmail.toLowerCase(),
         });
       }
-    } else if (!user || authenticatedModel !== "User") {
-      user = null;
     }
 
     if (!user) {
