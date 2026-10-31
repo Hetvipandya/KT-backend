@@ -500,6 +500,22 @@ const syncUserToEmployee = async (user) => {
     employee.employeeCode = user.uniqueID;
   }
 
+  const employeeRole = normalizeRole(employee.role);
+  const normalizedUserRole =
+    employee.isTeamLead || employeeRole === "team lead"
+      ? "team lead"
+      : normalizeRole(user.role);
+  if (normalizeRole(user.role) !== normalizedUserRole) {
+    user.role = normalizedUserRole || "employee";
+    userModified = true;
+  }
+  const shouldBeTeamLead = normalizedUserRole === "team lead";
+  if (employee.role !== normalizedUserRole || employee.isTeamLead !== shouldBeTeamLead) {
+    employee.role = normalizedUserRole || "employee";
+    employee.isTeamLead = shouldBeTeamLead;
+    userModified = true;
+  }
+
   employee.firstName = user.name || employee.firstName;
 
   employee.email = user.email || employee.email;

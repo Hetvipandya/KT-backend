@@ -215,6 +215,11 @@ exports.syncEmployeeToUser = async ({ employee, role, userData = {} }) => {
       employee.role = finalRole;
       employeeModified = true;
     }
+    const shouldBeTeamLead = finalRole === "team lead";
+    if (Boolean(employee.isTeamLead) !== shouldBeTeamLead) {
+      employee.isTeamLead = shouldBeTeamLead;
+      employeeModified = true;
+    }
     if (payload.designation && employee.designation !== payload.designation) {
       employee.designation = payload.designation;
       employeeModified = true;

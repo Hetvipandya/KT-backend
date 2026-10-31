@@ -9,7 +9,7 @@ const {
   getLeaveBalance,  
   createHoliday,
   getAllHolidays,   
-  getAllLeaves,
+  getAllLeaves, 
   adminApproval,
   calculateLeaveDays,
 } = require("../controllers/leaveController");

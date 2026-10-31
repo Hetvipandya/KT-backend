@@ -12,7 +12,7 @@ const leaveSchema = new mongoose.Schema(
       type: String,
       enum: ["employee", "intern", "team lead", "hr", "admin"],
       required: true,
-    },
+    }, 
 
     leaveType: {
       type: String,
