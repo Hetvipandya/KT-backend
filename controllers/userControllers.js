@@ -818,6 +818,11 @@ const updateProfile = async (req, res) => {
     });
   } catch (error) {
     console.error("Update Profile Error:", error);
+    if (error?.name === "DocumentNotFoundError") {
+      console.error("Update Profile Missing Document Stack:", error.stack);
+      console.error("Update Profile Auth ID:", req.user?._id || req.user?.id);
+      console.error("Update Profile Auth Email:", req.user?.email);
+    }
 
     return res.status(500).json({
       success: false,
