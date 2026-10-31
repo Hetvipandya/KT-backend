@@ -592,7 +592,13 @@ const updateProfile = async (req, res) => {
       const linkedUserId = employee?.userID || employee?.userId || user.userID || user.userId;
 
       if (linkedUserId) {
-        user = await User.findById(linkedUserId);
+        try {
+          user = mongoose.Types.ObjectId.isValid(linkedUserId)
+            ? await User.findOne({ _id: linkedUserId })
+            : await User.findOne({ userId: linkedUserId });
+        } catch (_) {
+          user = null;
+        }
       }
       if (!user && (employee?.email || user.email)) {
         user = await User.findOne({

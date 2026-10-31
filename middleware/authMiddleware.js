@@ -95,7 +95,13 @@ exports.protect = async (req, res, next) => {
       if (employee) {
         const linkedUserId = employee.userID || employee.userId;
         if (linkedUserId) {
-          user = await User.findById(linkedUserId).select("-password");
+          try {
+            user = mongoose.Types.ObjectId.isValid(linkedUserId)
+              ? await User.findOne({ _id: linkedUserId }).select("-password")
+              : null;
+          } catch (_) {
+            user = null;
+          }
         }
         if (!user && employee.email) {
           user = await User.findOne({ email: employee.email.toLowerCase() }).select("-password");

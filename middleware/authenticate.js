@@ -91,7 +91,10 @@ const authenticate = async (req, res, next) => {
           });
           if (emp) {
             if (emp.userID || emp.userId) {
-              user = await User.findById(emp.userID || emp.userId);
+              const linkedUserId = emp.userID || emp.userId;
+              if (mongoose.Types.ObjectId.isValid(linkedUserId)) {
+                user = await User.findOne({ _id: linkedUserId });
+              }
             }
             if (!user && emp.email) {
               user = await User.findOne({ email: emp.email.toLowerCase() });
