@@ -585,9 +585,22 @@ const updateProfile = async (req, res) => {
     const resolvedPhoneNumber = phoneNumber ?? phone ?? null;
 
     let user = req.user;
-    if (!user || (user.constructor && user.constructor.modelName !== "User")) {
-      const authenticatedUserId = req.user?._id || req.user?.userId || req.user?.userID;
-      user = authenticatedUserId ? await User.findById(authenticatedUserId) : null;
+    const authenticatedModel = user?.constructor?.modelName;
+
+    if (authenticatedModel === "Employee") {
+      const employee = await Employee.findById(user._id);
+      const linkedUserId = employee?.userID || employee?.userId || user.userID || user.userId;
+
+      if (linkedUserId) {
+        user = await User.findById(linkedUserId);
+      }
+      if (!user && (employee?.email || user.email)) {
+        user = await User.findOne({
+          email: (employee?.email || user.email).toLowerCase(),
+        });
+      }
+    } else if (!user || authenticatedModel !== "User") {
+      user = null;
     }
 
     if (!user) {
