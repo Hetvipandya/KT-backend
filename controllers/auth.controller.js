@@ -97,7 +97,13 @@ const ensureFinanceUser = async (user, role) => {
   }
 
   const existingFinanceUser = await FinanceUser.findOne({ userId: user._id });
-  if (existingFinanceUser) return existingFinanceUser;
+  if (existingFinanceUser) {
+    if (existingFinanceUser.role !== normalizedRole) {
+      existingFinanceUser.role = normalizedRole;
+      await existingFinanceUser.save();
+    }
+    return existingFinanceUser;
+  }
 
   return FinanceUser.create({
     userId: user._id,

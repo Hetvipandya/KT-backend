@@ -223,6 +223,9 @@ const resolveProfileImage = (user) => {
   );
 };
 
+const isFinanceRole = (role) =>
+  ["accountant", "ca", "admin", "super admin"].includes(normalizeRole(role));
+
 const isTrueValue = (value) =>
   value === true || value === 1 || String(value).toLowerCase() === "true";
 
@@ -497,6 +500,16 @@ const syncUserToEmployee = async (user) => {
     return null;
   }
 
+  const financeRole = normalizeRole(user.role);
+  if (isFinanceRole(financeRole)) {
+    await FinanceUser.findOneAndUpdate(
+      { userId: user._id },
+      { $set: { role: financeRole } },
+      { new: true }
+    );
+    return employee;
+  }
+
   let userModified = false;
   const empId = employee.employeeID || employee.employeeCode;
   if (empId && !user.uniqueID) {
@@ -510,16 +523,19 @@ const syncUserToEmployee = async (user) => {
   }
 
   const employeeRole = normalizeRole(employee.role);
+  const userRole = normalizeRole(user.role);
   const normalizedUserRole =
     employee.isTeamLead || employeeRole === "team lead"
       ? "team lead"
-      : normalizeRole(user.role);
-  if (normalizeRole(user.role) !== normalizedUserRole) {
+      : isFinanceRole(userRole)
+        ? userRole
+        : normalizeRole(user.role);
+  if (!isFinanceRole(userRole) && normalizeRole(user.role) !== normalizedUserRole) {
     user.role = normalizedUserRole || "employee";
     userModified = true;
   }
   const shouldBeTeamLead = normalizedUserRole === "team lead";
-  if (employee.role !== normalizedUserRole || employee.isTeamLead !== shouldBeTeamLead) {
+  if (!isFinanceRole(userRole) && (employee.role !== normalizedUserRole || employee.isTeamLead !== shouldBeTeamLead)) {
     employee.role = normalizedUserRole || "employee";
     employee.isTeamLead = shouldBeTeamLead;
     userModified = true;
@@ -1613,6 +1629,15 @@ const approveEmployee = async (req, res) => {
     await user.save();
 
     const FinanceUser = require("../models/FinanceUser");
+    const existingFinanceUser = await FinanceUser.findOne({ userId: user._id });
+    const existingFinanceRole = normalizeRole(existingFinanceUser?.role);
+    const userRole = normalizeRole(user.role);
+    const financeRole =
+      isFinanceRole(existingFinanceRole)
+        ? existingFinanceRole
+        : isFinanceRole(userRole)
+          ? userRole
+          : user.role || "employee";
     if (companyId || branchId || assignedFinancialYearId) {
       await FinanceUser.findOneAndUpdate(
         { userId: user._id },
@@ -1624,13 +1649,13 @@ const approveEmployee = async (req, res) => {
             companyCreated: true,
             branchCreated: true,
             financialYearCreated: Boolean(assignedFinancialYearId || user.financialYearId),
-            role: user.role || "employee",
+            role: financeRole,
           },
           $addToSet: {
             companyAccess: {
               companyId: companyId || user.companyId || null,
               branchId: branchId || user.branchId || null,
-              role: user.role || "employee",
+              role: financeRole,
               isActive: true,
               invitedAt: new Date(),
               inviteSent: true,
