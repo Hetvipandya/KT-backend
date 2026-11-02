@@ -144,6 +144,16 @@ const inviteUser = async ({ companyId, branchId, name, email, phoneNumber, role,
     : null;
   const normalizedRole = String(role || '').trim().toLowerCase();
   const shouldSendTempPassword = Boolean(sendTemporaryPassword) || normalizedRole === 'accountant' || normalizedRole === 'ca';
+  const isDirectFinanceRole = normalizedRole === 'accountant' || normalizedRole === 'ca';
+
+  if (existingUser && isDirectFinanceRole) {
+    existingUser.role = normalizedRole;
+    existingUser.isApproved = true;
+    existingUser.isActive = true;
+    existingUser.termsAndConditions = true;
+    existingUser.termsAccepted = true;
+    await existingUser.save();
+  }
 
   if (existingUser) {
     // Check if already has access to this company
@@ -171,6 +181,9 @@ const inviteUser = async ({ companyId, branchId, name, email, phoneNumber, role,
       existingFinanceUser.companyAccess.push(accessEntry);
       existingFinanceUser.branchId = branchId || existingFinanceUser.branchId;
       existingFinanceUser.role = role;
+      if (isDirectFinanceRole) {
+        existingFinanceUser.isActive = true;
+      }
       await existingFinanceUser.save();
     } else {
       await FinanceUser.create({
@@ -178,6 +191,7 @@ const inviteUser = async ({ companyId, branchId, name, email, phoneNumber, role,
         companyId,
         branchId: branchId || null,
         role,
+        isActive: true,
         companyAccess: [accessEntry],
       });
     }
@@ -197,6 +211,10 @@ const inviteUser = async ({ companyId, branchId, name, email, phoneNumber, role,
       passwordHash,
       mustChangePassword: true,
       isEmailVerified: false,
+      isApproved: isDirectFinanceRole ? true : undefined,
+      isActive: isDirectFinanceRole ? true : undefined,
+      termsAndConditions: isDirectFinanceRole ? true : false,
+      termsAccepted: isDirectFinanceRole ? true : false,
     });
 
     await FinanceUser.create({
@@ -204,6 +222,7 @@ const inviteUser = async ({ companyId, branchId, name, email, phoneNumber, role,
       companyId,
       branchId: branchId || null,
       role,
+      isActive: true,
       companyAccess: [{
         companyId,
         branchId: branchId || null,
@@ -239,6 +258,10 @@ const inviteUser = async ({ companyId, branchId, name, email, phoneNumber, role,
     isEmailVerified: false,
     passwordResetTokenHash: tokenHash,
     passwordResetExpires: tokenExpiry,
+    isApproved: isDirectFinanceRole ? true : undefined,
+    isActive: isDirectFinanceRole ? true : undefined,
+    termsAndConditions: isDirectFinanceRole ? true : false,
+    termsAccepted: isDirectFinanceRole ? true : false,
   });
 
   await FinanceUser.create({

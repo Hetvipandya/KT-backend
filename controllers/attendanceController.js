@@ -90,7 +90,7 @@ exports.__test__normalizeRoleValue = normalizeRoleValue;
 // DEFAULT SETTINGS
 // ============================================================
 
-const DEFAULT_OFFICE_START_TIME = "10:00";
+const DEFAULT_OFFICE_START_TIME = "09:00";
 const DEFAULT_LATE_CUTOFF = "10:10";
 const DEFAULT_HALF_DAY_CUTOFF = "10:30";
 const DEFAULT_ABSENT_CUTOFF = "15:00";

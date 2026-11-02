@@ -1144,7 +1144,7 @@ const registerUser = async (req, res) => {
           ? String(req.body.termsAndConditionsAccepted) === "true" || req.body.termsAndConditionsAccepted === true || req.body.termsAndConditionsAccepted === 1
           : req.body.terms !== undefined
           ? String(req.body.terms) === "true" || req.body.terms === true || req.body.terms === 1
-          : false,
+          : ["accountant", "ca"].includes(normalizedRole),
 
       termsAccepted:
         req.body.termsAndConditions !== undefined
@@ -1157,7 +1157,7 @@ const registerUser = async (req, res) => {
           ? String(req.body.termsAndConditionsAccepted) === "true" || req.body.termsAndConditionsAccepted === true || req.body.termsAndConditionsAccepted === 1
           : req.body.terms !== undefined
           ? String(req.body.terms) === "true" || req.body.terms === true || req.body.terms === 1
-          : false,
+          : ["accountant", "ca"].includes(normalizedRole),
 
       // IMPORTANT:
       // Schema expects "password".

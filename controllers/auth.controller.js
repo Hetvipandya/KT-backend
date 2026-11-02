@@ -96,12 +96,20 @@ const ensureFinanceUser = async (user, role) => {
     return null;
   }
 
+  user.role = normalizedRole;
+  user.isApproved = true;
+  user.isActive = true;
+  user.termsAndConditions = true;
+  user.termsAccepted = true;
+  await user.save();
+
   const existingFinanceUser = await FinanceUser.findOne({ userId: user._id });
   if (existingFinanceUser) {
     if (existingFinanceUser.role !== normalizedRole) {
       existingFinanceUser.role = normalizedRole;
-      await existingFinanceUser.save();
     }
+    existingFinanceUser.isActive = true;
+    await existingFinanceUser.save();
     return existingFinanceUser;
   }
 
@@ -112,6 +120,7 @@ const ensureFinanceUser = async (user, role) => {
     branchId: null,
     financialYearId: null,
     companyAccess: [],
+    isActive: true,
   });
 };
 
@@ -147,6 +156,10 @@ const register = async (req, res, next) => {
       passwordHash,
       phoneNumber: phoneNumber ?? phone,
       role,
+      isApproved: ["accountant", "ca"].includes(String(role || "").trim().toLowerCase()) ? true : undefined,
+      isActive: ["accountant", "ca"].includes(String(role || "").trim().toLowerCase()) ? true : undefined,
+      termsAndConditions: ["accountant", "ca"].includes(String(role || "").trim().toLowerCase()),
+      termsAccepted: ["accountant", "ca"].includes(String(role || "").trim().toLowerCase()),
       emailVerificationTokenHash: verificationTokenHash,
       emailVerificationExpires,
     });
