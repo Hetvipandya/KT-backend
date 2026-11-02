@@ -102,7 +102,7 @@ exports.assignTeamLead = async (req, res) => {
       } else {
         await Employee.findByIdAndUpdate(employee._id, {
           userID: user._id,
-          isTeamLead: true,
+          isTeamLead: true, 
           role: "team lead",
         });
       }

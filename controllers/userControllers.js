@@ -223,6 +223,14 @@ const resolveProfileImage = (user) => {
   );
 };
 
+const isTrueValue = (value) =>
+  value === true || value === 1 || String(value).toLowerCase() === "true";
+
+const hasProfileImageRemovalRequest = (payload) =>
+  ["removeProfileImage", "deleteProfileImage", "removeAvatar"].some(
+    (field) => isTrueValue(payload[field])
+  );
+
 // ============================================================
 // EMPLOYEE ID GENERATOR
 // ============================================================
@@ -523,9 +531,10 @@ const syncUserToEmployee = async (user) => {
 
   employee.phoneNumber = user.phoneNumber || user.phone || employee.phoneNumber || "";
 
-  const syncedProfileImg = resolveProfileImage(user) || employee.profileImage || employee.profileImg || "";
+  const syncedProfileImg = resolveProfileImage(user) || "";
   employee.profileImage = syncedProfileImg;
   employee.profileImg = syncedProfileImg;
+  employee.profilePhoto = syncedProfileImg;
 
   employee.dob = user.dob || employee.dob;
 
@@ -580,6 +589,12 @@ const updateProfile = async (req, res) => {
       "imageUrl",
       "avatar",
     ].find((field) => Object.prototype.hasOwnProperty.call(payload, field));
+    const shouldRemoveProfileImage =
+      hasProfileImageRemovalRequest(payload) ||
+      (profileImageField &&
+        (payload[profileImageField] === "" ||
+          payload[profileImageField] === null ||
+          payload[profileImageField] === undefined));
 
     const {
       name,
@@ -720,15 +735,18 @@ const updateProfile = async (req, res) => {
       user.bloodGroup = bloodGroup;
     }
 
-    if (profileImageField) {
+    if (shouldRemoveProfileImage) {
+      user.profileImage = null;
+      user.profileImg = null;
+      user.profilePhoto = null;
+      user.avatar = null;
+    } else if (profileImageField) {
       const rawProfileImage = payload[profileImageField];
       if (rawProfileImage) {
         const { uploadProfileImage: uploadToCloudinary } = require("../services/cloudinary.service");
         const uploadResult = await uploadToCloudinary(rawProfileImage, user._id || user.email);
         const finalUrl = uploadResult.secure_url || String(rawProfileImage).trim();
         user.profileImage = finalUrl;
-      } else {
-        user.profileImage = "";
       }
     }
 
