@@ -91,6 +91,11 @@ const maskEmail = (email) => {
 }; 
 
 const ensureFinanceUser = async (user, role) => {
+  const normalizedRole = String(user.role || role || "").trim().toLowerCase();
+  if (!["accountant", "ca"].includes(normalizedRole)) {
+    return null;
+  }
+
   const existingFinanceUser = await FinanceUser.findOne({ userId: user._id });
   if (existingFinanceUser) return existingFinanceUser;
 
@@ -166,9 +171,9 @@ const register = async (req, res, next) => {
         "Registered successfully. Please check your email to verify your account.",
       data: {
         userId: newUser._id,
-        financeUserId: financeUser._id,
+        financeUserId: financeUser?._id || null,
         email: newUser.email,
-        role: financeUser.role,
+        role: financeUser?.role || newUser.role,
       },
     });
   } catch (error) {

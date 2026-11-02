@@ -7,6 +7,7 @@ const Company = require("../models/Company");
 const Branch = require("../models/Branch");
 const SalaryStructure = require("../models/SalaryStructure");
 const MonthlySalary = require("../models/MonthlySalary");
+const FinanceUser = require("../models/FinanceUser");
 
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
@@ -1140,6 +1141,25 @@ const registerUser = async (req, res) => {
 
       isActive: !shouldRequireApproval(normalizedRole),
     });
+
+    if (["accountant", "ca"].includes(normalizedRole)) {
+      try {
+        await FinanceUser.findOneAndUpdate(
+          { userId: user._id },
+          {
+            $set: {
+              userId: user._id,
+              role: normalizedRole,
+              isActive: true,
+            },
+          },
+          { upsert: true, new: true },
+        );
+      } catch (financeError) {
+        await User.findByIdAndDelete(user._id);
+        throw financeError;
+      }
+    }
 
     // --------------------------------------------------------
     // CREATE EMPLOYEE
