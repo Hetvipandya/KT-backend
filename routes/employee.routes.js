@@ -10,7 +10,7 @@ const validate = require('../middleware/validateRequest');
 const {
   createEmployeeSchema,
   updateEmployeeSchema,
-  employeeQuerySchema,
+  employeeQuerySchema, 
   validateQuery
 } = require('../validators/employee.validators');
 

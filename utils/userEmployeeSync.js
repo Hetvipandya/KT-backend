@@ -167,6 +167,12 @@ exports.syncEmployeeToUser = async ({ employee, role, userData = {} }) => {
     designation: safeUserData.designation || employee.designation || user?.designation || "",
     gender: safeUserData.gender || employee.gender || "",
     bloodGroup: safeUserData.bloodGroup || employee.bloodGroup || "",
+    bankName: safeUserData.bankName ?? user?.bankName ?? "",
+    bankBranch: safeUserData.bankBranch ?? user?.bankBranch ?? "",
+    accountHolderName: safeUserData.accountHolderName ?? user?.accountHolderName ?? "",
+    bankAccountNumber: safeUserData.bankAccountNumber ?? user?.bankAccountNumber ?? "",
+    ifscCode: safeUserData.ifscCode ?? user?.ifscCode ?? "",
+    upiId: safeUserData.upiId ?? user?.upiId ?? "",
     role: finalRole,
     isApproved: shouldBeInactive
       ? user?.isApproved ?? false

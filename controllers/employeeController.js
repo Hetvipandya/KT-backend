@@ -169,18 +169,54 @@ exports.editEmployee = async (req, res) => {
     // ==========================================
     // UPDATE EMPLOYEE DATA
     // ==========================================
-    const updateData = sanitizeUserUpdatePayload(req.body);
+    const payload = req.body.user && typeof req.body.user === "object"
+      ? { ...req.body.user, ...req.body }
+      : req.body;
+    const updateData = sanitizeUserUpdatePayload(payload);
 
-    if (req.body.fullName || req.body.name) {
-      const fullName = (req.body.fullName || req.body.name || "").trim();
+    if (payload.fullName || payload.name) {
+      const fullName = String(payload.fullName || payload.name || "").trim();
       updateData.name = fullName;
-      updateData.firstName = fullName;
-      updateData.lastName = "";
+      if (payload.firstName === undefined && payload.lastName === undefined) {
+        const nameParts = fullName.split(/\s+/).filter(Boolean);
+        updateData.firstName = nameParts.shift() || "";
+        updateData.lastName = nameParts.pop() || "";
+        if (nameParts.length) updateData.middleName = nameParts.join(" ");
+      }
+    }
+
+    if (payload.firstName !== undefined || payload.middleName !== undefined || payload.lastName !== undefined) {
+      const firstName = payload.firstName ?? employee.firstName ?? "";
+      const middleName = payload.middleName ?? employee.middleName ?? "";
+      const lastName = payload.lastName ?? employee.lastName ?? "";
+      updateData.name = [firstName, middleName, lastName].filter(Boolean).join(" ").trim();
+    }
+
+    if (payload.phone !== undefined && payload.phoneNumber === undefined) {
+      updateData.phoneNumber = payload.phone;
+    }
+    if (payload.mobile !== undefined && payload.phoneNumber === undefined) {
+      updateData.phoneNumber = payload.mobile;
+    }
+    if (payload.dateOfBirth !== undefined && payload.dob === undefined) {
+      updateData.dob = payload.dateOfBirth;
+    }
+    if (payload.address !== undefined && payload.currentAddress === undefined) {
+      updateData.currentAddress = payload.address;
+      updateData.address = payload.address;
+    }
+    if (payload.dateOfJoining !== undefined && payload.joiningDate === undefined) {
+      updateData.joiningDate = payload.dateOfJoining;
+    }
+    if (payload.employeeStatus !== undefined && payload.status === undefined) {
+      updateData.status = String(payload.employeeStatus).toUpperCase();
     }
 
     // These fields should not be directly changed
     delete updateData.employeeID;
     delete updateData.userID;
+    delete updateData.userId;
+    delete updateData.user;
 
     // Remove fields that are not Employee model fields if needed
     delete updateData.action;
@@ -255,6 +291,16 @@ exports.editEmployee = async (req, res) => {
           bloodGroup: updatedEmployee.bloodGroup,
 
           role: roleValue,
+          designation: updatedEmployee.designation,
+          gender: updatedEmployee.gender,
+          dob: updatedEmployee.dob,
+          profileImage: updatedEmployee.profileImage || updatedEmployee.profileImg,
+          bankName: payload.bankName ?? payload.bankDetails?.bankName,
+          bankBranch: payload.bankBranch ?? payload.bankDetails?.bankBranch,
+          accountHolderName: payload.accountHolderName ?? payload.bankDetails?.accountHolderName,
+          bankAccountNumber: payload.bankAccountNumber ?? payload.bankDetails?.bankAccountNumber ?? payload.accountNumber,
+          ifscCode: payload.ifscCode ?? payload.bankDetails?.ifscCode,
+          upiId: payload.upiId ?? payload.upiID ?? payload.upi ?? payload.bankDetails?.upiId,
         },
       });
     } else {
@@ -283,6 +329,16 @@ exports.editEmployee = async (req, res) => {
           department: updatedEmployee.department,
 
           bloodGroup: updatedEmployee.bloodGroup,
+          designation: updatedEmployee.designation,
+          gender: updatedEmployee.gender,
+          dob: updatedEmployee.dob,
+          profileImage: updatedEmployee.profileImage || updatedEmployee.profileImg,
+          bankName: payload.bankName ?? payload.bankDetails?.bankName,
+          bankBranch: payload.bankBranch ?? payload.bankDetails?.bankBranch,
+          accountHolderName: payload.accountHolderName ?? payload.bankDetails?.accountHolderName,
+          bankAccountNumber: payload.bankAccountNumber ?? payload.bankDetails?.bankAccountNumber ?? payload.accountNumber,
+          ifscCode: payload.ifscCode ?? payload.bankDetails?.ifscCode,
+          upiId: payload.upiId ?? payload.upiID ?? payload.upi ?? payload.bankDetails?.upiId,
         },
       });
     }
