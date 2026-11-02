@@ -26,6 +26,11 @@ const logger = pino({
     env.NODE_ENV === "development" ? { target: "pino-pretty" } : undefined,
 });
 
+const approvalIsRequired = (role) => {
+  const normalizedRole = String(role || "").trim().toLowerCase();
+  return !["admin", "hr", "accountant", "ca"].includes(normalizedRole);
+};
+
 // Helper to record audit event in controller
 const normalizeResetToken = (tokenValue) => {
   const tokenString = String(tokenValue ?? "").trim();
@@ -196,7 +201,7 @@ const login = async (req, res, next) => {
         message: "Invalid email or password",
       });
     }
-    if (user.isApproved === false || (user.isActive === false && user.isApproved === false)) {
+    if (approvalIsRequired(user.role) && (user.isApproved === false || user.isActive === false)) {
       return res.status(403).json({
         success: false,
         message: "Admin Approval Pending",

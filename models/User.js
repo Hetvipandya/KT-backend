@@ -213,6 +213,8 @@ const userSchema =
           "team lead", 
           "Accountant",
           "CA",
+          "accountant",
+          "ca",
         ], 
       },
 

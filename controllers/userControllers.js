@@ -971,6 +971,8 @@ const registerUser = async (req, res) => {
       "intern",
       "admin",
       "user",
+      "accountant",
+      "ca",
     ];
 
     if (!allowedRoles.includes(normalizedRole)) {
@@ -1176,7 +1178,11 @@ const registerUser = async (req, res) => {
 
     const registrationEmailTasks = [];
 
-    if (process.env.EMAIL_USER && process.env.ADMIN_EMAIL) {
+    if (
+      process.env.EMAIL_USER &&
+      process.env.ADMIN_EMAIL &&
+      shouldRequireApproval(normalizedRole)
+    ) {
       registrationEmailTasks.push(
         transporter.sendMail({
           from: process.env.EMAIL_USER,
@@ -1329,8 +1335,12 @@ const getAllUsers = async (req, res) => {
     const filter = {};
     if (req.query.isApproved !== undefined) {
       filter.isApproved = req.query.isApproved === "true";
+      if (req.query.isApproved === "false") {
+        filter.role = { $nin: ["accountant", "Accountant", "ca", "CA"] };
+      }
     } else if (req.query.pending === "true") {
       filter.isApproved = false;
+      filter.role = { $nin: ["accountant", "Accountant", "ca", "CA"] };
     }
     if (req.query.companyId && mongoose.Types.ObjectId.isValid(req.query.companyId)) {
       filter.companyId = req.query.companyId;
@@ -1770,13 +1780,6 @@ const loginUser = async (req, res) => {
     const role = normalizeRole(user.role);
 
     if (shouldRequireApproval(role) && !user.isApproved) {
-      return res.status(403).json({
-        success: false,
-        message: "Admin Approval Pending",
-      });
-    }
-
-    if (!user.isApproved || (!user.isActive && !user.isApproved)) {
       return res.status(403).json({
         success: false,
         message: "Admin Approval Pending",
