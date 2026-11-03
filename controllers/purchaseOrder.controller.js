@@ -4,7 +4,7 @@ exports.list = send(async (req, res) => {
   const { companyId, _id, id, ...query } = req.query;
   const purchaseOrderId = _id || id;
   if (purchaseOrderId) {
-    return res.json({ success: true, data: await service.getPurchaseOrderDetails(purchaseOrderId) });
+    return res.json({ success: true, data: await service.getPurchaseOrderDocument(purchaseOrderId) });
   }
   if (!companyId) {
     return res.status(400).json({ success: false, message: 'companyId is required when purchase order id is not provided', errorCode: 'INVALID_QUERY' });
