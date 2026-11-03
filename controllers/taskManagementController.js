@@ -1,4 +1,5 @@
 const TaskManagement = require("../models/taskModel");
+const cloudinary = require("../config/cloudinary");
 const Employee = require("../models/Employee");
 const User = require("../models/User");
 const Project = require("../models/projectModel");
@@ -40,8 +41,24 @@ const formatFileUrl = (url, req) => {
   if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
     return trimmed;
   } 
-  const baseUrl = getBaseUrl(req);
   const cleanPath = trimmed.replace(/\\/g, "/");
+  const isLocalUpload = cleanPath.startsWith("/uploads/") || cleanPath.startsWith("uploads/");
+  const fileName = cleanPath.split("/").pop();
+  const ext = fileName.includes(".") ? fileName.split(".").pop().toLowerCase() : "";
+  const resourceType = ["pdf"].includes(ext) ? "raw" : "image";
+  const cloudName = cloudinary.config().cloud_name;
+
+  if (cloudName && (isLocalUpload || !cleanPath.includes("/"))) {
+    const publicId = resourceType === "raw"
+      ? fileName
+      : fileName.replace(/\.[^.]+$/, "");
+    return cloudinary.url(`file-management/${publicId}`, {
+      secure: true,
+      resource_type: resourceType,
+      format: resourceType === "image" ? ext : undefined,
+    });
+  }
+  const baseUrl = getBaseUrl(req);
   if (cleanPath.startsWith("/uploads/")) {
     return `${baseUrl}${cleanPath}`;
   }
