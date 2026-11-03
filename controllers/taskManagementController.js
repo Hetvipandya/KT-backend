@@ -75,6 +75,17 @@ const getRequiredUploadedFileUrl = (file) => {
 };
 
 const uploadAttachmentSource = async (attachment) => {
+  if (typeof attachment === "string") {
+    const existingCloudinaryUrl = normalizeAttachmentUrl(attachment);
+    if (existingCloudinaryUrl) {
+      return { fileName: existingCloudinaryUrl.split("/").pop() || "attachment", fileUrl: existingCloudinaryUrl };
+    }
+    return uploadAttachmentSource({
+      fileName: "task-attachment",
+      uri: attachment,
+    });
+  }
+
   if (!attachment || typeof attachment !== "object") return null;
 
   const fileName =
@@ -100,6 +111,15 @@ const uploadAttachmentSource = async (attachment) => {
 
   if (!source || typeof source !== "string") return null;
 
+  const existingCloudinaryUrl = normalizeAttachmentUrl(source);
+  if (existingCloudinaryUrl) {
+    return { fileName, fileUrl: existingCloudinaryUrl };
+  }
+
+  if (/^file:\/\//i.test(source) || /^blob:/i.test(source)) {
+    throw new Error(`Attachment source "${source.slice(0, 20)}..." is not accessible by the backend`);
+  }
+
   const normalizedSource =
     /^data:/i.test(source) || /^https?:\/\//i.test(source)
       ? source
@@ -115,6 +135,57 @@ const uploadAttachmentSource = async (attachment) => {
     fileName,
     fileUrl: result.secure_url,
   };
+};
+
+const processAttachmentPayload = async (attachmentPayload) => {
+  if (!attachmentPayload) return [];
+
+  let parsedAttachments = attachmentPayload;
+  if (typeof attachmentPayload === "string") {
+    try {
+      parsedAttachments = JSON.parse(attachmentPayload);
+    } catch (e) {
+      const uploadedAttachment = await uploadAttachmentSource(attachmentPayload);
+      return uploadedAttachment ? [uploadedAttachment] : [];
+    }
+  }
+
+  const payloadItems = Array.isArray(parsedAttachments)
+    ? parsedAttachments
+    : [parsedAttachments];
+  const attachments = [];
+
+  for (const attachment of payloadItems) {
+    if (typeof attachment === "string") {
+      const cloudinaryUrl = normalizeAttachmentUrl(attachment);
+      if (cloudinaryUrl) {
+        attachments.push({
+          fileName: attachment.split("/").pop() || "attachment",
+          fileUrl: cloudinaryUrl,
+        });
+      } else {
+        const uploadedAttachment = await uploadAttachmentSource(attachment);
+        if (uploadedAttachment) attachments.push(uploadedAttachment);
+      }
+      continue;
+    }
+
+    if (!attachment || typeof attachment !== "object") continue;
+    const rawUrl = attachment.fileUrl || attachment.url || attachment.path || "";
+    const cloudinaryUrl = normalizeAttachmentUrl(rawUrl);
+    if (cloudinaryUrl) {
+      attachments.push({
+        fileName: attachment.fileName || rawUrl.split("/").pop() || "attachment",
+        fileUrl: cloudinaryUrl,
+      });
+      continue;
+    }
+
+    const uploadedAttachment = await uploadAttachmentSource(attachment);
+    if (uploadedAttachment) attachments.push(uploadedAttachment);
+  }
+
+  return attachments;
 };
 
 const sanitizeTaskWithAttachments = (taskDoc, req) => {
@@ -591,42 +662,10 @@ exports.createTask = async (req, res) => {
     const attachmentPayload = req.body.attachments ?? req.body.attachment;
     if (attachmentPayload) {
       try {
-        const parsedAttachments =
-          typeof attachmentPayload === "string"
-            ? JSON.parse(attachmentPayload)
-            : attachmentPayload;
-
-        if (Array.isArray(parsedAttachments)) {
-          for (const att of parsedAttachments) {
-            if (typeof att === "string") {
-              const fileName = att.split("/").pop() || att;
-              const cloudinaryUrl = normalizeAttachmentUrl(att);
-              if (!cloudinaryUrl) continue;
-              attachments.push({
-                fileName,
-                fileUrl: cloudinaryUrl,
-              });
-            } else if (att && typeof att === "object") {
-              const rawUrl = att.fileUrl || att.url || att.path || att.fileName || "";
-              const fileName = att.fileName || rawUrl.split("/").pop() || "attachment";
-              const cloudinaryUrl = normalizeAttachmentUrl(rawUrl);
-              if (!cloudinaryUrl) {
-                const uploadedAttachment = await uploadAttachmentSource(att);
-                if (uploadedAttachment) attachments.push(uploadedAttachment);
-                continue;
-              }
-              attachments.push({
-                fileName,
-                fileUrl: cloudinaryUrl,
-              });
-            }
-          }
-        } else if (typeof parsedAttachments === "object") {
-          const uploadedAttachment = await uploadAttachmentSource(parsedAttachments);
-          if (uploadedAttachment) attachments.push(uploadedAttachment);
-        }
+        attachments.push(...await processAttachmentPayload(attachmentPayload));
       } catch (e) {
         console.warn("Could not parse req.body.attachments:", e);
+        throw e;
       }
     }
 
@@ -815,47 +854,16 @@ exports.updateTask =
           fileName: file.originalname,
           fileUrl: getRequiredUploadedFileUrl(file),
         }));
-
-        if (req.body.attachments) {
-          try {
-            const parsed = typeof req.body.attachments === "string" ? JSON.parse(req.body.attachments) : req.body.attachments;
-            if (Array.isArray(parsed)) {
-              parsed.forEach((att) => {
-                if (typeof att === "string") {
-                  const cloudinaryUrl = normalizeAttachmentUrl(att);
-                  if (cloudinaryUrl) {
-                    newAttachments.push({ fileName: att.split("/").pop() || att, fileUrl: cloudinaryUrl });
-                  }
-                } else if (att && typeof att === "object") {
-                  const cloudinaryUrl = normalizeAttachmentUrl(att.fileUrl || att.url || "");
-                  if (cloudinaryUrl) {
-                    newAttachments.push({ fileName: att.fileName || "attachment", fileUrl: cloudinaryUrl });
-                  }
-                }
-              });
-            }
-          } catch (e) {}
+        const bodyAttachmentPayload = req.body.attachments ?? req.body.attachment;
+        if (bodyAttachmentPayload) {
+          newAttachments.push(...await processAttachmentPayload(bodyAttachmentPayload));
         }
         updatePayload.attachments = newAttachments;
-      } else if (req.body.attachments) {
-        try {
-          const parsed = typeof req.body.attachments === "string" ? JSON.parse(req.body.attachments) : req.body.attachments;
-          if (Array.isArray(parsed)) {
-            updatePayload.attachments = parsed.map((att) => {
-              if (typeof att === "string") {
-                const cloudinaryUrl = normalizeAttachmentUrl(att);
-                return cloudinaryUrl
-                  ? { fileName: att.split("/").pop() || att, fileUrl: cloudinaryUrl }
-                  : null;
-              }
-              const cloudinaryUrl = normalizeAttachmentUrl(att.fileUrl || att.url || "");
-              return cloudinaryUrl
-                ? { fileName: att.fileName || "attachment", fileUrl: cloudinaryUrl }
-                : null;
-            });
-            updatePayload.attachments = updatePayload.attachments.filter(Boolean);
-          }
-        } catch (e) {}
+      } else {
+        const bodyAttachmentPayload = req.body.attachments ?? req.body.attachment;
+        if (bodyAttachmentPayload) {
+          updatePayload.attachments = await processAttachmentPayload(bodyAttachmentPayload);
+        }
       }
 
       updatePayload = applyDelayedStatus(
