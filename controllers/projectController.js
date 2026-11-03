@@ -1063,11 +1063,7 @@ const uploadTaskAttachmentPayload = async (att) => {
     } catch (e) {}
 
     if (!localPath || !fs.existsSync(localPath)) {
-      const error = new Error(
-        "The file URL is local to the client and is not accessible by the server. Upload the file using multipart/form-data or provide base64/data URL content."
-      );
-      error.statusCode = 400;
-      throw error;
+      return null;
     }
     const result = await cloudinary.uploader.upload(localPath, {
       folder: "file-management",
