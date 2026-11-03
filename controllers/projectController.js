@@ -1049,11 +1049,7 @@ const uploadTaskAttachmentPayload = async (att) => {
 
   if (!source || typeof source !== "string") return null;
   if (/^file:\/\//i.test(source) || /^blob:/i.test(source)) {
-    const error = new Error(
-      "Local file URLs cannot be uploaded by the backend. Send the file as multipart/form-data or provide base64/data URL content."
-    );
-    error.statusCode = 400;
-    throw error;
+    return null;
   }
 
   const uploadSource =
