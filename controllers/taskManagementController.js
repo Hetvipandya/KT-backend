@@ -54,6 +54,13 @@ const formatFileUrl = (url, req) => {
   return "";
 };
 
+const normalizeAttachmentUrl = (url) => {
+  if (typeof url !== "string") return "";
+  const trimmed = url.trim().replace(/^http:\/\/res\.cloudinary\.com\//i, "https://res.cloudinary.com/");
+  if (!/^https:\/\/res\.cloudinary\.com\//i.test(trimmed)) return "";
+  return trimmed;
+};
+
 const getUploadedFileUrl = (file) =>
   file.secure_url || file.path || file.url || file.location || "";
 
@@ -71,24 +78,28 @@ const sanitizeTaskWithAttachments = (taskDoc, req) => {
   if (task.attachments && Array.isArray(task.attachments)) {
     task.attachments = task.attachments.map((att) => {
       if (typeof att === "string") {
-        const fileName = att.split("/").pop() || att;
+        const normalizedUrl = normalizeAttachmentUrl(att);
+        if (!normalizedUrl) return null;
+        const fileName = normalizedUrl.split("/").pop() || normalizedUrl;
         return {
           fileName,
-          fileUrl: formatFileUrl(att, req),
+          fileUrl: normalizedUrl,
           uploadedAt: new Date(),
         };
       }
       if (att && typeof att === "object") {
         const rawUrl = att.fileUrl || att.url || att.path || att.fileName || "";
+        const normalizedUrl = normalizeAttachmentUrl(rawUrl);
         const fileName = att.fileName || rawUrl.split("/").pop() || "attachment";
+        if (!normalizedUrl) return null;
         return {
           ...att,
           fileName,
-          fileUrl: formatFileUrl(rawUrl, req),
+          fileUrl: normalizedUrl,
         };
       }
       return att;
-    });
+    }).filter(Boolean);
   }
   return task;
 };
@@ -543,16 +554,20 @@ exports.createTask = async (req, res) => {
           parsedAttachments.forEach((att) => {
             if (typeof att === "string") {
               const fileName = att.split("/").pop() || att;
+              const cloudinaryUrl = normalizeAttachmentUrl(att);
+              if (!cloudinaryUrl) return;
               attachments.push({
                 fileName,
-                fileUrl: formatFileUrl(att, req),
+                fileUrl: cloudinaryUrl,
               });
             } else if (att && typeof att === "object") {
               const rawUrl = att.fileUrl || att.url || att.path || att.fileName || "";
               const fileName = att.fileName || rawUrl.split("/").pop() || "attachment";
+              const cloudinaryUrl = normalizeAttachmentUrl(rawUrl);
+              if (!cloudinaryUrl) return;
               attachments.push({
                 fileName,
-                fileUrl: formatFileUrl(rawUrl, req),
+                fileUrl: cloudinaryUrl,
               });
             }
           });
@@ -754,9 +769,15 @@ exports.updateTask =
             if (Array.isArray(parsed)) {
               parsed.forEach((att) => {
                 if (typeof att === "string") {
-                  newAttachments.push({ fileName: att.split("/").pop() || att, fileUrl: formatFileUrl(att, req) });
+                  const cloudinaryUrl = normalizeAttachmentUrl(att);
+                  if (cloudinaryUrl) {
+                    newAttachments.push({ fileName: att.split("/").pop() || att, fileUrl: cloudinaryUrl });
+                  }
                 } else if (att && typeof att === "object") {
-                  newAttachments.push({ fileName: att.fileName || "attachment", fileUrl: formatFileUrl(att.fileUrl || att.url || "", req) });
+                  const cloudinaryUrl = normalizeAttachmentUrl(att.fileUrl || att.url || "");
+                  if (cloudinaryUrl) {
+                    newAttachments.push({ fileName: att.fileName || "attachment", fileUrl: cloudinaryUrl });
+                  }
                 }
               });
             }
@@ -769,10 +790,17 @@ exports.updateTask =
           if (Array.isArray(parsed)) {
             updatePayload.attachments = parsed.map((att) => {
               if (typeof att === "string") {
-                return { fileName: att.split("/").pop() || att, fileUrl: formatFileUrl(att, req) };
+                const cloudinaryUrl = normalizeAttachmentUrl(att);
+                return cloudinaryUrl
+                  ? { fileName: att.split("/").pop() || att, fileUrl: cloudinaryUrl }
+                  : null;
               }
-              return { fileName: att.fileName || "attachment", fileUrl: formatFileUrl(att.fileUrl || att.url || "", req) };
+              const cloudinaryUrl = normalizeAttachmentUrl(att.fileUrl || att.url || "");
+              return cloudinaryUrl
+                ? { fileName: att.fileName || "attachment", fileUrl: cloudinaryUrl }
+                : null;
             });
+            updatePayload.attachments = updatePayload.attachments.filter(Boolean);
           }
         } catch (e) {}
       }
