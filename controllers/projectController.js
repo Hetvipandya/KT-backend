@@ -7,6 +7,7 @@ const Employee = require("../models/Employee");
 const Team = require("../models/Team");  
 const { sanitizeTaskWithAttachments } = require("./taskManagementController");  
 const cloudinary = require("../config/cloudinary");
+const fs = require("fs");
  
 const recalculateMilestoneAndProjectProgress = require("../utils/recalculateMilestoneAndProjectProgress");
 const { notifyNewAssignments } = require("../utils/assignmentNotifications");
@@ -1045,11 +1046,39 @@ const uploadTaskAttachmentPayload = async (att) => {
   const source =
     att.dataUrl || att.dataURI || att.base64 || att.base64String ||
     att.data || att.content || att.uri || att.path || att.source ||
-    att.fileData || att.imageData || rawUrl;
+    att.fileData || att.imageData ||
+    (typeof att.file === "object"
+      ? att.file.dataUrl || att.file.base64 || att.file.data || att.file.uri || att.file.path || att.file.fileUrl
+      : att.file) ||
+    rawUrl;
 
   if (!source || typeof source !== "string") return null;
   if (/^file:\/\//i.test(source) || /^blob:/i.test(source)) {
-    return null;
+    let localPath = "";
+    try {
+      if (/^file:\/\//i.test(source)) {
+        localPath = decodeURIComponent(source.replace(/^file:\/\/\/?/i, ""));
+        localPath = localPath.replace(/^\/([A-Za-z]:\/)/, "$1");
+      }
+    } catch (e) {}
+
+    if (!localPath || !fs.existsSync(localPath)) {
+      const error = new Error(
+        "The file URL is local to the client and is not accessible by the server. Upload the file using multipart/form-data or provide base64/data URL content."
+      );
+      error.statusCode = 400;
+      throw error;
+    }
+    const result = await cloudinary.uploader.upload(localPath, {
+      folder: "file-management",
+      resource_type: "auto",
+      use_filename: true,
+      unique_filename: true,
+    });
+    return {
+      fileName,
+      fileUrl: normalizeTaskAttachmentUrl(result.secure_url) || result.secure_url,
+    };
   }
 
   const uploadSource =
