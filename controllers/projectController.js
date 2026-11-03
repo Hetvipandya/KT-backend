@@ -6,6 +6,7 @@ const User = require("../models/User");
 const Employee = require("../models/Employee");
 const Team = require("../models/Team");  
 const { sanitizeTaskWithAttachments } = require("./taskManagementController");  
+const cloudinary = require("../config/cloudinary");
  
 const recalculateMilestoneAndProjectProgress = require("../utils/recalculateMilestoneAndProjectProgress");
 const { notifyNewAssignments } = require("../utils/assignmentNotifications");
@@ -1022,6 +1023,55 @@ exports.deleteProject = async (req, res) => {
 // TASK CONTROLLER
 // ======================================================
 
+const normalizeTaskAttachmentUrl = (url) => {
+  if (typeof url !== "string") return "";
+  const normalized = url.trim().replace(/^http:\/\/res\.cloudinary\.com\//i, "https://res.cloudinary.com/");
+  return /^https:\/\/res\.cloudinary\.com\//i.test(normalized) ? normalized : "";
+};
+
+const uploadTaskAttachmentPayload = async (att) => {
+  if (typeof att === "string") {
+    const cloudinaryUrl = normalizeTaskAttachmentUrl(att);
+    if (cloudinaryUrl) return { fileName: cloudinaryUrl.split("/").pop() || "attachment", fileUrl: cloudinaryUrl };
+    att = { fileName: "task-attachment", uri: att };
+  }
+
+  if (!att || typeof att !== "object") return null;
+  const fileName = att.fileName || att.name || att.originalname || "task-attachment";
+  const rawUrl = att.fileUrl || att.url || att.path || att.uri || "";
+  const cloudinaryUrl = normalizeTaskAttachmentUrl(rawUrl);
+  if (cloudinaryUrl) return { fileName, fileUrl: cloudinaryUrl };
+
+  const source =
+    att.dataUrl || att.dataURI || att.base64 || att.base64String ||
+    att.data || att.content || att.uri || att.path || att.source ||
+    att.fileData || att.imageData;
+
+  if (!source || typeof source !== "string") return null;
+  if (/^file:\/\//i.test(source) || /^blob:/i.test(source)) {
+    const error = new Error(
+      "Local file URLs cannot be uploaded by the backend. Send the file as multipart/form-data or provide base64/data URL content."
+    );
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const uploadSource =
+    /^data:/i.test(source) || /^https?:\/\//i.test(source)
+      ? source
+      : `data:application/octet-stream;base64,${source}`;
+  const result = await cloudinary.uploader.upload(uploadSource, {
+    folder: "file-management",
+    resource_type: "auto",
+    use_filename: true,
+    unique_filename: true,
+  });
+  if (!normalizeTaskAttachmentUrl(result.secure_url)) {
+    throw new Error("Cloudinary upload did not return a secure URL");
+  }
+  return { fileName, fileUrl: result.secure_url };
+};
+
 // Create Task
 exports.createTask = async (req, res) => {
   try {
@@ -1161,9 +1211,13 @@ exports.createTask = async (req, res) => {
         ? req.files
         : Object.values(req.files).flat();
       fileList.forEach((file) => {
+        const fileUrl = normalizeTaskAttachmentUrl(file.secure_url || file.path || file.url || "");
+        if (!fileUrl) {
+          throw Object.assign(new Error("Cloudinary upload did not return a secure URL"), { statusCode: 400 });
+        }
         uploadedAttachments.push({
           fileName: file.originalname || file.filename,
-          fileUrl: file.path || file.url || file.filename,
+          fileUrl,
         });
       });
     } else if (req.file) {
@@ -1186,19 +1240,13 @@ exports.createTask = async (req, res) => {
           : taskData.attachments;
 
       if (Array.isArray(parsedAttachments)) {
-        parsedAttachments.forEach((att) => {
-          if (typeof att === "string") {
-            uploadedAttachments.push({
-              fileName: att.split("/").pop() || att,
-              fileUrl: att,
-            });
-          } else if (att && typeof att === "object") {
-            uploadedAttachments.push({
-              fileName: att.fileName || (att.fileUrl ? att.fileUrl.split("/").pop() : "attachment"),
-              fileUrl: att.fileUrl || att.url || att.path || "",
-            });
-          }
-        });
+        for (const att of parsedAttachments) {
+          const uploadedAttachment = await uploadTaskAttachmentPayload(att);
+          if (uploadedAttachment) uploadedAttachments.push(uploadedAttachment);
+        }
+      } else {
+        const uploadedAttachment = await uploadTaskAttachmentPayload(parsedAttachments);
+        if (uploadedAttachment) uploadedAttachments.push(uploadedAttachment);
       }
     }
 
@@ -1247,7 +1295,7 @@ exports.createTask = async (req, res) => {
     
   } catch (error) {
     console.error("Create Task Error:", error);
-    return res.status(500).json({
+    return res.status(error.statusCode || 500).json({
       success: false,
       message: error.message
     });
