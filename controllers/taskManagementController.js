@@ -86,9 +86,17 @@ const uploadAttachmentSource = async (attachment) => {
     attachment.dataUrl ||
     attachment.dataURI ||
     attachment.base64 ||
+    attachment.base64String ||
     attachment.data ||
     attachment.content ||
-    attachment.file;
+    attachment.uri ||
+    attachment.path ||
+    attachment.fileData ||
+    attachment.imageData ||
+    attachment.source ||
+    (typeof attachment.file === "object"
+      ? attachment.file.base64 || attachment.file.data || attachment.file.uri || attachment.file.path
+      : attachment.file);
 
   if (!source || typeof source !== "string") return null;
 
