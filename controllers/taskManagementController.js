@@ -2,6 +2,7 @@ const TaskManagement = require("../models/taskModel");
 const Employee = require("../models/Employee");
 const User = require("../models/User");
 const Project = require("../models/projectModel");
+const cloudinary = require("../config/cloudinary");
 const recalculateMilestoneAndProjectProgress = require("../utils/recalculateMilestoneAndProjectProgress");
 const { notifyNewAssignments } = require("../utils/assignmentNotifications");
 
@@ -71,6 +72,41 @@ const getRequiredUploadedFileUrl = (file) => {
     throw new Error("Cloudinary upload did not return a file URL");
   }
   return normalizedUrl;
+};
+
+const uploadAttachmentSource = async (attachment) => {
+  if (!attachment || typeof attachment !== "object") return null;
+
+  const fileName =
+    attachment.fileName ||
+    attachment.name ||
+    attachment.originalname ||
+    "task-attachment";
+  const source =
+    attachment.dataUrl ||
+    attachment.dataURI ||
+    attachment.base64 ||
+    attachment.data ||
+    attachment.content ||
+    attachment.file;
+
+  if (!source || typeof source !== "string") return null;
+
+  const normalizedSource =
+    /^data:/i.test(source) || /^https?:\/\//i.test(source)
+      ? source
+      : `data:application/octet-stream;base64,${source}`;
+  const result = await cloudinary.uploader.upload(normalizedSource, {
+    folder: "file-management",
+    resource_type: "auto",
+    use_filename: true,
+    unique_filename: true,
+  });
+
+  return {
+    fileName,
+    fileUrl: result.secure_url,
+  };
 };
 
 const sanitizeTaskWithAttachments = (taskDoc, req) => {
@@ -544,19 +580,20 @@ exports.createTask = async (req, res) => {
       });
     }
 
-    if (req.body.attachments) {
+    const attachmentPayload = req.body.attachments ?? req.body.attachment;
+    if (attachmentPayload) {
       try {
         const parsedAttachments =
-          typeof req.body.attachments === "string"
-            ? JSON.parse(req.body.attachments)
-            : req.body.attachments;
+          typeof attachmentPayload === "string"
+            ? JSON.parse(attachmentPayload)
+            : attachmentPayload;
 
         if (Array.isArray(parsedAttachments)) {
-          parsedAttachments.forEach((att) => {
+          for (const att of parsedAttachments) {
             if (typeof att === "string") {
               const fileName = att.split("/").pop() || att;
               const cloudinaryUrl = normalizeAttachmentUrl(att);
-              if (!cloudinaryUrl) return;
+              if (!cloudinaryUrl) continue;
               attachments.push({
                 fileName,
                 fileUrl: cloudinaryUrl,
@@ -565,13 +602,20 @@ exports.createTask = async (req, res) => {
               const rawUrl = att.fileUrl || att.url || att.path || att.fileName || "";
               const fileName = att.fileName || rawUrl.split("/").pop() || "attachment";
               const cloudinaryUrl = normalizeAttachmentUrl(rawUrl);
-              if (!cloudinaryUrl) return;
+              if (!cloudinaryUrl) {
+                const uploadedAttachment = await uploadAttachmentSource(att);
+                if (uploadedAttachment) attachments.push(uploadedAttachment);
+                continue;
+              }
               attachments.push({
                 fileName,
                 fileUrl: cloudinaryUrl,
               });
             }
-          });
+          }
+        } else if (typeof parsedAttachments === "object") {
+          const uploadedAttachment = await uploadAttachmentSource(parsedAttachments);
+          if (uploadedAttachment) attachments.push(uploadedAttachment);
         }
       } catch (e) {
         console.warn("Could not parse req.body.attachments:", e);
