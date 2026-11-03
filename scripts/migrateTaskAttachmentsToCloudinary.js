@@ -31,6 +31,7 @@ const migrateTaskAttachments = async () => {
   }).select("_id attachments");
 
   let migrated = 0;
+  let removedUnavailable = 0;
   let failed = 0;
 
   for (const task of tasks) {
@@ -59,6 +60,13 @@ const migrateTaskAttachments = async () => {
         migrated++;
       } catch (error) {
         failed++;
+        const status = error.response?.status;
+        if (status === 404) {
+          task.attachments = task.attachments.filter((item) => item !== attachment);
+          changed = true;
+          removedUnavailable++;
+          continue;
+        }
         console.error(
           `Could not migrate task ${task._id}, attachment ${attachment.fileName}:`,
           error.message
@@ -69,7 +77,9 @@ const migrateTaskAttachments = async () => {
     if (changed) await task.save();
   }
 
-  console.log(`Task attachment migration complete: ${migrated} migrated, ${failed} failed`);
+  console.log(
+    `Task attachment migration complete: ${migrated} migrated, ${removedUnavailable} unavailable attachments removed, ${failed} failed`
+  );
   await disconnectDB();
 };
 

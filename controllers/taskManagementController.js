@@ -43,15 +43,15 @@ const formatFileUrl = (url, req) => {
   const baseUrl = getBaseUrl(req);
   const cleanPath = trimmed.replace(/\\/g, "/");
   if (cleanPath.startsWith("/uploads/")) {
-    return `${baseUrl}${cleanPath}`;
+    return "";
   }
   if (cleanPath.startsWith("uploads/")) {
-    return `${baseUrl}/${cleanPath}`;
+    return "";
   }
   if (cleanPath.startsWith("/")) {
-    return `${baseUrl}/uploads${cleanPath}`;
+    return "";
   }
-  return `${baseUrl}/uploads/${cleanPath}`;
+  return "";
 };
 
 const getUploadedFileUrl = (file) =>
