@@ -66,10 +66,11 @@ const getUploadedFileUrl = (file) =>
 
 const getRequiredUploadedFileUrl = (file) => {
   const url = getUploadedFileUrl(file);
-  if (!url) {
+  const normalizedUrl = normalizeAttachmentUrl(url);
+  if (!normalizedUrl) {
     throw new Error("Cloudinary upload did not return a file URL");
   }
-  return url;
+  return normalizedUrl;
 };
 
 const sanitizeTaskWithAttachments = (taskDoc, req) => {
@@ -538,7 +539,7 @@ exports.createTask = async (req, res) => {
       req.files.forEach((file) => {
         attachments.push({
           fileName: file.originalname,
-          fileUrl: formatFileUrl(getRequiredUploadedFileUrl(file), req),
+          fileUrl: getRequiredUploadedFileUrl(file),
         });
       });
     }
@@ -760,7 +761,7 @@ exports.updateTask =
       if (req.files && req.files.length > 0) {
         const newAttachments = req.files.map((file) => ({
           fileName: file.originalname,
-          fileUrl: formatFileUrl(getRequiredUploadedFileUrl(file), req),
+          fileUrl: getRequiredUploadedFileUrl(file),
         }));
 
         if (req.body.attachments) {
