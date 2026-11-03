@@ -68,6 +68,25 @@ const upload = multer({
   },
 });
 
+upload.array = ((originalArray) => (fieldName, maxCount) => {
+  const middleware = originalArray(fieldName, maxCount);
+  return (req, res, next) => {
+    middleware(req, res, (err) => {
+      if (err) return next(err);
+      if (req.files && Array.isArray(req.files)) {
+        for (const file of req.files) {
+          const uploadedUrl = file.secure_url || file.path;
+          if (!uploadedUrl || !/^https:\/\/res\.cloudinary\.com\//i.test(uploadedUrl)) {
+            return next(new Error("Cloudinary upload did not return a valid secure URL"));
+          }
+          file.path = uploadedUrl;
+        }
+      }
+      next();
+    });
+  };
+})(upload.array.bind(upload));
+
 // Middleware specifically for profile image upload:
 // Gracefully accepts profileImage, profileImg, photo, avatar, image, file, or whatever field name is sent
 const profileImageUpload = (req, res, next) => {
