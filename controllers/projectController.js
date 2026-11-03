@@ -1045,7 +1045,7 @@ const uploadTaskAttachmentPayload = async (att) => {
   const source =
     att.dataUrl || att.dataURI || att.base64 || att.base64String ||
     att.data || att.content || att.uri || att.path || att.source ||
-    att.fileData || att.imageData;
+    att.fileData || att.imageData || rawUrl;
 
   if (!source || typeof source !== "string") return null;
   if (/^file:\/\//i.test(source) || /^blob:/i.test(source)) {

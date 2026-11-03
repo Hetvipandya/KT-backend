@@ -24,7 +24,7 @@ const {
   getAllMilestones,
 
   // Task
-  createTask,
+  createTask, 
   getAllTasks,
   getProjectTasks,
   getMilestoneTasks,
@@ -161,12 +161,7 @@ router.put(
 // Create Task
 router.post(
   "/task/create",
-  upload.fields([
-    { name: "attachments", maxCount: 10 },
-    { name: "files", maxCount: 10 },
-    { name: "file", maxCount: 10 },
-    { name: "document", maxCount: 10 },
-  ]),
+  upload.any(),
   createTask
 );
  
