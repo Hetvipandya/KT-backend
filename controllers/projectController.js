@@ -1221,9 +1221,13 @@ exports.createTask = async (req, res) => {
         });
       });
     } else if (req.file) {
+      const fileUrl = normalizeTaskAttachmentUrl(req.file.secure_url || req.file.path || req.file.url || "");
+      if (!fileUrl) {
+        throw Object.assign(new Error("Cloudinary upload did not return a secure URL"), { statusCode: 400 });
+      }
       uploadedAttachments.push({
         fileName: req.file.originalname || req.file.filename,
-        fileUrl: req.file.path || req.file.url || req.file.filename,
+        fileUrl,
       });
     }
 

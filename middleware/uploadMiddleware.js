@@ -3,30 +3,8 @@ const path = require("path");
 const { CloudinaryStorage } = require("multer-storage-cloudinary");
 const cloudinary = require("../config/cloudinary");
 
-// Only PDF and Standard Images are allowed
-const allowedExtensions = [
-  "pdf",
-  "jpg",
-  "jpeg",
-  "png",
-  "webp",
-  "gif",
-  "svg",
-];
-
 const fileFilter = (req, file, cb) => {
-  const ext = path.extname(file.originalname).toLowerCase().replace(".", "");
-
-  if (allowedExtensions.includes(ext)) {
-    cb(null, true);
-  } else {
-    cb(
-      new Error(
-        `File format .${ext} is not allowed. Only PDF and Images (JPG, JPEG, PNG, WEBP, GIF, SVG) are permitted.`
-      ),
-      false
-    );
-  }
+  cb(null, true);
 };
 
 const storage = new CloudinaryStorage({
