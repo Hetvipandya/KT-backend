@@ -51,6 +51,9 @@ const formatFileUrl = (url, req) => {
   return `${baseUrl}/uploads/${cleanPath}`;
 };
 
+const getUploadedFileUrl = (file) =>
+  file.secure_url || file.path || file.url || file.location || file.filename || "";
+
 const sanitizeTaskWithAttachments = (taskDoc, req) => {
   if (!taskDoc) return taskDoc;
   const task = typeof taskDoc.toObject === "function" ? taskDoc.toObject() : { ...taskDoc };
@@ -513,7 +516,7 @@ exports.createTask = async (req, res) => {
       req.files.forEach((file) => {
         attachments.push({
           fileName: file.originalname,
-          fileUrl: formatFileUrl(file.path || file.filename || "", req),
+          fileUrl: formatFileUrl(getUploadedFileUrl(file), req),
         });
       });
     }
@@ -731,7 +734,7 @@ exports.updateTask =
       if (req.files && req.files.length > 0) {
         const newAttachments = req.files.map((file) => ({
           fileName: file.originalname,
-          fileUrl: formatFileUrl(file.path || file.filename || "", req),
+          fileUrl: formatFileUrl(getUploadedFileUrl(file), req),
         }));
 
         if (req.body.attachments) {

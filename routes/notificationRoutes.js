@@ -11,7 +11,7 @@ router.post("/register-token", protect, notificationController.registerDeviceTok
 router.post("/remove-token", protect, notificationController.removeDeviceToken);
 
 // ===============================
-// NOTIFICATION ROUTES
+// NOTIFICATION ROUTES 
 // ===============================
 router.post("/create", notificationController.createNotification);
 

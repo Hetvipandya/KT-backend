@@ -248,7 +248,7 @@ app.use('/api/company', finCompanyRoutes);
 // Unified Module Routes (Combining HRMS + Finance Endpoints)
 app.use('/api/department', finDepartmentRoutes);
 app.use('/api/employee', finEmployeeRoutes);
-app.use('/api/expense', finExpenseRoutes);
+app.use('/api/expense', finExpenseRoutes); 
 app.use('/api/role', finRoleRoutes);
 
 // FIN Specific Routes
