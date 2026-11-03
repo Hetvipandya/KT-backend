@@ -34,6 +34,9 @@ const formatFileUrl = (url, req) => {
   if (!url) return "";
   if (typeof url !== "string") return "";
   const trimmed = url.trim();
+  if (/^http:\/\/res\.cloudinary\.com\//i.test(trimmed)) {
+    return trimmed.replace(/^http:/i, "https:");
+  }
   if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
     return trimmed;
   } 
@@ -52,7 +55,15 @@ const formatFileUrl = (url, req) => {
 };
 
 const getUploadedFileUrl = (file) =>
-  file.secure_url || file.path || file.url || file.location || file.filename || "";
+  file.secure_url || file.path || file.url || file.location || "";
+
+const getRequiredUploadedFileUrl = (file) => {
+  const url = getUploadedFileUrl(file);
+  if (!url) {
+    throw new Error("Cloudinary upload did not return a file URL");
+  }
+  return url;
+};
 
 const sanitizeTaskWithAttachments = (taskDoc, req) => {
   if (!taskDoc) return taskDoc;
@@ -516,7 +527,7 @@ exports.createTask = async (req, res) => {
       req.files.forEach((file) => {
         attachments.push({
           fileName: file.originalname,
-          fileUrl: formatFileUrl(getUploadedFileUrl(file), req),
+          fileUrl: formatFileUrl(getRequiredUploadedFileUrl(file), req),
         });
       });
     }
@@ -734,7 +745,7 @@ exports.updateTask =
       if (req.files && req.files.length > 0) {
         const newAttachments = req.files.map((file) => ({
           fileName: file.originalname,
-          fileUrl: formatFileUrl(getUploadedFileUrl(file), req),
+          fileUrl: formatFileUrl(getRequiredUploadedFileUrl(file), req),
         }));
 
         if (req.body.attachments) {
