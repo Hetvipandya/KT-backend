@@ -27,13 +27,13 @@ const authenticate = require("../middleware/authenticate");
 router.get("/employee/:employeeId", getTasksByEmployeeId); 
 
 // Create Task
-router.post("/create", upload.array("attachments"), createTask);
+router.post("/create", upload.any(), createTask);
 
 // Get All Tasks
 router.get("/all", getAllTasks); 
  
 // Update Task
-router.put("/update/:id", authenticate, upload.array("attachments"), updateTask);
+router.put("/update/:id", authenticate, upload.any(), updateTask);
 
 // Task Status Routes
 router.put("/status/:id", updateTaskStatus);
