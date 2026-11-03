@@ -102,6 +102,7 @@ const uploadAttachmentSource = async (attachment) => {
     attachment.content ||
     attachment.uri ||
     attachment.path ||
+    attachment.fileUrl ||
     attachment.fileData ||
     attachment.imageData ||
     attachment.source ||
@@ -117,7 +118,11 @@ const uploadAttachmentSource = async (attachment) => {
   }
 
   if (/^file:\/\//i.test(source) || /^blob:/i.test(source)) {
-    throw new Error(`Attachment source "${source.slice(0, 20)}..." is not accessible by the backend`);
+    const error = new Error(
+      "Local file URLs cannot be uploaded by the backend. Send the file as multipart/form-data or send its base64/data URL content."
+    );
+    error.statusCode = 400;
+    throw error;
   }
 
   const normalizedSource =
@@ -722,7 +727,7 @@ const [resolvedTask] = await resolveTasksWithEmployees([createdTask], req);
       });
     }
 
-    return res.status(500).json({
+    return res.status(error.statusCode || 500).json({
       success: false,
       message: error.message,
     });
