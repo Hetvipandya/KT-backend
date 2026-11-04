@@ -249,6 +249,7 @@ describe("70m check-in and 20m auto-checkout geofencing", () => {
         userId: user._id.toString(),
         ...coords80m,
         immediate: true,
+        consecutiveOutsideReadings: 5,
       },
     };
     const pingRes = createMockRes();
@@ -576,6 +577,7 @@ describe("70m check-in and 20m auto-checkout geofencing", () => {
         userId: user._id.toString(),
         ...coords80m,
         immediate: true,
+        consecutiveOutsideReadings: 5,
       },
     };
     const pingRes = createMockRes();
@@ -705,9 +707,9 @@ describe("70m check-in and 20m auto-checkout geofencing", () => {
     expect(exact20.isInside).toBe(true);
     expect(exact20.distance).toBe(20);
 
-    const outside21 = validateAttendanceGeofence({ distance: 21 });
+    const outside21 = validateAttendanceGeofence({ distance: 51 });
     expect(outside21.isInside).toBe(false);
-    expect(outside21.distance).toBe(21);
+    expect(outside21.distance).toBe(51);
   });
 
   /**
@@ -722,7 +724,7 @@ describe("70m check-in and 20m auto-checkout geofencing", () => {
     expect(res.body.success).toBe(true);
     expect(res.body.data.latitude).toBe(23.058290);
     expect(res.body.data.longitude).toBe(72.539190);
-    expect(res.body.data.radiusMeters).toBe(20);
+    expect(res.body.data.radiusMeters).toBe(50);
     expect(res.body.data.checkInRadiusMeters).toBe(70);
   });
 });

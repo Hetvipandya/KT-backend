@@ -2,21 +2,30 @@
  * GPS Geofencing Utility for Employee Attendance
  * Office: Solaris Business Hub, 913, 9th Floor
  * Coordinates: 23.058290, 72.539190
- * Radius: 20 meters
+ * Radius: 50 meters
  */
 
 const OFFICE_LOCATION = {
   name: "Solaris Business Hub, 913, 9th Floor",
   latitude: parseFloat(process.env.OFFICE_LATITUDE) || 23.058290,
   longitude: parseFloat(process.env.OFFICE_LONGITUDE) || 72.539190,
-  radiusMeters: parseFloat(process.env.OFFICE_RADIUS_METERS) || 20,
+  radiusMeters: parseFloat(process.env.OFFICE_RADIUS_METERS) || 50,
 };
 
 const CHECK_IN_RADIUS_METERS =
   parseFloat(process.env.CHECK_IN_RADIUS_METERS) || 70;
 
 const GEOFENCE_AUTO_CHECKOUT_DELAY_SECONDS =
-  parseInt(process.env.GEOFENCE_AUTO_CHECKOUT_DELAY_SECONDS, 10) || 10;
+  parseInt(process.env.GEOFENCE_AUTO_CHECKOUT_DELAY_SECONDS, 10) || 30;
+
+const GEOFENCE_CONSECUTIVE_EXIT_THRESHOLD =
+  parseInt(process.env.GEOFENCE_CONSECUTIVE_EXIT_THRESHOLD, 10) || 5;
+
+const GEOFENCE_LOCATION_DISTANCE_FILTER_METERS =
+  parseFloat(process.env.GEOFENCE_LOCATION_DISTANCE_FILTER_METERS) || 10;
+
+const GEOFENCE_MAX_GPS_ACCURACY_METERS =
+  parseFloat(process.env.GEOFENCE_MAX_GPS_ACCURACY_METERS) || 30;
 
 const LOCATION_FETCH_INTERVAL_SECONDS = 20; // Automatically fetch GPS location every 20 seconds
 
@@ -158,10 +167,14 @@ function validateAttendanceGeofence(body, allowedRadius = OFFICE_LOCATION.radius
   }
 
   // Check GPS accuracy if provided
-  const rawAccuracy = body.accuracy || body.location?.accuracy;
+  const rawAccuracy =
+    body.accuracy ??
+    body.location?.accuracy ??
+    body.coords?.accuracy ??
+    body.position?.coords?.accuracy;
   if (rawAccuracy !== undefined && rawAccuracy !== null) {
     const accuracy = parseFloat(rawAccuracy);
-    if (!Number.isNaN(accuracy) && accuracy > 200) {
+    if (!Number.isNaN(accuracy) && accuracy > GEOFENCE_MAX_GPS_ACCURACY_METERS) {
       return {
         isInside: false,
         distance: null,
@@ -283,7 +296,15 @@ module.exports = {
   CHECK_IN_RADIUS_METERS,
   GEOFENCE_AUTO_CHECKOUT_DELAY_SECONDS,
   LOCATION_FETCH_INTERVAL_SECONDS,
+  GEOFENCE_CONSECUTIVE_EXIT_THRESHOLD,
+  GEOFENCE_LOCATION_DISTANCE_FILTER_METERS,
+  GEOFENCE_MAX_GPS_ACCURACY_METERS,
   calculateDistanceMeters,
   validateAttendanceGeofence,
   isBreakStartActive,
+  autoCheckoutRadiusMeters: OFFICE_LOCATION.radiusMeters,
+  consecutiveExitThreshold: GEOFENCE_CONSECUTIVE_EXIT_THRESHOLD,
+  timeOutsideThresholdSeconds: GEOFENCE_AUTO_CHECKOUT_DELAY_SECONDS,
+  maxGpsAccuracyMeters: GEOFENCE_MAX_GPS_ACCURACY_METERS,
+  distanceFilterMeters: GEOFENCE_LOCATION_DISTANCE_FILTER_METERS,
 };

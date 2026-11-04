@@ -7,6 +7,7 @@ const {
   validateAttendanceGeofence,
   OFFICE_LOCATION,
   GEOFENCE_AUTO_CHECKOUT_DELAY_SECONDS,
+  GEOFENCE_CONSECUTIVE_EXIT_THRESHOLD,
   isBreakStartActive,
 } = require("../utils/geofence");
  
@@ -196,6 +197,32 @@ exports.updateSessionStatus = async (req, res) => {
             req.body.immediate === true ||
             req.body.force === true ||
             delaySeconds === 0;
+
+          const reportedCount = Number(
+            req.body.consecutiveOutsideReadings ??
+            req.body.consecutiveExitCount ??
+            req.body.outsideReadingCount ??
+            NaN
+          );
+          attendance.outsideGeofenceReadingCount = Number.isFinite(reportedCount)
+            ? Math.max(0, Math.floor(reportedCount))
+            : Number(attendance.outsideGeofenceReadingCount || 0) + 1;
+          if (
+            attendance.outsideGeofenceReadingCount <
+            GEOFENCE_CONSECUTIVE_EXIT_THRESHOLD
+          ) {
+            attendance.outsideGeofenceAt = null;
+            attendance.outsideGeofenceCountdown = 0;
+            await attendance.save();
+            return res.status(200).json({
+              success: true,
+              isInside: false,
+              confirmationPending: true,
+              consecutiveOutsideReadings: attendance.outsideGeofenceReadingCount,
+              requiredConsecutiveOutsideReadings: GEOFENCE_CONSECUTIVE_EXIT_THRESHOLD,
+              autoCheckedOut: false,
+            });
+          }
 
           let breachTime = attendance.outsideGeofenceAt;
           if (!breachTime) {

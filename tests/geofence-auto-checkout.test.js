@@ -65,7 +65,7 @@ afterEach(async () => {
 
 describe("Geofence 20m Auto Check-Out & Break-Start Skip", () => {
   test("1. Office location radius is set to 20 meters by default", () => {
-    expect(OFFICE_LOCATION.radiusMeters).toBe(20);
+    expect(OFFICE_LOCATION.radiusMeters).toBe(50);
   });
 
   test("2. validateAttendanceGeofence accurately validates within and outside 20m", () => {
@@ -195,7 +195,8 @@ describe("Geofence 20m Auto Check-Out & Break-Start Skip", () => {
       user: { _id: user._id },
       body: {
         userId: user._id.toString(),
-        distance: 120, // 120 meters away (> 20m)
+        distance: 120,
+        consecutiveOutsideReadings: 5,
       },
     };
 
@@ -206,8 +207,8 @@ describe("Geofence 20m Auto Check-Out & Break-Start Skip", () => {
     expect(res.body.isInside).toBe(false);
     expect(res.body.distance).toBe(120);
     expect(res.body.autoCheckoutPending).toBe(true);
-    expect(res.body.autoCheckoutDelaySeconds).toBe(10);
-    expect(res.body.remainingSeconds).toBe(10);
+    expect(res.body.autoCheckoutDelaySeconds).toBe(30);
+    expect(res.body.remainingSeconds).toBe(30);
     expect(res.body.autoCheckedOut).toBe(false);
     expect(res.body.isOnBreak).toBe(false);
 
@@ -232,7 +233,8 @@ describe("Geofence 20m Auto Check-Out & Break-Start Skip", () => {
       userType: "employee",
       date: today,
       checkInTime: new Date(Date.now() - 2 * 60 * 60 * 1000),
-      outsideGeofenceAt: new Date(Date.now() - 11 * 1000), // 11 seconds ago
+      outsideGeofenceAt: new Date(Date.now() - 31 * 1000),
+      outsideGeofenceReadingCount: 5,
       status: "present",
       approvalStatus: "approved",
     });
@@ -249,6 +251,7 @@ describe("Geofence 20m Auto Check-Out & Break-Start Skip", () => {
       body: {
         userId: user._id.toString(),
         distance: 120,
+        consecutiveOutsideReadings: 5,
       },
     };
 
@@ -302,7 +305,8 @@ describe("Geofence 20m Auto Check-Out & Break-Start Skip", () => {
       user: { _id: user._id },
       body: {
         userId: user._id.toString(),
-        distance: 120, // > 20m
+        distance: 120,
+        consecutiveOutsideReadings: 5,
       },
     };
     await attendanceController.checkLocationGeofence(req1, res1);
@@ -353,6 +357,7 @@ describe("Geofence 20m Auto Check-Out & Break-Start Skip", () => {
       body: {
         userId: user._id.toString(),
         distance: 120,
+        consecutiveOutsideReadings: 5,
         delaySeconds: 0.15, // 150ms for test
       },
     };
@@ -382,8 +387,9 @@ describe("Geofence 20m Auto Check-Out & Break-Start Skip", () => {
       userType: "employee",
       date: getToday(),
       checkInTime: new Date(Date.now() - 2 * 60 * 60 * 1000),
-      outsideGeofenceAt: new Date(Date.now() - 11 * 1000),
-      outsideGeofenceCountdown: 10,
+      outsideGeofenceAt: new Date(Date.now() - 31 * 1000),
+      outsideGeofenceCountdown: 30,
+      outsideGeofenceReadingCount: 5,
       status: "present",
       approvalStatus: "approved",
     });
@@ -423,6 +429,7 @@ describe("Geofence 20m Auto Check-Out & Break-Start Skip", () => {
       body: {
         userId: user._id.toString(),
         distance: 120,
+        consecutiveOutsideReadings: 5,
         immediate: true,
       },
     };

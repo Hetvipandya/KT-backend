@@ -199,6 +199,10 @@ const attendanceSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+    outsideGeofenceReadingCount: {
+      type: Number,
+      default: 0,
+    },
   },
   {
     timestamps: true,

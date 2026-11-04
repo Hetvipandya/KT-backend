@@ -9,6 +9,7 @@ const {
   CHECK_IN_RADIUS_METERS,
   GEOFENCE_AUTO_CHECKOUT_DELAY_SECONDS,
   LOCATION_FETCH_INTERVAL_SECONDS,
+  GEOFENCE_CONSECUTIVE_EXIT_THRESHOLD,
   validateAttendanceGeofence,
   isBreakStartActive,
 } = require("../utils/geofence");
@@ -77,7 +78,7 @@ const normalizeRoleValue = (value) => {
     return "accountant";
   }
 
-  if (compact === "ca") {
+  if (compact === "ca") { 
     return "ca";
   }
 
@@ -4393,8 +4394,11 @@ exports.restorePendingGeofenceCheckouts = async () => {
     checkInTime: { $ne: null },
     checkOutTime: null,
     outsideGeofenceAt: { $ne: null },
+    outsideGeofenceReadingCount: {
+      $gte: GEOFENCE_CONSECUTIVE_EXIT_THRESHOLD,
+    },
   })
-    .select("_id userId outsideGeofenceAt outsideGeofenceCountdown")
+    .select("_id userId outsideGeofenceAt outsideGeofenceCountdown outsideGeofenceReadingCount")
     .lean();
 
   for (const attendance of pendingAttendances) {
@@ -4556,8 +4560,13 @@ exports.checkLocationGeofence = async (req, res) => {
       if (attendance.outsideGeofenceAt) {
         attendance.outsideGeofenceAt = null;
         attendance.outsideGeofenceCountdown = 0;
+        attendance.outsideGeofenceReadingCount = 0;
         await attendance.save();
         wasPendingCancelled = true;
+      }
+      if (attendance.outsideGeofenceReadingCount !== 0) {
+        attendance.outsideGeofenceReadingCount = 0;
+        await attendance.save();
       }
 
       return res.status(200).json({
@@ -4590,6 +4599,7 @@ exports.checkLocationGeofence = async (req, res) => {
       if (attendance.outsideGeofenceAt) {
         attendance.outsideGeofenceAt = null;
         attendance.outsideGeofenceCountdown = 0;
+        attendance.outsideGeofenceReadingCount = 0;
         await attendance.save();
       }
 
@@ -4622,7 +4632,47 @@ exports.checkLocationGeofence = async (req, res) => {
     const delaySeconds =
       payload.delaySeconds !== undefined
         ? Math.max(0, Number(payload.delaySeconds))
-        : GEOFENCE_AUTO_CHECKOUT_DELAY_SECONDS; // 10 seconds
+        : GEOFENCE_AUTO_CHECKOUT_DELAY_SECONDS; // 30 seconds
+
+    const reportedReadingCount = Number(
+      payload.consecutiveOutsideReadings ??
+      payload.consecutiveExitCount ??
+      payload.outsideReadingCount ??
+      NaN
+    );
+    const currentReadingCount = Number(attendance.outsideGeofenceReadingCount || 0);
+    const consecutiveOutsideReadings = Number.isFinite(reportedReadingCount)
+      ? Math.max(0, Math.floor(reportedReadingCount))
+      : currentReadingCount + 1;
+    attendance.outsideGeofenceReadingCount = consecutiveOutsideReadings;
+
+    if (
+      consecutiveOutsideReadings < GEOFENCE_CONSECUTIVE_EXIT_THRESHOLD
+    ) {
+      attendance.outsideGeofenceAt = null;
+      attendance.outsideGeofenceCountdown = 0;
+      await attendance.save();
+      return res.status(200).json({
+        success: true,
+        isInside: false,
+        distance: geofenceResult.distance,
+        allowedRadius: OFFICE_LOCATION.radiusMeters,
+        isCheckedIn: true,
+        isCheckedOut: false,
+        isOnBreak,
+        status: "checked-in",
+        autoCheckedOut: false,
+        autoCheckoutPending: false,
+        confirmationPending: true,
+        consecutiveOutsideReadings,
+        requiredConsecutiveOutsideReadings: GEOFENCE_CONSECUTIVE_EXIT_THRESHOLD,
+        autoLogout: false,
+        shouldLogout: false,
+        deviceType,
+        message: `Outside reading ${consecutiveOutsideReadings}/${GEOFENCE_CONSECUTIVE_EXIT_THRESHOLD} confirmed.`,
+        data: formatAttendanceDocument(attendance),
+      });
+    }
 
     const isImmediate =
       payload.immediate === true ||
