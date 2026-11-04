@@ -2,9 +2,52 @@ const Leave = require("../models/Leave");
 const LeaveBalance = require("../models/LeaveBalance");
 const Holiday = require("../models/Holiday");
 const User = require("../models/User");
+const Employee = require("../models/Employee");
+const Team = require("../models/Team");
 const { calculateWorkingLeaveDays, toDateString } = require("../utils/leaveUtils");
 const { getTeamLeadForUser } = require("../utils/teamLeadLookup");
 const { notify } = require("../utils/sendNotification");
+
+const getTeamLeadAssignedUserIds = async (teamLeadId) => {
+  const leadUserIds = new Set([String(teamLeadId)]);
+  const leadEmployeeIds = new Set();
+
+  const linkedEmployee = await Employee.findOne({
+    $or: [{ userID: teamLeadId }, { userId: teamLeadId }],
+  }).select("_id userID userId").lean();
+
+  if (linkedEmployee) {
+    leadEmployeeIds.add(String(linkedEmployee._id));
+    if (linkedEmployee.userID) leadUserIds.add(String(linkedEmployee.userID));
+    if (linkedEmployee.userId) leadUserIds.add(String(linkedEmployee.userId));
+  }
+
+  const teams = await Team.find({
+    $or: [
+      { teamLeadUser: teamLeadId },
+      { teamLeadEmployee: { $in: Array.from(leadEmployeeIds) } },
+      ...(linkedEmployee ? [{ teamLeadEmployee: linkedEmployee._id }] : []),
+    ],
+  }).select("employees").lean();
+
+  const assignedUserIds = new Set(leadUserIds);
+  for (const team of teams) {
+    const memberIds = team.employees || [];
+    if (!memberIds.length) continue;
+
+    const members = await Employee.find({
+      _id: { $in: memberIds },
+    }).select("_id userID userId").lean();
+
+    for (const member of members) {
+      assignedUserIds.add(String(member._id));
+      if (member.userID) assignedUserIds.add(String(member.userID));
+      if (member.userId) assignedUserIds.add(String(member.userId));
+    }
+  }
+
+  return Array.from(assignedUserIds);
+};
 
 const notifyLeaveDecision = (leave, stage, status, remark) => {
   const employee = leave.employeeId;
@@ -250,21 +293,32 @@ exports.applyLeave = async (req, res) => {
 exports.getAllLeaves = async (req, res) => {
   try {
     const { role, _id } = req.user;
+    const normalizedRole = String(role || "")
+      .toLowerCase()
+      .replace(/[\s_-]+/g, "");
 
     let filter = {};
 
     // Employee & Intern → Only own leaves
-    if (role === "employee" || role === "intern") {
+    if (normalizedRole === "employee" || normalizedRole === "intern") {
       filter = { employeeId: _id };
     }
 
     // Team Lead, HR, Admin → All leaves
-    else if (role === "team lead" || role === "hr") {
+    else if (normalizedRole === "hr") {
       filter = { applicantRole: { $ne: "hr" } };
     }
 
+    else if (normalizedRole === "teamlead") {
+      const assignedUserIds = await getTeamLeadAssignedUserIds(_id);
+      filter = {
+        employeeId: { $in: assignedUserIds },
+        applicantRole: { $ne: "hr" },
+      };
+    }
+
     // Admin → All leaves, including HR leaves
-    else if (role === "admin") {
+    else if (normalizedRole === "admin") {
       filter = {};
     }
 
