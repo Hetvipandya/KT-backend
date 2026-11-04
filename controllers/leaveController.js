@@ -12,38 +12,81 @@ const getTeamLeadAssignedUserIds = async (teamLeadId) => {
   const leadUserIds = new Set([String(teamLeadId)]);
   const leadEmployeeIds = new Set();
 
-  const linkedEmployee = await Employee.findOne({
-    $or: [{ userID: teamLeadId }, { userId: teamLeadId }],
-  }).select("_id userID userId").lean();
+  let user = null;
+  let leadEmployee = null;
+  try {
+    user = await User.findById(teamLeadId).select("_id").lean();
+  } catch (_) {}
+  try {
+    leadEmployee = await Employee.findById(teamLeadId).select("_id userID userId employeeID employeeCode").lean();
+  } catch (_) {}
 
-  if (linkedEmployee) {
-    leadEmployeeIds.add(String(linkedEmployee._id));
-    if (linkedEmployee.userID) leadUserIds.add(String(linkedEmployee.userID));
-    if (linkedEmployee.userId) leadUserIds.add(String(linkedEmployee.userId));
+  const linkedEmployees = await Employee.find({
+    $or: [
+      { userID: teamLeadId },
+      { userId: teamLeadId },
+      ...(user ? [{ userID: user._id }, { userId: user._id }] : []),
+    ],
+  }).select("_id userID userId employeeID employeeCode").lean();
+
+  for (const employee of linkedEmployees) {
+    leadEmployeeIds.add(String(employee._id));
+    if (employee.userID) leadUserIds.add(String(employee.userID));
+    if (employee.userId) leadUserIds.add(String(employee.userId));
+  }
+
+  if (leadEmployee) {
+    leadEmployeeIds.add(String(leadEmployee._id));
+    if (leadEmployee.userID) leadUserIds.add(String(leadEmployee.userID));
+    if (leadEmployee.userId) leadUserIds.add(String(leadEmployee.userId));
   }
 
   const teams = await Team.find({
     $or: [
       { teamLeadUser: teamLeadId },
+      { teamLeadUser: { $in: Array.from(leadUserIds) } },
       { teamLeadEmployee: { $in: Array.from(leadEmployeeIds) } },
-      ...(linkedEmployee ? [{ teamLeadEmployee: linkedEmployee._id }] : []),
+      { teamLeadEmployee: teamLeadId },
     ],
-  }).select("employees").lean();
+  }).select("employees interns developers designers testers").lean();
 
   const assignedUserIds = new Set(leadUserIds);
   for (const team of teams) {
-    const memberIds = team.employees || [];
+    const memberIds = [
+      ...(team.employees || []),
+      ...(team.interns || []),
+      ...(team.developers || []),
+      ...(team.designers || []),
+      ...(team.testers || []),
+    ];
     if (!memberIds.length) continue;
 
-    const members = await Employee.find({
-      _id: { $in: memberIds },
-    }).select("_id userID userId").lean();
+    const members = await Employee.find({ _id: { $in: memberIds } })
+      .select("_id userID userId")
+      .lean();
 
     for (const member of members) {
       assignedUserIds.add(String(member._id));
       if (member.userID) assignedUserIds.add(String(member.userID));
       if (member.userId) assignedUserIds.add(String(member.userId));
     }
+
+    for (const memberId of memberIds) {
+      assignedUserIds.add(String(memberId));
+    }
+  }
+
+  const directMembers = await Employee.find({
+    $or: [
+      { teamLeadUser: { $in: Array.from(leadUserIds) } },
+      { teamLeadEmployee: { $in: Array.from(leadEmployeeIds) } },
+    ],
+  }).select("_id userID userId").lean();
+
+  for (const member of directMembers) {
+    assignedUserIds.add(String(member._id));
+    if (member.userID) assignedUserIds.add(String(member.userID));
+    if (member.userId) assignedUserIds.add(String(member.userId));
   }
 
   return Array.from(assignedUserIds);
