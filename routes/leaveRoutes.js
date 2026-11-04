@@ -41,7 +41,7 @@ router.post(
   protect,
   authorizeRoles(
     "intern",
-    "employee", 
+    "employee",  
     "hr",
     "admin",
     "team lead"
@@ -173,7 +173,8 @@ router.get(
     "hr",
     "admin",
     "team lead",
-    "intern"
+    "intern",
+    "employee"
   ),
   getAllLeaves
 );
