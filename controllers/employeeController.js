@@ -819,11 +819,31 @@ exports.addEmployee = async (req, res) => {
     }
 
     // Add the newly registered employee to the selected Team Lead's team.
+    const resolveTeamLeadValue = (value) => {
+      if (!value) return "";
+      if (typeof value !== "object") return String(value);
+      return String(
+        value._id ||
+        value.id ||
+        value.userId ||
+        value.userID ||
+        value.employeeId ||
+        value.employeeID ||
+        value.uniqueID ||
+        value.employeeCode ||
+        value.email ||
+        value.value ||
+        "",
+      );
+    };
+
     const teamLeadValue =
-      teamLead ||
-      req.body.teamLeadUser ||
-      req.body.teamLeadEmployee ||
-      req.body.teamLeadId;
+      resolveTeamLeadValue(teamLead) ||
+      resolveTeamLeadValue(req.body.teamLeadUser) ||
+      resolveTeamLeadValue(req.body.teamLeadEmployee) ||
+      resolveTeamLeadValue(req.body.teamLeadId) ||
+      resolveTeamLeadValue(req.body.assignedTeamLead) ||
+      resolveTeamLeadValue(req.body.reportingTo);
 
     if (teamLeadValue) {
       const teamLeadKey = String(teamLeadValue);
@@ -861,12 +881,7 @@ exports.addEmployee = async (req, res) => {
         });
       }
 
-      const normalizedLeadRole =
-        String(leadUser?.role || leadEmployee?.role || "")
-          .toLowerCase()
-          .replace(/[\s_-]+/g, "");
-
-      if ((leadUser || leadEmployee) && (normalizedLeadRole === "teamlead" || leadEmployee?.isTeamLead)) {
+      if (leadUser || leadEmployee) {
         let team = await Team.findOne({
           $or: [
             ...(leadUser?._id ? [{ teamLeadUser: leadUser._id }] : []),
