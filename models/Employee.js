@@ -1,6 +1,6 @@
 const mongoose = require('mongoose');
 
-const addressSchema = new mongoose.Schema(
+const addressSchema = new mongoose.Schema( 
   {
     line1: { type: String, trim: true, default: '' },
     line2: { type: String, trim: true, default: '' },
