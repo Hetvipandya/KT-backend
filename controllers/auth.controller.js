@@ -1,4 +1,5 @@
 const User = require("../models/User");
+const Employee = require("../models/Employee");
 const FinanceUser = require("../models/FinanceUser");
 const { hashPassword, comparePassword, hashSha256 } = require("../utils/hash");
 const {
@@ -20,6 +21,7 @@ const env = require("../config/env");
 const crypto = require("crypto");
 const pino = require("pino");
 const { isEmployeeLoginBlocked } = require("../utils/employeeLoginStatus");
+const generateEmployeeID = require("../utils/employeeId");
 
 const logger = pino({
   transport:
@@ -124,6 +126,51 @@ const ensureFinanceUser = async (user, role) => {
   });
 };
 
+const ensureRegisteredEmployee = async (user) => {
+  const role = String(user.role || "").trim().toLowerCase().replace(/[_-]+/g, " ").replace(/\s+/g, " ");
+  if (!["employee", "intern", "team lead"].includes(role)) {
+    return null;
+  }
+
+  const existingEmployee = await Employee.findOne({
+    $or: [{ userID: user._id }, { userId: user._id }],
+  });
+  if (existingEmployee) {
+    if (!existingEmployee.userID) existingEmployee.userID = user._id;
+    if (!existingEmployee.userId) existingEmployee.userId = user._id;
+    await existingEmployee.save();
+    if (!user.uniqueID && (existingEmployee.employeeID || existingEmployee.employeeCode)) {
+      user.uniqueID = existingEmployee.employeeID || existingEmployee.employeeCode;
+      await user.save();
+    }
+    return existingEmployee;
+  }
+
+  const employeeID = await generateEmployeeID(Employee);
+  const employee = await Employee.create({
+    employeeID,
+    userID: user._id,
+    userId: user._id,
+    name: user.name || "",
+    firstName: user.name || "",
+    lastName: "",
+    email: user.email || "",
+    phoneNumber: user.phoneNumber || "",
+    designation: role === "team lead" ? "Team Lead" : "Employee",
+    department: user.department || "",
+    joiningDate: new Date(),
+    isTeamLead: role === "team lead",
+    employeeStatus: "Active",
+    status: "ACTIVE",
+  });
+
+  if (!user.uniqueID) {
+    user.uniqueID = employeeID;
+    await user.save();
+  }
+  return employee;
+};
+
 /**
  * POST /api/auth/register
  */
@@ -135,6 +182,7 @@ const register = async (req, res, next) => {
     const existingUser = await User.findOne({ email });
     if (existingUser) {
       await ensureFinanceUser(existingUser, role);
+      await ensureRegisteredEmployee(existingUser);
       return res.status(409).json({
         success: false,
         message: "Email address is already registered",
@@ -170,6 +218,13 @@ const register = async (req, res, next) => {
     } catch (financeError) {
       await User.findByIdAndDelete(newUser._id);
       throw financeError;
+    }
+
+    try {
+      await ensureRegisteredEmployee(newUser);
+    } catch (employeeError) {
+      await User.findByIdAndDelete(newUser._id);
+      throw employeeError;
     }
 
     // Send verification email (non-blocking — do not fail register if email fails)
