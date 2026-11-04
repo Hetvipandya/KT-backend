@@ -9,7 +9,7 @@ const access = require('../middleware/companyAccess');
 const validate = require('../middleware/validateRequest');
 const {
   createEmployeeSchema,
-  updateEmployeeSchema,
+  updateEmployeeSchema, 
   employeeQuerySchema, 
   validateQuery
 } = require('../validators/employee.validators');
