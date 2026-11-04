@@ -822,7 +822,7 @@ exports.addEmployee = async (req, res) => {
     const resolveTeamLeadValue = (value) => {
       if (!value) return "";
       if (typeof value !== "object") return String(value);
-      return String(
+      return String( 
         value._id ||
         value.id ||
         value.userId ||

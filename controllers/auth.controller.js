@@ -22,6 +22,7 @@ const crypto = require("crypto");
 const pino = require("pino");
 const { isEmployeeLoginBlocked } = require("../utils/employeeLoginStatus");
 const generateEmployeeID = require("../utils/employeeId");
+const { assignEmployeeToTeamLead } = require("../utils/teamLeadAssignment");
 
 const logger = pino({
   transport:
@@ -126,7 +127,7 @@ const ensureFinanceUser = async (user, role) => {
   });
 };
 
-const ensureRegisteredEmployee = async (user) => {
+const ensureRegisteredEmployee = async (user, teamLead) => {
   const role = String(user.role || "").trim().toLowerCase().replace(/[_-]+/g, " ").replace(/\s+/g, " ");
   if (!["employee", "intern", "team lead"].includes(role)) {
     return null;
@@ -143,6 +144,7 @@ const ensureRegisteredEmployee = async (user) => {
       user.uniqueID = existingEmployee.employeeID || existingEmployee.employeeCode;
       await user.save();
     }
+    await assignEmployeeToTeamLead({ employee: existingEmployee, user, teamLead });
     return existingEmployee;
   }
 
@@ -168,6 +170,7 @@ const ensureRegisteredEmployee = async (user) => {
     user.uniqueID = employeeID;
     await user.save();
   }
+  await assignEmployeeToTeamLead({ employee, user, teamLead });
   return employee;
 };
 
@@ -182,7 +185,15 @@ const register = async (req, res, next) => {
     const existingUser = await User.findOne({ email });
     if (existingUser) {
       await ensureFinanceUser(existingUser, role);
-      await ensureRegisteredEmployee(existingUser);
+      await ensureRegisteredEmployee(
+        existingUser,
+        req.body.teamLead ||
+        req.body.teamLeadUser ||
+        req.body.teamLeadEmployee ||
+        req.body.teamLeadId ||
+        req.body.assignedTeamLead ||
+        req.body.reportingTo,
+      );
       return res.status(409).json({
         success: false,
         message: "Email address is already registered",
@@ -221,7 +232,15 @@ const register = async (req, res, next) => {
     }
 
     try {
-      await ensureRegisteredEmployee(newUser);
+      await ensureRegisteredEmployee(
+        newUser,
+        req.body.teamLead ||
+        req.body.teamLeadUser ||
+        req.body.teamLeadEmployee ||
+        req.body.teamLeadId ||
+        req.body.assignedTeamLead ||
+        req.body.reportingTo,
+      );
     } catch (employeeError) {
       await User.findByIdAndDelete(newUser._id);
       throw employeeError;
