@@ -14,7 +14,13 @@ const registerSchema = z.object({
     .regex(passwordRegex, 'password must contain at least one letter and one number'),
   phone: z.string().regex(phoneRegex, 'phone must be in E.164 format (e.g., +1234567890)').optional(),
   phoneNumber: z.string().regex(phoneRegex, 'phoneNumber must be in E.164 format (e.g., +1234567890)').optional(),
-  role: z.enum(['admin', 'hr', 'employee', 'intern', 'teamlead', 'team lead']).optional().default('admin')
+  role: z.enum(['admin', 'hr', 'employee', 'intern', 'teamlead', 'team lead']).optional().default('admin'),
+  teamLead: z.union([z.string(), z.object({}).passthrough()]).optional(),
+  teamLeadUser: z.union([z.string(), z.object({}).passthrough()]).optional(),
+  teamLeadEmployee: z.union([z.string(), z.object({}).passthrough()]).optional(),
+  teamLeadId: z.union([z.string(), z.object({}).passthrough()]).optional(),
+  assignedTeamLead: z.union([z.string(), z.object({}).passthrough()]).optional(),
+  reportingTo: z.union([z.string(), z.object({}).passthrough()]).optional()
 }).strict();
 
 

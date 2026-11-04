@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+const { assignEmployeeToTeamLead } = require("../utils/teamLeadAssignment");
 const User = require("../models/User");
 const Employee = require("../models/Employee");
 const Team = require("../models/Team");
@@ -1208,6 +1209,17 @@ const registerUser = async (req, res) => {
     ) {
       try {
         employee = await createEmployeeForUser(user);
+        await assignEmployeeToTeamLead({
+          employee,
+          user,
+          teamLead:
+            req.body.teamLead ||
+            req.body.teamLeadUser ||
+            req.body.teamLeadEmployee ||
+            req.body.teamLeadId ||
+            req.body.assignedTeamLead ||
+            req.body.reportingTo,
+        });
       } catch (employeeError) {
         console.error(
           "Employee creation failed:",
