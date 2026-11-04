@@ -41,6 +41,34 @@ const getTeamLeadAssignedUserIds = async (teamLeadId) => {
     if (leadEmployee.userId) leadUserIds.add(String(leadEmployee.userId));
   }
 
+  const uniqueEmployeesByLeadId = await Employee.find({
+    $or: [
+      { employeeID: String(teamLeadId) },
+      { employeeCode: String(teamLeadId) },
+    ],
+  }).select("_id userID userId employeeID employeeCode").lean();
+
+  for (const employee of uniqueEmployeesByLeadId) {
+    leadEmployeeIds.add(String(employee._id));
+    if (employee.userID) leadUserIds.add(String(employee.userID));
+    if (employee.userId) leadUserIds.add(String(employee.userId));
+  }
+
+  if (user?.uniqueID) {
+    const employeesByUniqueId = await Employee.find({
+      $or: [
+        { employeeID: String(user.uniqueID) },
+        { employeeCode: String(user.uniqueID) },
+      ],
+    }).select("_id userID userId employeeID employeeCode").lean();
+
+    for (const employee of employeesByUniqueId) {
+      leadEmployeeIds.add(String(employee._id));
+      if (employee.userID) leadUserIds.add(String(employee.userID));
+      if (employee.userId) leadUserIds.add(String(employee.userId));
+    }
+  }
+
   const leadIdentifiers = new Set(
     [
       String(teamLeadId),
@@ -83,6 +111,28 @@ const getTeamLeadAssignedUserIds = async (teamLeadId) => {
 
     for (const memberId of memberIds) {
       assignedUserIds.add(String(memberId));
+
+      let linkedUser = null;
+      try {
+        linkedUser = await User.findById(memberId).select("_id").lean();
+      } catch (_) {}
+
+      if (linkedUser) {
+        assignedUserIds.add(String(linkedUser._id));
+
+        const linkedEmployees = await Employee.find({
+          $or: [
+            { userID: linkedUser._id },
+            { userId: linkedUser._id },
+          ],
+        }).select("_id userID userId").lean();
+
+        for (const linkedEmployee of linkedEmployees) {
+          assignedUserIds.add(String(linkedEmployee._id));
+          if (linkedEmployee.userID) assignedUserIds.add(String(linkedEmployee.userID));
+          if (linkedEmployee.userId) assignedUserIds.add(String(linkedEmployee.userId));
+        }
+      }
     }
   }
 
