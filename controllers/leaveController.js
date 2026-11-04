@@ -86,7 +86,7 @@ const getTeamLeadAssignedUserIds = async (teamLeadId) => {
       { teamLeadEmployee: teamLeadId },
       { teamLeadId: { $in: Array.from(leadIdentifiers) } },
     ],
-  }).select("employees interns developers designers testers").lean();
+  }).select("employees interns developers designers testers teamLeadUser teamLeadEmployee teamLeadId").lean();
 
   const assignedUserIds = new Set(leadUserIds);
   for (const team of teams) {
@@ -460,12 +460,12 @@ exports.getTeamLeadPendingLeaves = async (req, res) => {
       });
     }
 
-    // Get all employees and interns under this team lead (if you have team mapping)
-    // For now, fetch all pending employee/intern leaves
+    const assignedUserIds = await getTeamLeadAssignedUserIds(userId);
     const leaves = await Leave.find({
       applicantRole: { $in: ["employee", "intern"] },
       teamLeadStatus: "pending",
       status: "pending",
+      employeeId: { $in: assignedUserIds },
     })
       .populate({
         path: "employeeId",

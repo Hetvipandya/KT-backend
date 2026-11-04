@@ -10,6 +10,7 @@ const {
   createHoliday,
   getAllHolidays,   
   getAllLeaves,
+  getTeamLeadPendingLeaves,
   adminApproval,
   calculateLeaveDays,
 } = require("../controllers/leaveController");
@@ -177,6 +178,13 @@ router.get(
     "employee"
   ),
   getAllLeaves
+);
+
+router.get(
+  "/team-lead/pending",
+  protect,
+  authorizeRoles("team lead"),
+  getTeamLeadPendingLeaves
 );
 
 module.exports = router;
