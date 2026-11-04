@@ -453,7 +453,10 @@ exports.getTeamLeadPendingLeaves = async (req, res) => {
     const userId = req.user._id;
     const user = await User.findById(userId);
 
-    if (!user || user.role !== "team lead") {
+    const normalizedRole = String(user?.role || "")
+      .toLowerCase()
+      .replace(/[\s_-]+/g, "");
+    if (!user || normalizedRole !== "teamlead") {
       return res.status(403).json({
         success: false,
         message: "Access denied. Only Team Leads can view pending leaves.",
