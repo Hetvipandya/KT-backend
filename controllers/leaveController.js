@@ -15,7 +15,7 @@ const getTeamLeadAssignedUserIds = async (teamLeadId) => {
   let user = null;
   let leadEmployee = null;
   try {
-    user = await User.findById(teamLeadId).select("_id").lean();
+    user = await User.findById(teamLeadId).select("_id uniqueID").lean();
   } catch (_) {}
   try {
     leadEmployee = await Employee.findById(teamLeadId).select("_id userID userId employeeID employeeCode").lean();
@@ -41,12 +41,22 @@ const getTeamLeadAssignedUserIds = async (teamLeadId) => {
     if (leadEmployee.userId) leadUserIds.add(String(leadEmployee.userId));
   }
 
+  const leadIdentifiers = new Set(
+    [
+      String(teamLeadId),
+      user?.uniqueID,
+      leadEmployee?.employeeID,
+      leadEmployee?.employeeCode,
+    ].filter(Boolean).map(String),
+  );
+
   const teams = await Team.find({
     $or: [
       { teamLeadUser: teamLeadId },
       { teamLeadUser: { $in: Array.from(leadUserIds) } },
       { teamLeadEmployee: { $in: Array.from(leadEmployeeIds) } },
       { teamLeadEmployee: teamLeadId },
+      { teamLeadId: { $in: Array.from(leadIdentifiers) } },
     ],
   }).select("employees interns developers designers testers").lean();
 
