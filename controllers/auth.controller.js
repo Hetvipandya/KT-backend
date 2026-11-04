@@ -389,6 +389,7 @@ const login = async (req, res, next) => {
       reconcileUserOrphanedReferences,
     } = require("../services/reconcile.service");
     const reconciledUser = await reconcileUserOrphanedReferences(user);
+    await ensureRegisteredEmployee(reconciledUser);
     const teamLead = await getTeamLeadForUser(reconciledUser._id);
 
     // Establish session (persists refresh token + loginAttempts reset in 1 DB save)

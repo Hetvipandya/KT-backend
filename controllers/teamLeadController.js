@@ -458,8 +458,13 @@ exports.createOrUpdateTeam = async (req, res) => {
 
         const user = await User.findById(rawId);
         if (user) {
-          const linkedEmployee = await Employee.findOne({ userID: user._id });
+          const linkedEmployee = await Employee.findOne({
+            $or: [{ userID: user._id }, { userId: user._id }],
+          });
           if (linkedEmployee) {
+            if (!linkedEmployee.userID) linkedEmployee.userID = user._id;
+            if (!linkedEmployee.userId) linkedEmployee.userId = user._id;
+            await linkedEmployee.save();
             uniqueIds.add(String(linkedEmployee._id));
             continue;
           }
