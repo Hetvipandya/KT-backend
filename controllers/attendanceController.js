@@ -1996,9 +1996,16 @@ exports.checkOut = async (req, res) => {
       });
     }
 
-    // Enforce geofence: manual checkout is only allowed within 20m of office
+    const checkoutReason = req.body.reason ?? req.body.checkoutReason;
+    const checkoutType = req.body.checkoutType ?? req.body.type;
+    const isOutsideGeofenceCheckout =
+      String(checkoutReason || "").trim().toUpperCase() === "OUTSIDE_GEOFENCE" ||
+      String(checkoutType || "").trim().toUpperCase() === "OUTSIDE_GEOFENCE";
+
+    // Manual checkout remains geofence-restricted. Geofence auto-checkout is
+    // allowed outside the office and records the employee's actual location.
     const geofenceResult = validateAttendanceGeofence(req.body);
-    if (!geofenceResult.isInside) {
+    if (!isOutsideGeofenceCheckout && !geofenceResult.isInside) {
       return res.status(400).json({
         success: false,
         message:
@@ -2054,6 +2061,11 @@ exports.checkOut = async (req, res) => {
       distanceFromOffice: geofenceResult.distance,
     };
     attendance.isActiveSession = false;
+    if (isOutsideGeofenceCheckout) {
+      attendance.autoCheckedOut = true;
+      attendance.autoCheckedOutBy = "AUTO_GEOFENCE_CHECKOUT";
+      attendance.outsideGeofenceCountdown = 0;
+    }
 
     const settings = getAttendanceSettings({
       officeStartTime: attendance.officeStartTime,
