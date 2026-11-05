@@ -132,7 +132,7 @@ exports.protect = async (req, res, next) => {
       delete financeUserData.userId;
 
       Object.assign(user, financeUserData);
-      user._id = originalUserId;
+      user._id = originalUserId; 
       user.userId = originalUserId;
     }
 

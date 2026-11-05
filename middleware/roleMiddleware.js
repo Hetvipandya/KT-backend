@@ -32,7 +32,7 @@ exports.authorizeRoles = (...roles) => {
           requiredRoles: roles,
         });
       }
-
+ 
       next();
     } catch (error) {
       console.error("Role Middleware Error:", error);
