@@ -268,6 +268,13 @@ exports.getAllLeaves = async (req, res) => {
       filter = {};
     }
 
+    else {
+      return res.status(403).json({
+        success: false,
+        message: `Role "${role}" is not authorized to view leaves.`,
+      });
+    }
+
     const leaves = await Leave.find(filter)
       .populate({
         path: "employeeId",
