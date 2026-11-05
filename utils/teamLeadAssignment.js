@@ -64,6 +64,47 @@ const assignEmployeeToTeamLead = async ({ employee, user, teamLead }) => {
     });
   }
 
+  const leadIdentifier =
+    leadUser?.uniqueID ||
+    leadEmployee?.employeeID ||
+    leadEmployee?.employeeCode ||
+    "";
+
+  // Keep reporting information on the employee as well as in Team. This makes
+  // leave routing and reassignment work even when team data uses another ID format.
+  await Employee.updateMany(
+    {
+      $or: [
+        { _id: employee._id },
+        ...(employee.userID ? [{ userID: employee.userID }] : []),
+        ...(employee.userId ? [{ userId: employee.userId }] : []),
+      ],
+    },
+    {
+      $set: {
+        teamLeadUser: leadUser?._id || null,
+        teamLeadEmployee: leadEmployee?._id || null,
+        teamLeadId: leadIdentifier,
+      },
+    },
+  );
+
+  // Remove stale Team membership when an employee is reassigned.
+  await Team.updateMany(
+    {
+      employees: employee._id,
+      ...(leadUser || leadEmployee
+        ? {
+            $nor: [
+              ...(leadUser ? [{ teamLeadUser: leadUser._id }] : []),
+              ...(leadEmployee ? [{ teamLeadEmployee: leadEmployee._id }] : []),
+            ],
+          }
+        : {}),
+    },
+    { $pull: { employees: employee._id } },
+  );
+
   let team = await Team.findOne({
     $or: [
       ...(leadUser ? [{ teamLeadUser: leadUser._id }] : []),
@@ -80,11 +121,7 @@ const assignEmployeeToTeamLead = async ({ employee, user, teamLead }) => {
       name: `${leadName} Team`,
       teamLeadUser: leadUser?._id || null,
       teamLeadEmployee: leadEmployee?._id || null,
-      teamLeadId:
-        leadUser?.uniqueID ||
-        leadEmployee?.employeeID ||
-        leadEmployee?.employeeCode ||
-        "",
+      teamLeadId: leadIdentifier,
       employees: [],
       interns: [],
     });

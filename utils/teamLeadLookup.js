@@ -16,6 +16,21 @@ const getTeamLeadForUser = async (userId) => {
     teamLeadConditions.push({ teamLeadEmployee: employee._id });
   }
 
+  let directTeamLead = null;
+  if (employee) {
+    const linkedEmployee = await Employee.findById(employee._id)
+      .select("teamLeadUser teamLeadEmployee teamLeadId")
+      .lean();
+    if (linkedEmployee) {
+      directTeamLead = linkedEmployee;
+      teamLeadConditions.push(
+        ...(linkedEmployee.teamLeadUser ? [{ teamLeadUser: linkedEmployee.teamLeadUser }] : []),
+        ...(linkedEmployee.teamLeadEmployee ? [{ teamLeadEmployee: linkedEmployee.teamLeadEmployee }] : []),
+        ...(linkedEmployee.teamLeadId ? [{ teamLeadId: linkedEmployee.teamLeadId }] : []),
+      );
+    }
+  }
+
   const team = await Team.findOne({
     $or: [
       { employees: { $in: memberIds } },
@@ -26,36 +41,37 @@ const getTeamLeadForUser = async (userId) => {
     .select("teamLeadUser teamLeadEmployee teamLeadId")
     .lean();
 
-  if (!team) {
+  if (!team && !directTeamLead?.teamLeadUser && !directTeamLead?.teamLeadEmployee && !directTeamLead?.teamLeadId) {
     return null;
   }
 
   let [leadUser, leadEmployee] = await Promise.all([
-    team.teamLeadUser
-      ? User.findById(team.teamLeadUser)
+    team?.teamLeadUser || directTeamLead?.teamLeadUser
+      ? User.findById(team?.teamLeadUser || directTeamLead?.teamLeadUser)
           .select("_id name email role uniqueID")
           .lean()
       : null,
-    team.teamLeadEmployee
-      ? Employee.findById(team.teamLeadEmployee)
+    team?.teamLeadEmployee || directTeamLead?.teamLeadEmployee
+      ? Employee.findById(team?.teamLeadEmployee || directTeamLead?.teamLeadEmployee)
           .select("_id firstName lastName name email role employeeID employeeCode designation department")
           .lean()
       : null,
   ]);
 
-  if (team.teamLeadId && (!leadUser || !leadEmployee)) {
+  const teamLeadId = team?.teamLeadId || directTeamLead?.teamLeadId || "";
+  if (teamLeadId && (!leadUser || !leadEmployee)) {
     const [legacyUser, legacyEmployee] = await Promise.all([
       leadUser
         ? null
-        : User.findOne({ uniqueID: team.teamLeadId })
+        : User.findOne({ uniqueID: teamLeadId })
             .select("_id name email role uniqueID")
             .lean(),
       leadEmployee
         ? null
         : Employee.findOne({
             $or: [
-              { employeeID: team.teamLeadId },
-              { employeeCode: team.teamLeadId },
+              { employeeID: teamLeadId },
+              { employeeCode: teamLeadId },
             ],
           })
             .select("_id firstName lastName name email role employeeID employeeCode designation department")
@@ -80,11 +96,11 @@ const getTeamLeadForUser = async (userId) => {
       "Unnamed",
     email: leadUser?.email || leadEmployee?.email || "",
     role: leadUser?.role || leadEmployee?.role || "team lead",
-    uniqueID: leadUser?.uniqueID || team.teamLeadId || "",
+    uniqueID: leadUser?.uniqueID || teamLeadId || "",
     employeeID:
       leadEmployee?.employeeID ||
       leadEmployee?.employeeCode ||
-      team.teamLeadId ||
+      teamLeadId ||
       "",
     designation: leadEmployee?.designation || "",
     department: leadEmployee?.department || null,

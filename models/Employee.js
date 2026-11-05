@@ -56,6 +56,23 @@ const employeeSchema = new mongoose.Schema(
       ref: 'User',
       default: null
     },
+    teamLeadUser: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      default: null,
+      index: true
+    },
+    teamLeadEmployee: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Employee',
+      default: null,
+      index: true
+    },
+    teamLeadId: {
+      type: String,
+      trim: true,
+      default: ''
+    },
 
     // Personal Details
     name: {
