@@ -17,6 +17,8 @@ const Employee = require("../models/Employee");
 
 const Team =
   require("../models/Team");
+const Leave =
+  require("../models/Leave");
 
 const { ensureTeamLeadUniqueID } = require("../utils/teamLeadId");
 const { notifyNewAssignments } = require("../utils/assignmentNotifications");
@@ -458,8 +460,13 @@ exports.createOrUpdateTeam = async (req, res) => {
 
         const user = await User.findById(rawId);
         if (user) {
-          const linkedEmployee = await Employee.findOne({ userID: user._id });
+          const linkedEmployee = await Employee.findOne({
+            $or: [{ userID: user._id }, { userId: user._id }],
+          });
           if (linkedEmployee) {
+            if (!linkedEmployee.userID) linkedEmployee.userID = user._id;
+            if (!linkedEmployee.userId) linkedEmployee.userId = user._id;
+            await linkedEmployee.save();
             uniqueIds.add(String(linkedEmployee._id));
             continue;
           }
@@ -519,12 +526,27 @@ exports.createOrUpdateTeam = async (req, res) => {
         employeeDoc.isTeamLead = false;
         await employeeDoc.save();
 
-        if (employeeDoc.userID) {
-          const employeeUser = await User.findById(employeeDoc.userID);
+        const employeeUserId = employeeDoc.userID || employeeDoc.userId;
+        if (employeeUserId) {
+          const employeeUser = await User.findById(employeeUserId);
           if (employeeUser && employeeUser.role !== "team lead") {
             employeeUser.role = "employee";
             await employeeUser.save();
           }
+
+          await Leave.updateMany(
+            {
+              employeeId: employeeUserId,
+              status: "pending_hr",
+              teamLeadStatus: "skipped",
+            },
+            {
+              $set: {
+                status: "pending",
+                teamLeadStatus: "pending",
+              },
+            }
+          );
         }
       }
     }

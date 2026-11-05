@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+const { assignEmployeeToTeamLead } = require("../utils/teamLeadAssignment");
 const User = require("../models/User");
 const Employee = require("../models/Employee");
 const Team = require("../models/Team");
@@ -934,7 +935,7 @@ const getMyProfile = async (req, res) => {
 // REGISTER USER
 // ============================================================
 
-const registerUser = async (req, res) => {
+const registerUser = async (req, res) => { 
   try {
     const {
       name,
@@ -952,7 +953,6 @@ const registerUser = async (req, res) => {
       upiId,
       upiID,
       upi,
-      role,
       profileImage,
       profileImg,
       profilePhoto,
@@ -984,8 +984,7 @@ const registerUser = async (req, res) => {
       !dob ||
       !address ||
       !department ||
-      !bloodGroup ||
-      !role
+      !bloodGroup
     ) {
       return res.status(400).json({
         success: false,
@@ -997,17 +996,12 @@ const registerUser = async (req, res) => {
     // NORMALIZE ROLE
     // --------------------------------------------------------
 
-    const normalizedRole = normalizeRole(role);
+    // Public registration (including mobile app registration) is always for
+    // an employee. Final roles are assigned only by an authorized approver.
+    const normalizedRole = "employee";
 
     const allowedRoles = [
       "employee",
-      "team lead",
-      "hr",
-      "intern",
-      "admin",
-      "user",
-      "accountant",
-      "ca",
     ];
 
     if (!allowedRoles.includes(normalizedRole)) {
@@ -1208,6 +1202,17 @@ const registerUser = async (req, res) => {
     ) {
       try {
         employee = await createEmployeeForUser(user);
+        await assignEmployeeToTeamLead({
+          employee,
+          user,
+          teamLead:
+            req.body.teamLead ||
+            req.body.teamLeadUser ||
+            req.body.teamLeadEmployee ||
+            req.body.teamLeadId ||
+            req.body.assignedTeamLead ||
+            req.body.reportingTo,
+        });
       } catch (employeeError) {
         console.error(
           "Employee creation failed:",
@@ -1448,7 +1453,6 @@ const approveEmployee = async (req, res) => {
       financialYear,
       yearLabel,
     } = req.body || {};
-
     if (!targetUserId) {
       return res.status(400).json({
         success: false,
@@ -1479,6 +1483,17 @@ const approveEmployee = async (req, res) => {
         message: "User not found",
       });
     }
+
+    const requestedRole = normalizeRole(
+      req.body?.role ||
+      req.body?.selectedRole ||
+      req.body?.employeeRole ||
+      user.role ||
+      "employee",
+    );
+    const approvedRole = ["employee", "team lead"].includes(requestedRole)
+      ? requestedRole
+      : normalizeRole(user.role) || "employee";
 
     if (user.isApproved) {
       return res.status(400).json({
@@ -1584,7 +1599,24 @@ const approveEmployee = async (req, res) => {
       if (companyId) employee.companyId = companyId;
       if (branchId) employee.branchId = branchId;
       if (assignedFinancialYearId) employee.financialYearId = assignedFinancialYearId;
+      user.role = approvedRole;
+      user.designation = approvedRole === "team lead"
+        ? "Team Lead"
+        : user.designation || "Employee";
+      employee.role = approvedRole;
+      employee.isTeamLead = approvedRole === "team lead";
+      employee.designation = user.designation;
       await employee.save();
+    }
+
+    const teamLead = req.body?.teamLead ||
+      req.body?.teamLeadUser ||
+      req.body?.teamLeadEmployee ||
+      req.body?.teamLeadId ||
+      req.body?.assignedTeamLead ||
+      req.body?.reportingTo;
+    if (approvedRole === "employee" && teamLead) {
+      await assignEmployeeToTeamLead({ employee, user, teamLead });
     }
 
     // Sync companyId and branchId on SalaryStructure if existing

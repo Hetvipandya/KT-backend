@@ -1,4 +1,5 @@
 const User = require("../models/User");
+const Employee = require("../models/Employee");
 const FinanceUser = require("../models/FinanceUser");
 const { hashPassword, comparePassword, hashSha256 } = require("../utils/hash");
 const {
@@ -20,6 +21,8 @@ const env = require("../config/env");
 const crypto = require("crypto");
 const pino = require("pino");
 const { isEmployeeLoginBlocked } = require("../utils/employeeLoginStatus");
+const generateEmployeeID = require("../utils/employeeId");
+const { assignEmployeeToTeamLead } = require("../utils/teamLeadAssignment");
 
 const logger = pino({
   transport:
@@ -29,6 +32,19 @@ const logger = pino({
 const approvalIsRequired = (role) => {
   const normalizedRole = String(role || "").trim().toLowerCase();
   return !["admin", "hr", "accountant", "ca"].includes(normalizedRole);
+};
+
+const normalizeRegistrationRole = (role) => {
+  const normalized = String(role || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[_\s-]+/g, "");
+
+  if (normalized === "teamlead" || normalized === "teamleader") {
+    return "team lead";
+  }
+
+  return String(role || "").trim().toLowerCase().replace(/[_\s-]+/g, " ").trim();
 };
 
 // Helper to record audit event in controller
@@ -124,17 +140,78 @@ const ensureFinanceUser = async (user, role) => {
   });
 };
 
+const ensureRegisteredEmployee = async (user, teamLead) => {
+  const role = normalizeRegistrationRole(user.role);
+  if (!["employee", "intern", "team lead"].includes(role)) {
+    return null;
+  }
+
+  const existingEmployee = await Employee.findOne({
+    $or: [{ userID: user._id }, { userId: user._id }],
+  });
+  if (existingEmployee) {
+    if (!existingEmployee.userID) existingEmployee.userID = user._id;
+    if (!existingEmployee.userId) existingEmployee.userId = user._id;
+    await existingEmployee.save();
+    if (!user.uniqueID && (existingEmployee.employeeID || existingEmployee.employeeCode)) {
+      user.uniqueID = existingEmployee.employeeID || existingEmployee.employeeCode;
+      await user.save();
+    }
+    await assignEmployeeToTeamLead({ employee: existingEmployee, user, teamLead });
+    return existingEmployee;
+  }
+
+  const employeeID = await generateEmployeeID(Employee);
+  const employee = await Employee.create({
+    employeeID,
+    userID: user._id,
+    userId: user._id,
+    name: user.name || "",
+    firstName: user.name || "",
+    lastName: "",
+    email: user.email || "",
+    phoneNumber: user.phoneNumber || "",
+    designation: role === "team lead" ? "Team Lead" : "Employee",
+    department: user.department || "",
+    joiningDate: new Date(),
+    isTeamLead: role === "team lead",
+    employeeStatus: "Active",
+    status: "ACTIVE",
+  });
+
+  if (!user.uniqueID) {
+    user.uniqueID = employeeID;
+    await user.save();
+  }
+  await assignEmployeeToTeamLead({ employee, user, teamLead });
+  return employee;
+};
+
 /**
  * POST /api/auth/register
  */
 const register = async (req, res, next) => {
   try {
     const { name, email, password, phone, phoneNumber, role } = req.body;
+    const normalizedRole = normalizeRegistrationRole(role);
 
     // Check if email already exists
     const existingUser = await User.findOne({ email });
     if (existingUser) {
       await ensureFinanceUser(existingUser, role);
+      if (existingUser.role !== normalizedRole) {
+        existingUser.role = normalizedRole;
+        await existingUser.save();
+      }
+      await ensureRegisteredEmployee(
+        existingUser,
+        req.body.teamLead ||
+        req.body.teamLeadUser ||
+        req.body.teamLeadEmployee ||
+        req.body.teamLeadId ||
+        req.body.assignedTeamLead ||
+        req.body.reportingTo,
+      );
       return res.status(409).json({
         success: false,
         message: "Email address is already registered",
@@ -155,11 +232,11 @@ const register = async (req, res, next) => {
       email,
       passwordHash,
       phoneNumber: phoneNumber ?? phone,
-      role,
-      isApproved: ["accountant", "ca"].includes(String(role || "").trim().toLowerCase()) ? true : undefined,
-      isActive: ["accountant", "ca"].includes(String(role || "").trim().toLowerCase()) ? true : undefined,
-      termsAndConditions: ["accountant", "ca"].includes(String(role || "").trim().toLowerCase()),
-      termsAccepted: ["accountant", "ca"].includes(String(role || "").trim().toLowerCase()),
+      role: normalizedRole,
+      isApproved: ["accountant", "ca"].includes(normalizedRole) ? true : undefined,
+      isActive: ["accountant", "ca"].includes(normalizedRole) ? true : undefined,
+      termsAndConditions: ["accountant", "ca"].includes(normalizedRole),
+      termsAccepted: ["accountant", "ca"].includes(normalizedRole),
       emailVerificationTokenHash: verificationTokenHash,
       emailVerificationExpires,
     });
@@ -170,6 +247,21 @@ const register = async (req, res, next) => {
     } catch (financeError) {
       await User.findByIdAndDelete(newUser._id);
       throw financeError;
+    }
+
+    try {
+      await ensureRegisteredEmployee(
+        newUser,
+        req.body.teamLead ||
+        req.body.teamLeadUser ||
+        req.body.teamLeadEmployee ||
+        req.body.teamLeadId ||
+        req.body.assignedTeamLead ||
+        req.body.reportingTo,
+      );
+    } catch (employeeError) {
+      await User.findByIdAndDelete(newUser._id);
+      throw employeeError;
     }
 
     // Send verification email (non-blocking — do not fail register if email fails)
@@ -334,6 +426,7 @@ const login = async (req, res, next) => {
       reconcileUserOrphanedReferences,
     } = require("../services/reconcile.service");
     const reconciledUser = await reconcileUserOrphanedReferences(user);
+    await ensureRegisteredEmployee(reconciledUser);
     const teamLead = await getTeamLeadForUser(reconciledUser._id);
 
     // Establish session (persists refresh token + loginAttempts reset in 1 DB save)
@@ -1804,6 +1897,7 @@ const renderStatusPage = ({ success, title, message }) => `
 
 module.exports = {
   register,
+  normalizeRegistrationRole,
   login,
   refreshToken,
   logout,

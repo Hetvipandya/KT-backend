@@ -1,6 +1,6 @@
 const mongoose = require('mongoose');
 
-const addressSchema = new mongoose.Schema(
+const addressSchema = new mongoose.Schema( 
   {
     line1: { type: String, trim: true, default: '' },
     line2: { type: String, trim: true, default: '' },
@@ -55,6 +55,23 @@ const employeeSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
       default: null
+    },
+    teamLeadUser: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      default: null,
+      index: true
+    },
+    teamLeadEmployee: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Employee',
+      default: null,
+      index: true
+    },
+    teamLeadId: {
+      type: String,
+      trim: true,
+      default: ''
     },
 
     // Personal Details

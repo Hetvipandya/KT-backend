@@ -6,7 +6,7 @@ const router =
 
 const { authLimiter } = require("../middleware/rateLimiter");
  
-const {
+const { 
   updateProfile,
   getMyProfile,
   uploadProfileImage,
@@ -29,6 +29,7 @@ const {
 );
 
 const { protect } = require("../middleware/authMiddleware");
+const { authorizeRoles } = require("../middleware/roleMiddleware");
 const authenticate = require("../middleware/authenticate");
 const upload = require("../middleware/uploadMiddleware");
 const profileImageUpload = upload.profileImageUpload || upload.single("profileImage");
@@ -120,41 +121,57 @@ router.post(
 // ================= APPROVE EMPLOYEE =================
 router.put( 
   "/approve",
+  protect,
+  authorizeRoles("admin"),
   approveEmployee
 );  //done
 
 router.post(
   "/approve",
+  protect,
+  authorizeRoles("admin"),
   approveEmployee
 );
 
 router.put(
   "/approve/:id",
+  protect,
+  authorizeRoles("admin"),
   approveEmployee
 );
 
 router.post(
   "/approve/:id",
+  protect,
+  authorizeRoles("admin"),
   approveEmployee
 );
 
 router.put(
   "/approve-employee",
+  protect,
+  authorizeRoles("admin"),
   approveEmployee
 );
 
 router.post(
   "/approve-employee",
+  protect,
+  authorizeRoles("admin"),
   approveEmployee
 );
 
 router.put( 
   "/reject", 
+  protect,
+  authorizeRoles("admin"),
   rejectEmployee
 );
 
 router.post(
   "/reject",
+  protect,
+  authorizeRoles("admin"),
   rejectEmployee
 );
 

@@ -64,6 +64,30 @@ exports.assignTeamLead = async (req, res) => {
       });
     }
 
+    if (!employee && user) {
+      const employeeID = await generateEmployeeID(Employee);
+      employee = await Employee.create({
+        employeeID,
+        userID: user._id,
+        userId: user._id,
+        firstName: user.name || "",
+        lastName: "",
+        email: user.email,
+        phoneNumber: user.phoneNumber || user.phone || "",
+        designation: "Team Lead",
+        department: user.department || "",
+        joiningDate: new Date(),
+        isTeamLead: true,
+        role: "team lead",
+        employeeStatus: "Active",
+        status: "ACTIVE",
+      });
+
+      if (!user.uniqueID) {
+        user.uniqueID = employeeID;
+      }
+    }
+
     if (employee) {
       employee = await Employee.findByIdAndUpdate(
         employee._id,
@@ -815,6 +839,102 @@ exports.addEmployee = async (req, res) => {
       if (!employee.userID) {
         employee.userID = syncedUser._id;
         await employee.save();
+      }
+    }
+
+    // Add the newly registered employee to the selected Team Lead's team.
+    const resolveTeamLeadValue = (value) => {
+      if (!value) return "";
+      if (typeof value !== "object") return String(value);
+      return String( 
+        value._id ||
+        value.id ||
+        value.userId ||
+        value.userID ||
+        value.employeeId ||
+        value.employeeID ||
+        value.uniqueID ||
+        value.employeeCode ||
+        value.email ||
+        value.value ||
+        "",
+      );
+    };
+
+    const teamLeadValue =
+      resolveTeamLeadValue(teamLead) ||
+      resolveTeamLeadValue(req.body.teamLeadUser) ||
+      resolveTeamLeadValue(req.body.teamLeadEmployee) ||
+      resolveTeamLeadValue(req.body.teamLeadId) ||
+      resolveTeamLeadValue(req.body.assignedTeamLead) ||
+      resolveTeamLeadValue(req.body.reportingTo);
+
+    if (teamLeadValue) {
+      const teamLeadKey = String(teamLeadValue);
+      let leadEmployee = mongoose.isValidObjectId(teamLeadKey)
+        ? await Employee.findById(teamLeadKey)
+        : null;
+      let leadUser = mongoose.isValidObjectId(teamLeadKey)
+        ? await User.findById(teamLeadKey)
+        : null;
+
+      if (!leadUser) {
+        leadUser = await User.findOne({
+          $or: [{ uniqueID: teamLeadKey }, { email: teamLeadKey }],
+        });
+      }
+
+      if (!leadEmployee) {
+        leadEmployee = await Employee.findOne({
+          $or: [
+            { employeeID: teamLeadKey },
+            { employeeCode: teamLeadKey },
+            { email: teamLeadKey },
+            ...(leadUser?._id ? [{ userID: leadUser._id }, { userId: leadUser._id }] : []),
+          ],
+        });
+      }
+
+      if (!leadUser && leadEmployee) {
+        leadUser = await User.findOne({
+          $or: [
+            ...(leadEmployee.userID ? [{ _id: leadEmployee.userID }] : []),
+            ...(leadEmployee.userId ? [{ _id: leadEmployee.userId }] : []),
+            { email: leadEmployee.email },
+          ],
+        });
+      }
+
+      if (leadUser || leadEmployee) {
+        let team = await Team.findOne({
+          $or: [
+            ...(leadUser?._id ? [{ teamLeadUser: leadUser._id }] : []),
+            ...(leadEmployee?._id ? [{ teamLeadEmployee: leadEmployee._id }] : []),
+          ],
+        });
+
+        if (!team) {
+          const leadName =
+            leadUser?.name ||
+            `${leadEmployee?.firstName || ""} ${leadEmployee?.lastName || ""}`.trim() ||
+            "Team Lead";
+          team = await Team.create({
+            name: `${leadName} Team`,
+            teamLeadUser: leadUser?._id || null,
+            teamLeadEmployee: leadEmployee?._id || null,
+            teamLeadId:
+              leadUser?.uniqueID ||
+              leadEmployee?.employeeID ||
+              leadEmployee?.employeeCode ||
+              "",
+            employees: [],
+          });
+        }
+
+        if (!team.employees.some((id) => String(id) === String(employee._id))) {
+          team.employees.push(employee._id);
+          await team.save();
+        }
       }
     }
 
