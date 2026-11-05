@@ -5,7 +5,7 @@ exports.authorizeRoles = (...roles) => {
       if (!req.user) {
         return res.status(401).json({
           success: false,
-          message: "Not authenticated. Please login first.",
+          message: "Not authenticated.",
         });
       }
 
@@ -19,11 +19,15 @@ exports.authorizeRoles = (...roles) => {
 
       const allowedRoles = roles.map(normalizeRole);
 
-      console.log("Authorization Debug:", {
-        userRole: req.user.role,
-        normalizedUserRole: userRole,
-        allowedRoles: roles,
-      });
+      console.log("========== AUTHORIZATION TRACE ==========");
+      console.log("URL:", req.originalUrl);
+      console.log("METHOD:", req.method);
+      console.log("USER ROLE:", req.user.role);
+      console.log("ALLOWED ROLES:", roles);
+
+      console.trace("AUTHORIZE ROLES CALL STACK");
+
+      console.log("==========================================");
 
       if (!allowedRoles.includes(userRole)) {
         return res.status(403).json({
@@ -32,7 +36,7 @@ exports.authorizeRoles = (...roles) => {
           requiredRoles: roles,
         });
       }
- 
+
       next();
     } catch (error) {
       console.error("Role Middleware Error:", error);
