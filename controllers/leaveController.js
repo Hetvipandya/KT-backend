@@ -338,10 +338,11 @@ const getTeamLeadAssignedUserIds = async (teamLeadId) => {
   try {
     const directMembers = await Employee.find({
       $or: [
-        { teamLeadUser: { $in: [...leadUserObjectIds, ...Array.from(leadUserIds)] } },
-        { teamLeadEmployee: { $in: [...leadEmployeeObjectIds, ...Array.from(leadEmployeeIds)] } },
+        { teamLeadUser: { $in: leadUserObjectIds } },
+        { teamLeadEmployee: { $in: leadEmployeeObjectIds } },
+        { teamLeadId: { $in: Array.from(leadIdentifiers) } },
       ],
-    }).select("_id userID userId").lean();
+    }).select("_id userID userId teamLeadUser teamLeadEmployee teamLeadId").lean();
 
     for (const member of directMembers) {
       assignedUserIds.add(String(member._id));
