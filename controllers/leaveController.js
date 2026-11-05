@@ -393,12 +393,17 @@ exports.applyLeave = async (req, res) => {
       halfDayType,
     } = req.body;
 
-    const targetUserId =
-      bodyUserId ||
-      employeeId ||
-      req.body.userID ||
-      req.user?._id ||
-      req.user?.id;
+    const authenticatedUserId = req.user?._id || req.user?.id;
+    const suppliedIdentity = bodyUserId || employeeId || req.body.userID || null;
+
+    if (!authenticatedUserId) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized",
+      });
+    }
+
+    const targetUserId = authenticatedUserId;
 
     if (!targetUserId) {
       return res.status(400).json({
@@ -432,15 +437,45 @@ exports.applyLeave = async (req, res) => {
       }
     }
 
-    if (!user && req.user) {
-      user = req.user;
-    }
-
     if (!user) {
       return res.status(404).json({
         success: false,
         message: "User not found",
       });
+    }
+
+    if (user.isApproved === false || user.isActive === false) {
+      return res.status(403).json({
+        success: false,
+        message: "Approved active account required to apply for leave",
+      });
+    }
+
+    if (suppliedIdentity) {
+      const validObjectId = mongoose.Types.ObjectId.isValid(String(suppliedIdentity));
+      const employee = await Employee.findOne({
+        $or: [
+          ...(validObjectId ? [{ _id: suppliedIdentity }] : []),
+          { userID: authenticatedUserId },
+          { userId: authenticatedUserId },
+          { employeeID: suppliedIdentity },
+          { employeeCode: suppliedIdentity },
+        ],
+      });
+      const suppliedMatchesUser =
+        String(suppliedIdentity) === String(authenticatedUserId) ||
+        Boolean(employee && (
+          String(employee.userID || employee.userId || "") === String(authenticatedUserId) ||
+          String(employee._id) === String(suppliedIdentity) ||
+          String(employee.employeeID || "") === String(suppliedIdentity) ||
+          String(employee.employeeCode || "") === String(suppliedIdentity)
+        ));
+      if (!suppliedMatchesUser) {
+        return res.status(403).json({
+          success: false,
+          message: "You cannot apply for leave for another employee",
+        });
+      }
     }
 
     const userId = user._id || targetUserId;
