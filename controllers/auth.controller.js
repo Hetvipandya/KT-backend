@@ -34,6 +34,19 @@ const approvalIsRequired = (role) => {
   return !["admin", "hr", "accountant", "ca"].includes(normalizedRole);
 };
 
+const normalizeRegistrationRole = (role) => {
+  const normalized = String(role || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[_\s-]+/g, "");
+
+  if (normalized === "teamlead" || normalized === "teamleader") {
+    return "team lead";
+  }
+
+  return String(role || "").trim().toLowerCase().replace(/[_\s-]+/g, " ").trim();
+};
+
 // Helper to record audit event in controller
 const normalizeResetToken = (tokenValue) => {
   const tokenString = String(tokenValue ?? "").trim();
@@ -128,7 +141,7 @@ const ensureFinanceUser = async (user, role) => {
 };
 
 const ensureRegisteredEmployee = async (user, teamLead) => {
-  const role = String(user.role || "").trim().toLowerCase().replace(/[_-]+/g, " ").replace(/\s+/g, " ");
+  const role = normalizeRegistrationRole(user.role);
   if (!["employee", "intern", "team lead"].includes(role)) {
     return null;
   }
@@ -180,11 +193,16 @@ const ensureRegisteredEmployee = async (user, teamLead) => {
 const register = async (req, res, next) => {
   try {
     const { name, email, password, phone, phoneNumber, role } = req.body;
+    const normalizedRole = normalizeRegistrationRole(role);
 
     // Check if email already exists
     const existingUser = await User.findOne({ email });
     if (existingUser) {
       await ensureFinanceUser(existingUser, role);
+      if (existingUser.role !== normalizedRole) {
+        existingUser.role = normalizedRole;
+        await existingUser.save();
+      }
       await ensureRegisteredEmployee(
         existingUser,
         req.body.teamLead ||
@@ -214,11 +232,11 @@ const register = async (req, res, next) => {
       email,
       passwordHash,
       phoneNumber: phoneNumber ?? phone,
-      role,
-      isApproved: ["accountant", "ca"].includes(String(role || "").trim().toLowerCase()) ? true : undefined,
-      isActive: ["accountant", "ca"].includes(String(role || "").trim().toLowerCase()) ? true : undefined,
-      termsAndConditions: ["accountant", "ca"].includes(String(role || "").trim().toLowerCase()),
-      termsAccepted: ["accountant", "ca"].includes(String(role || "").trim().toLowerCase()),
+      role: normalizedRole,
+      isApproved: ["accountant", "ca"].includes(normalizedRole) ? true : undefined,
+      isActive: ["accountant", "ca"].includes(normalizedRole) ? true : undefined,
+      termsAndConditions: ["accountant", "ca"].includes(normalizedRole),
+      termsAccepted: ["accountant", "ca"].includes(normalizedRole),
       emailVerificationTokenHash: verificationTokenHash,
       emailVerificationExpires,
     });
@@ -1879,6 +1897,7 @@ const renderStatusPage = ({ success, title, message }) => `
 
 module.exports = {
   register,
+  normalizeRegistrationRole,
   login,
   refreshToken,
   logout,

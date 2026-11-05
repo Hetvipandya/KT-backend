@@ -7,7 +7,7 @@ const salaryStructureSchema = new mongoose.Schema(
       ref: "Company",
       index: true,
       default: null,
-    },
+    }, 
 
     branchId: {
       type: mongoose.Schema.Types.ObjectId,
@@ -386,4 +386,4 @@ salaryStructureSchema.index({ userId: 1, isActive: 1 }, { unique: false });
 const SalaryStructure = mongoose.models.SalaryStructure || mongoose.model("SalaryStructure", salaryStructureSchema);
 
 module.exports = SalaryStructure;
-module.exports.syncSalaryStructureToMonthlySalaries = syncSalaryStructureToMonthlySalaries;
+module.exports.syncSalaryStructureToMonthlySalaries = syncSalaryStructureToMonthlySalaries;

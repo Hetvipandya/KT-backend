@@ -64,6 +64,30 @@ exports.assignTeamLead = async (req, res) => {
       });
     }
 
+    if (!employee && user) {
+      const employeeID = await generateEmployeeID(Employee);
+      employee = await Employee.create({
+        employeeID,
+        userID: user._id,
+        userId: user._id,
+        firstName: user.name || "",
+        lastName: "",
+        email: user.email,
+        phoneNumber: user.phoneNumber || user.phone || "",
+        designation: "Team Lead",
+        department: user.department || "",
+        joiningDate: new Date(),
+        isTeamLead: true,
+        role: "team lead",
+        employeeStatus: "Active",
+        status: "ACTIVE",
+      });
+
+      if (!user.uniqueID) {
+        user.uniqueID = employeeID;
+      }
+    }
+
     if (employee) {
       employee = await Employee.findByIdAndUpdate(
         employee._id,
