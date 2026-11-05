@@ -170,13 +170,6 @@ router.get(
 router.get(
   "/all",
   protect,
-  authorizeRoles(
-    "hr",
-    "admin",
-    "team lead",
-    "intern",
-    "employee"
-  ),
   getAllLeaves
 );
 
