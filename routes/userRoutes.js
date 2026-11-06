@@ -9,7 +9,7 @@ const { authLimiter } = require("../middleware/rateLimiter");
 const { 
   updateProfile,
   getMyProfile,
-  uploadProfileImage,
+  uploadProfileImage, 
   registerUser,
   approveEmployee,
   rejectEmployee,

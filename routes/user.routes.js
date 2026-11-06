@@ -38,7 +38,7 @@ router.get(
   authenticate,
   requirePermission('UserManagement', 'manage'),
   userController.getUserById
-);
+); 
 
 // PUT /api/user/:id — Update role, status, or profile
 router.put(
