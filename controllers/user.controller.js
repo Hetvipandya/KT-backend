@@ -209,7 +209,15 @@ const listUsers = async (req, res, next) => {
 
 const updateUser = async (req, res, next) => {
   try {
-    const parsed = updateUserSchema.safeParse(req.body);
+    // Resolve companyId from Body or Query
+    const requestData = {
+      ...req.body,
+      companyId: req.body?.companyId || req.query?.companyId
+    };
+
+    // Validate request data
+    const parsed = updateUserSchema.safeParse(requestData);
+
     if (!parsed.success) {
       return res.status(400).json({
         success: false,
@@ -218,15 +226,33 @@ const updateUser = async (req, res, next) => {
       });
     }
 
-    const { companyId, branchId, allBranches, allBranch, role, isActive, name, phone, phoneNumber } = parsed.data;
+    const {
+      companyId,
+      branchId,
+      allBranches,
+      allBranch,
+      role,
+      isActive,
+      name,
+      phone,
+      phoneNumber
+    } = parsed.data;
+
     const targetUserId = req.params.id;
 
+    // Resolve all branches
     const resolvedAllBranches = allBranches ?? allBranch ?? false;
     const targetBranchId = resolvedAllBranches ? null : branchId;
 
+    // Validate branch belongs to company
     if (targetBranchId) {
       const Branch = require('../models/Branch');
-      const branchDoc = await Branch.findOne({ _id: targetBranchId, companyId });
+
+      const branchDoc = await Branch.findOne({
+        _id: targetBranchId,
+        companyId
+      });
+
       if (!branchDoc) {
         return res.status(400).json({
           success: false,
@@ -236,10 +262,18 @@ const updateUser = async (req, res, next) => {
       }
     }
 
-    const financeUser = await FinanceUser.findOne({ userId: targetUserId })
-      .populate('userId', 'name email phoneNumber role companyId branchId companyCreated companyAccess')
+    // Find FinanceUser and populate original User
+    const financeUser = await FinanceUser.findOne({
+      userId: targetUserId
+    })
+      .populate(
+        'userId',
+        'name email phoneNumber role companyId branchId companyCreated companyAccess'
+      )
       .exec();
+
     const targetUser = financeUser?.userId;
+
     if (!financeUser || !targetUser) {
       return res.status(404).json({
         success: false,
@@ -248,10 +282,13 @@ const updateUser = async (req, res, next) => {
       });
     }
 
-    // Find the companyAccess entry for this company
-    let accessEntry = financeUser.companyAccess.find(
-      (a) => a.companyId.toString() === companyId.toString()
+    // Find company-specific access entry
+    const accessEntry = financeUser.companyAccess.find(
+      (a) =>
+        a.companyId &&
+        a.companyId.toString() === companyId.toString()
     );
+
     if (!accessEntry) {
       return res.status(404).json({
         success: false,
@@ -260,9 +297,15 @@ const updateUser = async (req, res, next) => {
       });
     }
 
-    // Self-lockout guard
+    // Self-lockout protection
     if (isActive === false) {
-      if (userService.wouldSelfLockout(req.user, targetUserId, companyId)) {
+      if (
+        userService.wouldSelfLockout(
+          req.user,
+          targetUserId,
+          companyId
+        )
+      ) {
         return res.status(400).json({
           success: false,
           message: 'Cannot deactivate your own only remaining company access',
@@ -271,16 +314,21 @@ const updateUser = async (req, res, next) => {
       }
     }
 
-    // Apply companyAccess-scoped changes
+    // Apply company-specific role changes
     if (role !== undefined) {
       accessEntry.role = role;
       targetUser.role = role;
     }
+
+    // Apply branch changes
     if (branchId !== undefined || resolvedAllBranches) {
-      const finalBranchId = targetBranchId ? targetBranchId : null;
+      const finalBranchId = targetBranchId || null;
+
       accessEntry.branchId = finalBranchId;
       financeUser.branchId = finalBranchId;
     }
+
+    // Apply active/inactive status
     if (isActive !== undefined) {
       accessEntry.isActive = isActive;
       financeUser.isActive = isActive;
@@ -288,37 +336,73 @@ const updateUser = async (req, res, next) => {
     }
 
     // Apply global profile changes
-    if (name !== undefined) targetUser.name = name;
+    if (name !== undefined) {
+      targetUser.name = name;
+    }
+
     if (phone !== undefined || phoneNumber !== undefined) {
       targetUser.phoneNumber = phoneNumber ?? phone;
     }
 
+    // Save changes
     await financeUser.save();
     await targetUser.save();
 
-    const { invalidateUserCache } = require('../middleware/authenticate');
+    // Invalidate authentication cache
+    const {
+      invalidateUserCache
+    } = require('../middleware/authenticate');
+
     invalidateUserCache(targetUserId);
 
-    const assignedBranchId = accessEntry.branchId || financeUser.branchId || targetUser.branchId;
+    // Resolve assigned branch information
+    const assignedBranchId =
+      accessEntry.branchId ||
+      financeUser.branchId ||
+      targetUser.branchId;
+
     let branchName = null;
+
     if (assignedBranchId) {
       const Branch = require('../models/Branch');
-      const branchDoc = await Branch.findById(assignedBranchId).select('branchName').lean();
-      if (branchDoc) branchName = branchDoc.branchName;
-    }
-    const branchMap = new Map();
-    if (assignedBranchId && branchName) {
-      branchMap.set(assignedBranchId.toString(), branchName);
+
+      const branchDoc = await Branch.findById(assignedBranchId)
+        .select('branchName')
+        .lean();
+
+      if (branchDoc) {
+        branchName = branchDoc.branchName;
+      }
     }
 
+    // Prepare branch map
+    const branchMap = new Map();
+
+    if (assignedBranchId && branchName) {
+      branchMap.set(
+        assignedBranchId.toString(),
+        branchName
+      );
+    }
+
+    // Success response
     return res.status(200).json({
       success: true,
-      data: userService.toCompanyUserView(targetUser, companyId, branchMap, new Map(), new Map(), financeUser.companyAccess)
+      data: userService.toCompanyUserView(
+        targetUser,
+        companyId,
+        branchMap,
+        new Map(),
+        new Map(),
+        financeUser.companyAccess
+      )
     });
+
   } catch (error) {
     next(error);
   }
 };
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 // GET /api/user/:id?companyId= — Get details of a single user
