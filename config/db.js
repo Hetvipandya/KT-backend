@@ -2,10 +2,12 @@ const mongoose = require('mongoose');
 const pino = require('pino');
 const dns = require('dns');
 
-// Fallback to reliable public DNS (Google/Cloudflare) if local router/ISP refuses SRV queries
-try {
-  dns.setServers(['8.8.8.8', '1.1.1.1']);
-} catch (_) {}
+// Optional: only override DNS if explicitly requested in environment
+if (process.env.USE_CUSTOM_DNS === 'true') {
+  try {
+    dns.setServers(['8.8.8.8', '1.1.1.1']);
+  } catch (_) {}
+}
 
 const isDev = (process.env.NODE_ENV || 'development') === 'development';
 const logger = pino({
