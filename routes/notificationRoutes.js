@@ -11,7 +11,7 @@ router.post("/register-token", protect, notificationController.registerDeviceTok
 router.post("/remove-token", protect, notificationController.removeDeviceToken);
 
 // ===============================
-// NOTIFICATION ROUTES
+// NOTIFICATION ROUTES 
 // ===============================
 router.post("/create", notificationController.createNotification);
 
@@ -21,6 +21,8 @@ router.put("/read-all", notificationController.markAllAsRead);
 
 router.get("/user/:userId", notificationController.getUserNotifications);
 router.put("/read/:id", notificationController.markAsRead);
+router.delete("/delete-all", notificationController.deleteAllNotifications);
+router.delete("/user/:userId/delete-all", notificationController.deleteAllNotifications);
 router.delete("/:id", notificationController.deleteNotification);
 
 // ===============================
