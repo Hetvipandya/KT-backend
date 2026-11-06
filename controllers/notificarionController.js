@@ -281,7 +281,7 @@ exports.markAllAsRead = async (req, res) => {
 
 // ===============================
 // DELETE NOTIFICATION
-// ===============================
+// =============================== 
 exports.deleteNotification = async (req, res) => {
   try {
     const { id } = req.params;
@@ -293,6 +293,34 @@ exports.deleteNotification = async (req, res) => {
     return res.status(200).json({
       success: true,
       message: "Notification deleted",
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+// ===============================
+// DELETE ALL NOTIFICATIONS
+// ===============================
+exports.deleteAllNotifications = async (req, res) => {
+  try {
+    const userId =
+      req.params.userId ||
+      req.query.userId ||
+      req.body?.userId;
+
+    const filter = userId ? { userId } : {};
+    const result = await Notification.deleteMany(filter);
+
+    return res.status(200).json({
+      success: true,
+      message: userId
+        ? "All notifications deleted for user"
+        : "All notifications deleted",
+      deletedCount: result.deletedCount || 0,
     });
   } catch (error) {
     return res.status(500).json({
