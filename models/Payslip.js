@@ -262,8 +262,10 @@ const syncPayslipFromMonthlySalary = async (salaryDoc) => {
     paymentDate: raw.paymentDate || null,
     totalDays: Number(raw.totalDays || 30),
     workingDays: Number(raw.workingDays || 30),
-    presentDays: Number(raw.presentDays || 30),
-    daysPayable: Number(raw.daysPayable || 30),
+    presentDays: Number(raw.presentDays != null ? raw.presentDays : 30),
+    daysPayable: Number(
+      raw.presentDays != null ? raw.presentDays : (raw.daysPayable != null ? raw.daysPayable : 30)
+    ),
     generatedDate: raw.createdAt || new Date(),
   };
 

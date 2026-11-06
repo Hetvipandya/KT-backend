@@ -304,7 +304,7 @@ describe("HR Payroll Formula Module Test Suite", () => {
         totalDays: 30,
         workingDays: 30,
         presentDays: 26,
-        daysPayable: 30,
+        daysPayable: 26,
         leaveDays: 2,
         lopDays: 2,
         perDaySalary: 1333.33,
@@ -371,7 +371,7 @@ describe("HR Payroll Formula Module Test Suite", () => {
       expect(res.body.success).toBe(true);
       expect(res.body.count).toBe(1);
       const salaryUpdate = MonthlySalary.findOneAndUpdate.mock.calls[0][1];
-      expect(salaryUpdate.daysPayable).toBe(30);
+      expect(salaryUpdate.daysPayable).toBe(26);
       expect(salaryUpdate.leaveDays).toBe(2);
       expect(salaryUpdate.lopDeduction).toBeCloseTo(
         salaryUpdate.perDaySalary *
@@ -380,7 +380,7 @@ describe("HR Payroll Formula Module Test Suite", () => {
       );
       expect(salaryUpdate.presentDays).toBe(26);
       expect(salaryUpdate.presentDays).toBe(
-        salaryUpdate.daysPayable - salaryUpdate.leaveDays - salaryUpdate.lopDays
+        salaryUpdate.daysPayable
       );
       expect(notify).toHaveBeenCalledWith(expect.objectContaining({
         userId: testUserId,

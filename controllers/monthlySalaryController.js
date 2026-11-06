@@ -209,8 +209,9 @@ const generateMonthlySalary = async (req, res) => {
         finalLopDays = absentCount + halfDayCount * 0.5;
       }
 
-      const daysPayable = Math.round(totalWorkingDays);
-      const presentDays = Math.max(0, daysPayable - leaveDays - finalLopDays);
+      const workingDays = Math.round(totalWorkingDays);
+      const presentDays = Math.max(0, workingDays - leaveDays - finalLopDays);
+      const daysPayable = presentDays;
 
       // Earnings Components
       const basic = activeStructure.basicSalary || 0;
@@ -311,7 +312,7 @@ const generateMonthlySalary = async (req, res) => {
           salaryStructureSnapshot: snapshot,
           calculationMode,
           totalDays: totalDaysInMonth,
-          workingDays: totalWorkingDays,
+          workingDays,
           presentDays,
           daysPayable,
           leaveDays,
@@ -406,10 +407,31 @@ const getMonthlySalaries = async (req, res) => {
       .populate("paidBy", "name email")
       .sort({ year: -1, month: -1, createdAt: -1 });
 
+    if (isDbConnectedOrMocked(MonthlySalary.updateOne)) {
+      await Promise.all(salaries.map(async (salary) => {
+        const salaryObj = typeof salary.toObject === "function" ? salary.toObject() : salary;
+        const presentDays = salaryObj.presentDays != null ? Number(salaryObj.presentDays) : 0;
+        if (Number(salaryObj.daysPayable) !== presentDays) {
+          await MonthlySalary.updateOne(
+            { _id: salaryObj._id },
+            { $set: { daysPayable: presentDays } }
+          );
+        }
+      }));
+    }
+
     return res.status(200).json({
       success: true,
       count: salaries.length,
-      data: salaries,
+      data: salaries.map((salary) => {
+        const salaryObj = typeof salary.toObject === "function" ? salary.toObject() : { ...salary };
+        salaryObj.daysPayable = Number(
+          salaryObj.presentDays !== undefined && salaryObj.presentDays !== null
+            ? salaryObj.presentDays
+            : 0
+        );
+        return salaryObj;
+      }),
     });
   } catch (error) {
     console.error("Get Monthly Salaries Error:", error);

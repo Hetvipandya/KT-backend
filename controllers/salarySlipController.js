@@ -50,6 +50,11 @@ const resolveAndEnrichMonthlySalary = async (req) => {
   // 3. If MonthlySalary record was found
   if (monthlySalary) {
     const salaryObj = typeof monthlySalary.toObject === "function" ? monthlySalary.toObject() : { ...monthlySalary };
+    salaryObj.daysPayable = Number(
+      salaryObj.presentDays !== undefined && salaryObj.presentDays !== null
+        ? salaryObj.presentDays
+        : 0
+    );
 
     // Find active salary structure fallback if salaryStructureId is missing or deleted and breakdown is incomplete
     let activeStructure = null;
