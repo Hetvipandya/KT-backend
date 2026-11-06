@@ -373,6 +373,11 @@ describe("HR Payroll Formula Module Test Suite", () => {
       const salaryUpdate = MonthlySalary.findOneAndUpdate.mock.calls[0][1];
       expect(salaryUpdate.daysPayable).toBe(30);
       expect(salaryUpdate.leaveDays).toBe(2);
+      expect(salaryUpdate.lopDeduction).toBeCloseTo(
+        salaryUpdate.perDaySalary *
+          (salaryUpdate.lopDays + salaryUpdate.leaveDays),
+        1
+      );
       expect(salaryUpdate.presentDays).toBe(26);
       expect(salaryUpdate.presentDays).toBe(
         salaryUpdate.daysPayable - salaryUpdate.leaveDays - salaryUpdate.lopDays

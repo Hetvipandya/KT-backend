@@ -9,7 +9,7 @@ const Branch = require("../models/Branch");
 const Employee = require("../models/Employee");
 const { calculateWorkingLeaveDays, toDateString } = require("../utils/leaveUtils");
 const { notify } = require("../utils/sendNotification");
-
+ 
 const monthNames = [
   "January", "February", "March", "April", "May", "June",
   "July", "August", "September", "October", "November", "December"
@@ -232,7 +232,10 @@ const generateMonthlySalary = async (req, res) => {
 
       // Per Day Salary & LOP Deduction
       const perDaySalary = totalDaysInMonth > 0 ? grossSalary / totalDaysInMonth : 0;
-      const lopDeduction = Number((perDaySalary * finalLopDays).toFixed(2));
+      // Approved leave days are included in the LOP/absent deduction.
+      const lopDeduction = Number(
+        (perDaySalary * (finalLopDays + leaveDays)).toFixed(2)
+      );
 
       // Formula 2: PF (Employee) = (Basic + DA) * 12%
       const pfDeduction = activeStructure.pfDeduction || Math.round(basicForPf * 0.12);
@@ -944,7 +947,10 @@ const updateMonthlySalary = async (req, res) => {
     salary.perDaySalary =
       salary.totalDays > 0 ? Number((salary.grossSalary / salary.totalDays).toFixed(2)) : 0;
     salary.lopDeduction = Number(
-      (salary.perDaySalary * Number(salary.lopDays || 0)).toFixed(2)
+      (
+        salary.perDaySalary *
+        (Number(salary.lopDays || 0) + Number(salary.leaveDays || 0))
+      ).toFixed(2)
     );
 
     salary.totalDeduction =

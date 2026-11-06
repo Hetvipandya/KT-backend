@@ -352,7 +352,10 @@ const syncSalaryStructureToMonthlySalaries = async (structure, options = {}) => 
     salary.perDaySalary = salary.totalDays > 0
       ? Number((salary.grossSalary / salary.totalDays).toFixed(2))
       : 0;
-    salary.lopDeduction = Number((salary.perDaySalary * Number(salary.lopDays || 0)).toFixed(2));
+    salary.lopDeduction = Number((
+      salary.perDaySalary *
+      (Number(salary.lopDays || 0) + Number(salary.leaveDays || 0))
+    ).toFixed(2));
 
     const calculatedTds = salary.tds > 0
       ? Number(salary.tds)
