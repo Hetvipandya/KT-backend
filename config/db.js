@@ -46,6 +46,24 @@ const connectDB = async (customUri = null) => {
     logger.info(`✅ MongoDB Connected: ${conn.connection.host}/${conn.connection.name}`);
   } catch (error) {
     logger.error(`❌ MongoDB Connection Error: ${error.message}`);
+
+    if (error.reason && error.reason.servers) {
+      logger.error('🔍 ===== MONGO SERVER SELECTION DEBUG TRACE =====');
+      logger.error(`Topology Type: ${error.reason.type || 'Unknown'}`);
+
+      const serverEntries = error.reason.servers instanceof Map
+        ? Array.from(error.reason.servers.entries())
+        : Object.entries(error.reason.servers);
+
+      for (const [address, server] of serverEntries) {
+        const errorDetail = server?.error
+          ? `${server.error.name || 'Error'}: ${server.error.message || server.error}`
+          : 'No specific error reported';
+        logger.error(`📍 Node: ${address} | Status: ${server?.type || 'Unknown'} | Cause: ${errorDetail}`);
+      }
+      logger.error('=================================================');
+    }
+
     if (process.env.NODE_ENV !== 'test') {
       process.exit(1);
     }
