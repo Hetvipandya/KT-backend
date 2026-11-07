@@ -224,6 +224,23 @@ const monthlySalarySchema = new mongoose.Schema(
       default: 0,
     },
 
+    customDeductions: {
+      type: Number,
+      default: 0,
+    },
+
+    customDeductionsList: [
+      {
+        deductionRecordId: { type: String, default: "" },
+        deductionMasterId: { type: mongoose.Schema.Types.ObjectId, ref: "DeductionMaster", default: null },
+        name: { type: String, default: "" },
+        code: { type: String, default: "" },
+        category: { type: String, default: "VOLUNTARY" },
+        amount: { type: Number, default: 0 },
+        isLegallyPermissible: { type: Boolean, default: true },
+      },
+    ],
+
     // Formula 6: TOTAL DEDUCTIONS
     totalDeduction: {
       type: Number,

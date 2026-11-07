@@ -11,6 +11,7 @@ const {
   getMonthlySalaryById,
   approveMonthlySalary,
   payMonthlySalary,
+  previewMonthlySalary,
 } = require("./monthlySalaryController");
 
 const {
@@ -24,6 +25,7 @@ module.exports = {
   getSalaryStructureByUserId: getSalaryStructureById,
   updateSalaryStructure,
   processPayroll: generateMonthlySalary,
+  previewPayroll: previewMonthlySalary,
   approvePayroll: approveMonthlySalary,
   approveMonthlySalary,
   generatePayslip: getSalarySlipHtml,

@@ -2,6 +2,7 @@ const express = require('express');
 const authenticate = require('../middleware/authenticate');
 const checkCompanyAccess = require('../middleware/companyAccess');
 const reportsController = require('../controllers/reports.controller');
+const { getDeductionsReport } = require('../controllers/employeeDeductionController');
 
 const router = express.Router();
 
@@ -19,5 +20,6 @@ router.get('/gst/export', reportsController.exportGstReport);
 router.get('/trial-balance/export', reportsController.exportTrialBalance);
 router.get('/profit-loss/export', reportsController.exportProfitLoss);
 router.get('/balance-sheet/export', reportsController.exportBalanceSheet);
+router.get('/deductions', getDeductionsReport);
 
 module.exports = router;

@@ -41,6 +41,9 @@
 | `POST/GET` | `/api/attendance/*` | KT | Clock-in, clock-out, geofencing, daily records |
 | `POST/GET` | `/api/leave/*` | KT | Leave applications, balance calculation, approvals |
 | `POST/GET` | `/api/payroll/*` | KT | Salary structures, payslip generation, disbursements |
+| `POST/GET/PUT/DELETE` | `/api/deduction-masters/*` | KT | Centralized Deduction Master CRUD (categories, calculation rules, statutory legal permissibility) |
+| `POST/GET/PUT/DELETE` | `/api/employee-deductions/*` | KT | Centralized Employee Deduction CRUD with mandatory Employee ID, Team Leader ID, Master ID & unique Record ID, duplicate protection & payroll locking |
+| `POST/GET` | `/api/deductions/*` | KT | Unified deduction endpoints (preview, report, batch approval, my-deductions) |
 | `POST/GET` | `/api/employee-panel/*` | KT | Employee portal dashboard, profile, documents |
 | `POST/GET` | `/api/performance/*` | KT | Monthly performance reviews; submission requires `month` (1-12) and `year`, and reads can be filtered with `?month=&year=` |
 | `POST/GET` | `/api/adjustment/*` | KT | Attendance and time adjustments |

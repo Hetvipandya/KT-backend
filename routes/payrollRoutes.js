@@ -8,6 +8,7 @@ const {
   getSalaryStructureByUserId,
   updateSalaryStructure, 
   processPayroll,
+  previewPayroll,
   approvePayroll, 
   approveMonthlySalary,
   generatePayslip,  
@@ -49,7 +50,7 @@ router.put(
 // Payroll
 // ==========================
 router.post(
-  "/process",
+  "/preview", previewPayroll); router.get("/preview", previewPayroll); router.post("/process",
   processPayroll
 );
 

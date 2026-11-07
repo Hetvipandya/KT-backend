@@ -8,6 +8,9 @@ const {
   getReports,  
   createOrUpdateTeam,
   removeTeamLead,
+  getTeamDeductions,
+  approveTeamDeduction,
+  rejectTeamDeduction,
 } = require("../controllers/teamLeadController");
  
 const {  
@@ -27,7 +30,6 @@ router.get(
   ),
   getDashboard
 );
-
 
 router.post( 
   "/create-team",
@@ -55,6 +57,28 @@ router.get(
     "admin"
   ),
   getReports
+);
+
+// Team Lead Deduction Management
+router.get(
+  "/deductions",
+  protect,
+  authorizeRoles("team lead", "admin", "hr"),
+  getTeamDeductions
+);
+
+router.post(
+  "/deductions/:id/approve",
+  protect,
+  authorizeRoles("team lead", "admin", "hr"),
+  approveTeamDeduction
+);
+
+router.post(
+  "/deductions/:id/reject",
+  protect,
+  authorizeRoles("team lead", "admin", "hr"),
+  rejectTeamDeduction
 );
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -1035,3 +1035,146 @@ exports.getReports =
         });
     }
   };
+
+
+/*
+=========================
+TEAM LEAD DEDUCTIONS MANAGEMENT
+=========================
+*/
+exports.getTeamDeductions = async (req, res) => {
+  try {
+    const teamIds = await getTeamIds(req.user._id);
+    if (!teamIds || teamIds.length === 0) {
+      return res.status(200).json({ success: true, count: 0, data: [] });
+    }
+
+    const { month, year, status } = req.query;
+    const EmployeeDeduction = require("../models/EmployeeDeduction");
+
+    const query = {
+      $or: [
+        { employeeId: { $in: teamIds } },
+        { userId: { $in: teamIds } },
+        { teamLeadId: req.user.uniqueID || req.user._id.toString() },
+      ],
+    };
+
+    if (month) query.month = Number(month);
+    if (year) query.year = Number(year);
+    if (status) query.status = status;
+
+    const deductions = await EmployeeDeduction.find(query)
+      .populate("employeeId userId", "name email uniqueID department")
+      .populate("deductionMasterId", "name code category isLegallyPermissible")
+      .sort({ createdAt: -1 });
+
+    return res.status(200).json({
+      success: true,
+      count: deductions.length,
+      data: deductions,
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+exports.approveTeamDeduction = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { comments = "Approved by Team Lead" } = req.body;
+    const EmployeeDeduction = require("../models/EmployeeDeduction");
+    const { logDeductionAudit } = require("../services/deduction.service");
+
+    const deduction = await EmployeeDeduction.findById(id);
+    if (!deduction) {
+      return res.status(404).json({ success: false, message: "Deduction not found" });
+    }
+
+    if (deduction.isLocked) {
+      return res.status(409).json({ success: false, message: "Cannot modify locked deduction record" });
+    }
+
+    const prev = deduction.status;
+    deduction.status = "Approved";
+    deduction.approvedAt = new Date();
+    deduction.approvedBy = req.user._id;
+    deduction.rejectionReason = "";
+
+    deduction.approvalHistory.push({
+      status: "Approved",
+      actionBy: req.user._id,
+      actionByName: req.user.name,
+      actionRole: "Team Lead",
+      actionDate: new Date(),
+      comments,
+      previousStatus: prev,
+    });
+
+    await deduction.save();
+
+    await logDeductionAudit(
+      req,
+      "TEAM_LEAD_APPROVE_DEDUCTION",
+      deduction,
+      `Team Lead ${req.user.name} approved deduction ${deduction.deductionRecordId}`
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: "Deduction approved successfully",
+      data: deduction,
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+exports.rejectTeamDeduction = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { reason = "Rejected by Team Lead" } = req.body;
+    const EmployeeDeduction = require("../models/EmployeeDeduction");
+    const { logDeductionAudit } = require("../services/deduction.service");
+
+    const deduction = await EmployeeDeduction.findById(id);
+    if (!deduction) {
+      return res.status(404).json({ success: false, message: "Deduction not found" });
+    }
+
+    if (deduction.isLocked) {
+      return res.status(409).json({ success: false, message: "Cannot reject locked deduction record" });
+    }
+
+    const prev = deduction.status;
+    deduction.status = "Rejected";
+    deduction.rejectionReason = reason;
+
+    deduction.approvalHistory.push({
+      status: "Rejected",
+      actionBy: req.user._id,
+      actionByName: req.user.name,
+      actionRole: "Team Lead",
+      actionDate: new Date(),
+      comments: reason,
+      previousStatus: prev,
+    });
+
+    await deduction.save();
+
+    await logDeductionAudit(
+      req,
+      "TEAM_LEAD_REJECT_DEDUCTION",
+      deduction,
+      `Team Lead ${req.user.name} rejected deduction ${deduction.deductionRecordId}. Reason: ${reason}`
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: "Deduction rejected successfully",
+      data: deduction,
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};

@@ -25,6 +25,7 @@ const {
   applyEmployeeLeaveRequest,
   getEmployeeNotifications,
   markNotificationAsRead,
+  getEmployeeDeductions,
 } = require("../controllers/employeePanelController");
 
 // All routes require authentication
@@ -68,5 +69,8 @@ router.post("/leaves/apply", applyEmployeeLeaveRequest);
 // 9. Notification Center
 router.get("/notifications", getEmployeeNotifications);
 router.put("/notifications/:id/read", markNotificationAsRead);
+
+// 10. Employee Deduction Overview (Mobile & Web)
+router.get("/deductions", getEmployeeDeductions);
 
 module.exports = router;

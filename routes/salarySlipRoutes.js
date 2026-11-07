@@ -17,6 +17,7 @@ router.post("/generate", authorizeRoles("ca", "accountant", "admin", "hr", "supe
 router.get("/generate", authorizeRoles("ca", "accountant", "admin", "hr", "super admin", "employee"), getSalarySlipHtml);
 router.get("/print/:salaryId", authorizeRoles("ca", "accountant", "admin", "hr", "super admin", "employee"), getSalarySlipHtml);
 router.get("/html/:salaryId", authorizeRoles("ca", "accountant", "admin", "hr", "super admin", "employee"), getSalarySlipHtml);
+router.get("/pdf/:salaryId", authorizeRoles("ca", "accountant", "admin", "hr", "super admin", "employee"), getSalarySlipPdf);
 router.get("/:salaryId/pdf", authorizeRoles("ca", "accountant", "admin", "hr", "super admin", "employee"), getSalarySlipPdf);
 router.get("/download/:salaryId", authorizeRoles("ca", "accountant", "admin", "hr", "super admin", "employee"), getSalarySlipPdf);
 

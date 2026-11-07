@@ -131,6 +131,17 @@ const resolveAndEnrichMonthlySalary = async (req) => {
       } catch (_) {}
     }
 
+    if ((!salaryObj.customDeductionsList || salaryObj.customDeductionsList.length === 0) && empUserSearchId) {
+      try {
+        const { getApprovedLegallyPermissibleDeductions } = require("../services/deduction.service");
+        const deductionRes = await getApprovedLegallyPermissibleDeductions(empUserSearchId, salaryObj.month, salaryObj.year);
+        if (deductionRes && deductionRes.validDeductions && deductionRes.validDeductions.length > 0) {
+          salaryObj.customDeductionsList = deductionRes.validDeductions;
+          salaryObj.customDeductions = deductionRes.totalCustomDeductions;
+        }
+      } catch (_) {}
+    }
+
     let companyData = {};
     if (salaryObj.companyId && isDbConnectedOrMocked(Company.findById)) {
       try {
@@ -225,6 +236,17 @@ const resolveAndEnrichMonthlySalary = async (req) => {
       daysPayable: 30,
       status: "Paid",
     };
+
+    if ((!salaryObj.customDeductionsList || salaryObj.customDeductionsList.length === 0) && empUserSearchId) {
+      try {
+        const { getApprovedLegallyPermissibleDeductions } = require("../services/deduction.service");
+        const deductionRes = await getApprovedLegallyPermissibleDeductions(empUserSearchId, salaryObj.month, salaryObj.year);
+        if (deductionRes && deductionRes.validDeductions && deductionRes.validDeductions.length > 0) {
+          salaryObj.customDeductionsList = deductionRes.validDeductions;
+          salaryObj.customDeductions = deductionRes.totalCustomDeductions;
+        }
+      } catch (_) {}
+    }
 
     let companyData = {};
     if (virtualMonthlySalary.companyId && isDbConnectedOrMocked(Company.findById)) {

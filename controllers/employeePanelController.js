@@ -1483,3 +1483,33 @@ exports.markNotificationAsRead = async (req, res) => {
     return res.status(500).json({ success: false, message: error.message });
   }
 };
+
+
+exports.getEmployeeDeductions = async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const { month, year, status } = req.query;
+    const EmployeeDeduction = require("../models/EmployeeDeduction");
+
+    const query = {
+      $or: [{ employeeId: userId }, { userId }],
+    };
+
+    if (month) query.month = Number(month);
+    if (year) query.year = Number(year);
+    if (status) query.status = status;
+
+    const deductions = await EmployeeDeduction.find(query)
+      .populate("deductionMasterId", "name code category isLegallyPermissible")
+      .populate("approvedBy", "name email")
+      .sort({ year: -1, month: -1, createdAt: -1 });
+
+    return res.status(200).json({
+      success: true,
+      count: deductions.length,
+      data: deductions,
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};

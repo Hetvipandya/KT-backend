@@ -147,6 +147,23 @@ const payslipSchema = new mongoose.Schema(
       default: 0,
     },
 
+    customDeductions: {
+      type: Number,
+      default: 0,
+    },
+
+    customDeductionsList: [
+      {
+        deductionRecordId: { type: String, default: "" },
+        deductionMasterId: { type: mongoose.Schema.Types.ObjectId, ref: "DeductionMaster", default: null },
+        name: { type: String, default: "" },
+        code: { type: String, default: "" },
+        category: { type: String, default: "VOLUNTARY" },
+        amount: { type: Number, default: 0 },
+        isLegallyPermissible: { type: Boolean, default: true },
+      },
+    ],
+
     totalDeduction: {
       type: Number,
       default: 0,
@@ -253,6 +270,8 @@ const syncPayslipFromMonthlySalary = async (salaryDoc) => {
     pfDeduction: Number(raw.pfDeduction || 0),
     esicDeduction: Number(raw.esicDeduction || 0),
     professionalTax: Number(raw.professionalTax || 0),
+    customDeductions: Number(raw.customDeductions || 0),
+    customDeductionsList: Array.isArray(raw.customDeductionsList) ? raw.customDeductionsList : [],
     totalDeduction: Number(raw.totalDeduction || 0),
     tdsPercentage: Number(raw.tdsPercentage || 0),
     tdsAmount: Number(raw.tdsAmount || 0),

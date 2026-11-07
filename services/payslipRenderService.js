@@ -323,6 +323,7 @@ const renderPayslipHtml = (payslip, employeeData = {}, companyData = {}) => {
           ${fixedDeduction > 0 ? `<tr><td>Fixed Deductions</td><td class="text-right amount-col">${formatCurrency(fixedDeduction)}</td></tr>` : ''}
           ${extraDeduction > 0 ? `<tr><td>Extra Deductions</td><td class="text-right amount-col">${formatCurrency(extraDeduction)}</td></tr>` : ''}
           ${otherDeduction > 0 ? `<tr><td>Other Deductions</td><td class="text-right amount-col">${formatCurrency(otherDeduction)}</td></tr>` : ''}
+          ${Array.isArray(payslip.customDeductionsList) ? payslip.customDeductionsList.map(d => `<tr><td>${d.name || d.code || 'Custom Deduction'} (${d.deductionRecordId || ''})</td><td class="text-right amount-col">${formatCurrency(d.amount)}</td></tr>`).join('') : ''}
           <tr class="total-row">
             <td>Total Deductions (B)</td>
             <td class="text-right amount-col">${formatCurrency(totalDeduction)}</td>
@@ -542,6 +543,7 @@ const renderPayslipPdf = (res, payslip, employeeData = {}, companyData = {}) => 
     ...(fixedDeduction > 0 ? [{ label: "Fixed Deductions", val: fixedDeduction }] : []),
     ...(extraDeduction > 0 ? [{ label: "Extra Deductions", val: extraDeduction }] : []),
     ...(otherDeduction > 0 ? [{ label: "Other Deductions", val: otherDeduction }] : []),
+    ...(Array.isArray(payslip.customDeductionsList) ? payslip.customDeductionsList.map(d => ({ label: `${d.name || d.code || 'Custom Deduction'}`, val: Number(d.amount || 0) })) : []),
   ];
 
   const maxRows = Math.max(earningsList.length, deductionsList.length, 5);

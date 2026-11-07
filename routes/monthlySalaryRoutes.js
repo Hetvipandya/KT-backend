@@ -11,6 +11,7 @@ const {
   approveMonthlySalary, 
   payMonthlySalary,
   cancelMonthlySalary,
+  previewMonthlySalary,
 } = require("../controllers/monthlySalaryController");
 
 // Protect all monthly salary routes
@@ -25,6 +26,8 @@ router.get("/employee/:id", authorizeRoles("ca", "accountant", "admin", "hr", "s
 router.get("/user/:id", authorizeRoles("ca", "accountant", "admin", "hr", "super admin", "employee"), getMonthlySalaryById);
 
 // Generate, Update, Approve, Pay, Cancel (CA, Accountant, Admin, HR, Super Admin)
+router.post("/preview", authorizeRoles("ca", "accountant", "admin", "hr", "super admin"), previewMonthlySalary);
+router.get("/preview", authorizeRoles("ca", "accountant", "admin", "hr", "super admin"), previewMonthlySalary);
 router.post("/generate", authorizeRoles("ca", "accountant", "admin", "hr", "super admin"), generateMonthlySalary);
 router.post("/process", authorizeRoles("ca", "accountant", "admin", "hr", "super admin"), generateMonthlySalary);
 router.put("/:id", authorizeRoles("ca", "accountant", "admin", "hr", "super admin"), updateMonthlySalary);
