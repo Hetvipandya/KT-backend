@@ -1015,12 +1015,22 @@ const revertLeaveBalance = async (leave) => {
   }
 };
 
-// ================= TEAM LEAD APPROVAL =================
-// ================= TEAM LEAD APPROVAL =================
 exports.teamLeadApproval = async (req, res) => {
   try {
-    const { leaveId, status, remark, description } = req.body;
-    const remarkText = (remark || description || "").trim();
+    const { leaveId: bodyLeaveId, status: bodyStatus, remark, description } = req.body || {};
+    const leaveId = bodyLeaveId || req.params.id || req.params.leaveId || req.query.leaveId;
+
+    let status = bodyStatus;
+    if (!status) {
+      const path = (req.originalUrl || req.path || "").toLowerCase();
+      if (path.includes("/reject")) {
+        status = "rejected";
+      } else if (path.includes("/approve")) {
+        status = "approved";
+      }
+    }
+
+    const remarkText = (remark || description || (status === "approved" ? "Approved by Team Lead" : "")).trim();
 
     if (!leaveId) {
       return res.status(400).json({
@@ -1052,8 +1062,15 @@ exports.teamLeadApproval = async (req, res) => {
       });
     }
 
-    // 🔥 Check: Team Lead cannot approve their OWN leave
-    if (leave.employeeId._id.toString() === req.user._id.toString()) {
+    // Check: Team Lead cannot approve their OWN leave
+    const leaveEmployeeId = String(
+      (leave.employeeId && typeof leave.employeeId === "object" && leave.employeeId._id)
+        ? leave.employeeId._id
+        : leave.employeeId || ""
+    );
+    const authenticatedUserId = String(req.user?._id || req.user?.id || "");
+
+    if (leaveEmployeeId && authenticatedUserId && leaveEmployeeId === authenticatedUserId) {
       return res.status(403).json({
         success: false,
         message:
@@ -1061,15 +1078,21 @@ exports.teamLeadApproval = async (req, res) => {
       });
     }
 
-    // Check if this is an employee/intern leave
-    if (!["employee", "intern"].includes(leave.applicantRole)) {
+    // Check if this is an employee/intern leave (not HR or Admin)
+    const applicantRole = String(
+      leave.applicantRole ||
+      (typeof leave.employeeId === "object" ? leave.employeeId?.role : "") ||
+      "employee"
+    ).toLowerCase().trim().replace(/[_s-]+/g, "");
+
+    if (applicantRole === "hr" || applicantRole === "admin" || applicantRole === "superadmin") {
       return res.status(400).json({
         success: false,
         message: "Team Lead can only approve employee/intern leaves",
       });
     }
 
-    if (leave.teamLeadStatus !== "pending") {
+    if (leave.teamLeadStatus && leave.teamLeadStatus !== "pending") {
       return res.status(400).json({
         success: false,
         message: "Leave already processed by Team Lead",
@@ -1109,7 +1132,7 @@ exports.teamLeadApproval = async (req, res) => {
 
     const enrichedLeave = await enrichLeavesWithEmployeeDetails(leave);
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       message:
         status === "approved"
@@ -1119,7 +1142,7 @@ exports.teamLeadApproval = async (req, res) => {
     });
   } catch (error) {
     console.error("Team Lead Approval Error:", error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: error.message,
     });

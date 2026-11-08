@@ -75,21 +75,42 @@ router.put(
 router.put(
   "/teamlead-approval",
   protect,
-  authorizeRoles("team lead"),
+  authorizeRoles("team lead", "admin"),
   teamLeadApproval
 );
 
-// router.put(
-//   "/teamlead/approve",
-//   protect,
-//   authorizeRoles("team lead"),
-//   teamLeadApproval
-// );
+router.put(
+  "/teamlead-approval/:id",
+  protect,
+  authorizeRoles("team lead", "admin"),
+  teamLeadApproval
+);
+
+router.put(
+  "/teamlead/approve",
+  protect,
+  authorizeRoles("team lead", "admin"),
+  teamLeadApproval
+);
+
+router.put(
+  "/teamlead/approve/:id",
+  protect,
+  authorizeRoles("team lead", "admin"),
+  teamLeadApproval
+);
 
 router.put(
   "/teamlead/reject",
   protect,
-  authorizeRoles("team lead"),
+  authorizeRoles("team lead", "admin"),
+  teamLeadApproval
+);
+
+router.put(
+  "/teamlead/reject/:id",
+  protect,
+  authorizeRoles("team lead", "admin"),
   teamLeadApproval
 );
 

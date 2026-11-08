@@ -483,4 +483,169 @@ describe("Team Lead api/leave/all Employee Request Visibility", () => {
     expect(ids).toContain(leave1._id.toString());
     expect(ids).not.toContain(leave2._id.toString());
   });
+
+  test("8. Team Lead whose User.role is 'employee' can APPROVE employee leave via PUT /api/leave/teamlead-approval", async () => {
+    const leadUser = await User.create({
+      name: "Approver Lead",
+      email: "approver.lead@example.com",
+      password: "Password123!",
+      phoneNumber: "9876543230",
+      role: "employee", // User.role is employee
+      isActive: true,
+      status: "Active",
+      isApproved: true,
+    });
+    await Employee.create({
+      userID: leadUser._id,
+      firstName: "Approver",
+      lastName: "Lead",
+      email: leadUser.email,
+      isTeamLead: true, // Employee is Team Lead
+      role: "team lead",
+    });
+
+    const empUser = await User.create({
+      name: "Subordinate To Approve",
+      email: "sub.approve@example.com",
+      password: "Password123!",
+      phoneNumber: "9876543231",
+      role: "employee",
+      isActive: true,
+      status: "Active",
+      isApproved: true,
+    });
+    await Employee.create({
+      userID: empUser._id,
+      firstName: "Subordinate",
+      lastName: "Approve",
+      email: empUser.email,
+      teamLeadUser: leadUser._id,
+      role: "employee",
+    });
+
+    const leave = await Leave.create({
+      employeeId: empUser._id,
+      applicantRole: "employee",
+      leaveType: "paid",
+      startDate: new Date("2026-12-15"),
+      endDate: new Date("2026-12-16"),
+      totalDays: 2,
+      reason: "Vacation",
+      status: "pending",
+      teamLeadStatus: "pending",
+      hrStatus: "pending",
+    });
+
+    const leadToken = createToken(leadUser);
+    const res = await request(app)
+      .put("/api/leave/teamlead-approval")
+      .set("Authorization", `Bearer ${leadToken}`)
+      .send({
+        leaveId: leave._id.toString(),
+        status: "approved",
+        remark: "Approved, good work",
+      });
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+
+    const updatedLeave = await Leave.findById(leave._id);
+    expect(updatedLeave.teamLeadStatus).toBe("approved");
+    expect(updatedLeave.status).toBe("pending_hr");
+    expect(updatedLeave.hrStatus).toBe("pending");
+  });
+
+  test("9. Team Lead can call PUT /api/leave/teamlead/approve directly", async () => {
+    const leadUser = await User.create({
+      name: "Direct Approve Lead",
+      email: "direct.lead@example.com",
+      password: "Password123!",
+      phoneNumber: "9876543232",
+      role: "employee",
+      isActive: true,
+      status: "Active",
+      isApproved: true,
+    });
+    await Employee.create({
+      userID: leadUser._id,
+      firstName: "Direct",
+      lastName: "Lead",
+      email: leadUser.email,
+      isTeamLead: true,
+      role: "team lead",
+    });
+
+    const empUser = await User.create({
+      name: "Emp Direct",
+      email: "emp.direct@example.com",
+      password: "Password123!",
+      phoneNumber: "9876543233",
+      role: "employee",
+      isActive: true,
+      status: "Active",
+      isApproved: true,
+    });
+
+    const leave = await Leave.create({
+      employeeId: empUser._id,
+      applicantRole: "employee",
+      leaveType: "paid",
+      startDate: new Date("2026-12-18"),
+      endDate: new Date("2026-12-18"),
+      totalDays: 1,
+      reason: "Personal",
+      status: "pending",
+      teamLeadStatus: "pending",
+    });
+
+    const leadToken = createToken(leadUser);
+    const res = await request(app)
+      .put("/api/leave/teamlead/approve")
+      .set("Authorization", `Bearer ${leadToken}`)
+      .send({
+        leaveId: leave._id.toString(),
+        remark: "Looks good",
+      });
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+
+    const updatedLeave = await Leave.findById(leave._id);
+    expect(updatedLeave.teamLeadStatus).toBe("approved");
+    expect(updatedLeave.status).toBe("pending_hr");
+  });
+
+  test("10. Regular employee cannot access teamlead-approval (gets 403)", async () => {
+    const regularEmpUser = await User.create({
+      name: "Just Employee",
+      email: "just.emp@example.com",
+      password: "Password123!",
+      phoneNumber: "9876543234",
+      role: "employee",
+      isActive: true,
+      status: "Active",
+      isApproved: true,
+    });
+    await Employee.create({
+      userID: regularEmpUser._id,
+      firstName: "Just",
+      lastName: "Employee",
+      email: regularEmpUser.email,
+      isTeamLead: false,
+      role: "employee",
+    });
+
+    const regularToken = createToken(regularEmpUser);
+    const res = await request(app)
+      .put("/api/leave/teamlead-approval")
+      .set("Authorization", `Bearer ${regularToken}`)
+      .send({
+        leaveId: new mongoose.Types.ObjectId().toString(),
+        status: "approved",
+        remark: "Unauthorized try",
+      });
+
+    expect(res.status).toBe(403);
+    expect(res.body.message).toContain('is not authorized to access this resource');
+  });
 });
