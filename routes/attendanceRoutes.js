@@ -20,6 +20,9 @@ const {
   getMonthlyAttendance,
   getAllAbsentAttendance,
   recalculateAllAttendance,
+  finalizeDailyAttendance,
+  previewDailyAttendanceFinalization,
+  getAttendanceSchedulerLogs,
   checkLocationGeofence,
   getGeofenceConfig
 } = require("../controllers/attendanceController");
@@ -211,13 +214,13 @@ router.get(
 router.put(
   "/approve",
   protect,
-  authorizeRoles("admin", "hr"),
+  authorizeRoles("admin", "hr", "team lead"),
   approveAttendance
 );
 router.post(
   "/approve",
   protect,
-  authorizeRoles("admin", "hr"),
+  authorizeRoles("admin", "hr", "team lead"),
   approveAttendance
 );
 
@@ -225,13 +228,13 @@ router.post(
 router.put(
   "/reject",
   protect,
-  authorizeRoles("admin", "hr"),
+  authorizeRoles("admin", "hr", "team lead"),
   rejectAttendance
 );
 router.post(
   "/reject",
   protect,
-  authorizeRoles("admin", "hr"),
+  authorizeRoles("admin", "hr", "team lead"),
   rejectAttendance
 );
 
@@ -259,5 +262,28 @@ router.get(
   "/absent/all",
   getAllAbsentAttendance
 )
+
+
+// ================= DAILY ATTENDANCE FINALIZATION SCHEDULER =================
+router.post(
+  "/finalize-daily",
+  protect,
+  authorizeRoles("admin", "hr"),
+  finalizeDailyAttendance
+);
+
+router.get(
+  "/finalize-daily/preview",
+  protect,
+  authorizeRoles("admin", "hr"),
+  previewDailyAttendanceFinalization
+);
+
+router.get(
+  "/scheduler/logs",
+  protect,
+  authorizeRoles("admin", "hr"),
+  getAttendanceSchedulerLogs
+);
 
 module.exports = router;

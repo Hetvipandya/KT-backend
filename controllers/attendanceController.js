@@ -4,6 +4,8 @@ const { buildAttendanceTimeline } = require("../utils/attendanceTimeline");
 const { notifyAutoCheckoutSuccess } = require("../utils/attendanceNotifications");
 const { notify } = require("../utils/sendNotification");
 const { recordAuditEvent } = require("../services/auditLog.service");
+const { determineAttendanceStatus, calculateCheckInStatus: calcCheckInStatus, normalizeAttendanceSettings } = require("../services/attendanceCalculationService");
+const { runDailyAttendanceFinalization } = require("../services/attendanceScheduler.service");
 const User = require("../models/User");
 const {
   OFFICE_LOCATION,
@@ -88,6 +90,7 @@ const normalizeRoleValue = (value) => {
 
 exports.__test__normalizeRoleValue = normalizeRoleValue;
 
+
 // ============================================================
 // DEFAULT SETTINGS
 // ============================================================
@@ -128,14 +131,7 @@ const normalizeTime = (value, fallback) => {
   const hour = Number(parts[0]);
   const minute = Number(parts[1]);
 
-  if (
-    !Number.isInteger(hour) ||
-    !Number.isInteger(minute) ||
-    hour < 0 || 
-    hour > 23 ||
-    minute < 0 ||
-    minute > 59
-  ) {
+  if (isNaN(hour) || isNaN(minute)) {
     return fallback;
   }
 
@@ -143,88 +139,99 @@ const normalizeTime = (value, fallback) => {
 };
 
 // ============================================================
-// TIME TO MINUTES
+// RESOLVE TEAM MEMBER USER IDS (FOR TEAM LEAD ATTENDANCE SCOPE)
 // ============================================================
+const resolveTeamMemberUserIds = async (teamLeadUserId) => {
+  if (!teamLeadUserId) return null;
+  try {
+    const Team = require("../models/Team");
+    const Employee = require("../models/Employee");
+    const User = require("../models/User");
+    const rawId = String(teamLeadUserId).trim();
+    const objectId = mongoose.Types.ObjectId.isValid(rawId)
+      ? new mongoose.Types.ObjectId(rawId)
+      : null;
+    const leadMatch = objectId ? [rawId, objectId] : [rawId];
 
-const timeToMinutes = (time) => {
-  const normalized = normalizeTime(
-    time,
-    DEFAULT_LATE_CUTOFF
-  );
+    const leadEmployee = await Employee.findOne({
+      $or: [
+        { userID: { $in: leadMatch } },
+        { userId: { $in: leadMatch } },
+        { _id: { $in: leadMatch } },
+      ],
+    })
+      .select("_id userID userId")
+      .lean();
 
-  const [hour, minute] = normalized
-    .split(":")
-    .map(Number);
+    const employeeLeadMatch = leadEmployee
+      ? [...leadMatch, leadEmployee._id, String(leadEmployee._id)]
+      : leadMatch;
 
-  return hour * 60 + minute;
-};
+    const [teams, directEmployees] = await Promise.all([
+      Team.find({
+        $or: [
+          { teamLeadUser: { $in: employeeLeadMatch } },
+          { teamLeadEmployee: { $in: employeeLeadMatch } },
+          { teamLead: { $in: employeeLeadMatch } },
+          { teamLeadId: { $in: employeeLeadMatch.map(String) } },
+        ],
+      })
+        .select("employees members teamLeadUser teamLeadEmployee")
+        .lean(),
+      Employee.find({
+        $or: [
+          { teamLeadUser: { $in: employeeLeadMatch } },
+          { teamLeadEmployee: { $in: employeeLeadMatch } },
+          { teamLead: { $in: employeeLeadMatch } },
+          { teamLeadId: { $in: employeeLeadMatch.map(String) } },
+        ],
+      })
+        .select("_id userID userId")
+        .lean(),
+    ]);
 
-// ============================================================
-// VALIDATE SETTINGS ORDER
-//
-// office start <= late cutoff <= absent cutoff <= office end
-// ============================================================
+    const memberUserIds = new Set();
+    memberUserIds.add(String(teamLeadUserId));
 
-const normalizeAttendanceSettings = (source = {}) => {
-  const settingsSource =
-    source.settings &&
-    typeof source.settings === "object"
-      ? source.settings
-      : source;
+    directEmployees.forEach((emp) => {
+      if (emp._id) memberUserIds.add(String(emp._id));
+      if (emp.userID) memberUserIds.add(String(emp.userID));
+      if (emp.userId) memberUserIds.add(String(emp.userId));
+    });
 
-  const officeStartTime = normalizeTime(
-    settingsSource.officeStartTime,
-    DEFAULT_OFFICE_START_TIME
-  );
+    const empIdsToFetch = [];
+    teams.forEach((t) => {
+      (t.employees || []).forEach((e) => {
+        const idStr = String(e._id || e);
+        memberUserIds.add(idStr);
+        if (mongoose.isValidObjectId(idStr)) {
+          empIdsToFetch.push(new mongoose.Types.ObjectId(idStr));
+        }
+      });
+      (t.members || []).forEach((m) => {
+        const uId = m.user || m.userId || m.employee || m.employeeId || m;
+        if (uId) memberUserIds.add(String(uId));
+      });
+    });
 
-  const lateCutoffTime = normalizeTime(
-    settingsSource.lateCutoffTime ??
-      settingsSource.lateAfter ??
-      settingsSource.lateAfterTime,
-    DEFAULT_LATE_CUTOFF
-  );
+    if (empIdsToFetch.length > 0) {
+      const linkedEmps = await Employee.find({ _id: { $in: empIdsToFetch } })
+        .select("_id userID userId")
+        .lean();
+      linkedEmps.forEach((emp) => {
+        if (emp.userID) memberUserIds.add(String(emp.userID));
+        if (emp.userId) memberUserIds.add(String(emp.userId));
+        if (emp._id) memberUserIds.add(String(emp._id));
+      });
+    }
 
-  const halfDayCutoffTime = normalizeTime(
-    settingsSource.halfDayCutoffTime ??
-      settingsSource.halfDayAfter ??
-      settingsSource.halfDayAfterTime,
-    DEFAULT_HALF_DAY_CUTOFF
-  );
-
-  const absentCutoffTime = normalizeTime(
-    settingsSource.absentCutoffTime ??
-      settingsSource.absentAfter ??
-      settingsSource.absentAfterTime,
-    DEFAULT_ABSENT_CUTOFF
-  );
-
-  const officeEndTime = normalizeTime(
-    settingsSource.officeEndTime,
-    DEFAULT_OFFICE_END_TIME
-  );
-
-  const presentHours =
-    Number(settingsSource.presentHours) ||
-    DEFAULT_PRESENT_HOURS;
-
-  const halfDayHours =
-    Number(settingsSource.halfDayHours) ||
-    DEFAULT_HALF_DAY_HOURS;
-
-  const breakLimit =
-    Number(settingsSource.breakLimit) ||
-    DEFAULT_BREAK_LIMIT;
-
-  return {
-    officeStartTime,
-    lateCutoffTime,
-    halfDayCutoffTime,
-    absentCutoffTime,
-    officeEndTime,
-    presentHours,
-    halfDayHours,
-    breakLimit,
-  };
+    return Array.from(memberUserIds).map((id) =>
+      mongoose.Types.ObjectId.isValid(id) ? new mongoose.Types.ObjectId(id) : id
+    );
+  } catch (err) {
+    console.error("resolveTeamMemberUserIds error:", err);
+    return null;
+  }
 };
 
 // ============================================================
@@ -893,6 +900,20 @@ const formatAttendanceDocument = (
     plainAttendance,
     buildAttendanceTimeline(plainAttendance),
   );
+
+    if (plainAttendance.userId && typeof plainAttendance.userId === "object") {
+    plainAttendance.employee = plainAttendance.employee || plainAttendance.userId;
+    plainAttendance.user = plainAttendance.user || plainAttendance.userId;
+    plainAttendance.employeeName =
+      plainAttendance.employeeName ||
+      plainAttendance.userId.name ||
+      "";
+    plainAttendance.employeeId =
+      plainAttendance.employeeId ||
+      plainAttendance.userId.uniqueID ||
+      plainAttendance.userId.employeeID ||
+      plainAttendance.userId._id;
+  }
 
   return plainAttendance;
 };
@@ -1667,14 +1688,14 @@ exports.approveAttendance =
       const approverRole = normalizeRoleValue(approver.role);
 
       if (
-        !["admin", "hr"].includes(
+        !["admin", "hr", "team lead"].includes(
           approverRole
         )
       ) {
         return res.status(403).json({
           success: false,
           message:
-            "Only Admin or HR can approve attendance",
+            "Only Admin, HR, or Team Lead can approve attendance",
         });
       }
 
@@ -2097,22 +2118,22 @@ exports.checkOut = async (req, res) => {
 
     attendance.totalWorkTime = Number(totalHours.toFixed(2));
 
-    const attendanceStatus = calculateAttendanceStatus(
-      checkInTime,
-      settings
+    const calculatedStatus = determineAttendanceStatus(
+      {
+        checkInTime,
+        checkOutTime: checkoutTime,
+        totalBreakTime: attendance.totalBreakTime,
+        totalWorkTime: attendance.totalWorkTime,
+      },
+      settings,
+      { isEvaluationFinal: true }
     );
 
-    attendance.isLate = attendanceStatus.isLate;
-
-    if (attendanceStatus.isAbsentDueToLate) {
-      attendance.status = "absent";
-    } else if (
-      attendanceStatus.status === "half-day" ||
-      attendance.totalWorkTime < (settings.presentHours || 8)
-    ) {
-      attendance.status = "half-day";
-    } else {
-      attendance.status = "present";
+    attendance.totalWorkTime = calculatedStatus.totalWorkTime;
+    attendance.isLate = calculatedStatus.isLate;
+    attendance.status = calculatedStatus.status;
+    if (calculatedStatus.halfDayType) {
+      attendance.halfDayType = calculatedStatus.halfDayType;
     }
 
     await attendance.save();
@@ -2641,10 +2662,10 @@ exports.rejectAttendance =
       }
 
       const approverRole = normalizeRoleValue(approver.role);
-      if (!["admin", "hr"].includes(approverRole)) {
+      if (!["admin", "hr", "team lead"].includes(approverRole)) {
         return res.status(403).json({
           success: false,
-          message: "Only Admin or HR can reject attendance",
+          message: "Only Admin, HR, or Team Lead can reject attendance",
         });
       }
 
@@ -3105,49 +3126,191 @@ exports.getAttendanceById =
 // GET PENDING ATTENDANCE
 // ============================================================
 
-exports.getPendingAttendance =
-  async (req, res) => {
-    try {
-      const [data, approvedCount, rejectedCount] =
-        await Promise.all([
-          Attendance.find({
-            approvalStatus: "pending",
-            checkInTime: { $ne: null },
-          }).populate("userId", "name uniqueID role"),
-          Attendance.countDocuments({
-            approvalStatus: "approved",
-            checkInTime: { $ne: null },
-          }),
-          Attendance.countDocuments({
-            approvalStatus: "rejected",
-            checkInTime: { $ne: null },
-          }),
-        ]);
+exports.getPendingAttendance = async (req, res) => {
+  try {
+    const callerRole = normalizeRoleValue(req.user?.role);
+    const baseFilter = {};
 
-      return res.json({
-        success: true,
-        count: data.length,
-        pendingCount: data.length,
-        approvedCount,
-        rejectedCount,
-        data: data.map(formatAttendanceDocument),
-      });
-    } catch (err) {
-      console.error(
-        "GetPendingAttendance Error:",
-        err
-      );
-
-      return res.status(500).json({
-        success: false,
-        message: err.message,
-      });
+    // 1. Role-based scoping: team leads see their team members; employees see their own; admin/hr see all
+    if (callerRole === "team lead" && req.user?._id) {
+      const teamMemberIds = await resolveTeamMemberUserIds(req.user._id);
+      if (teamMemberIds && teamMemberIds.length > 0) {
+        baseFilter.userId = { $in: teamMemberIds };
+      }
+    } else if ((callerRole === "employee" || callerRole === "intern") && req.user?._id) {
+      baseFilter.userId = req.user._id;
     }
-  };
 
-// ============================================================
-// GET MY ATTENDANCE HISTORY
-// ============================================================
+    // Explicit query filter overrides if provided
+    const targetUserId = req.query?.userId || req.query?.employeeId;
+    if (targetUserId) {
+      baseFilter.userId = targetUserId;
+    }
+
+    // Optional date filtering
+    const dateFilter = {};
+    if (req.query?.date) {
+      dateFilter.date = req.query.date;
+    } else if (req.query?.startDate && req.query?.endDate) {
+      dateFilter.date = { $gte: req.query.startDate, $lte: req.query.endDate };
+    }
+
+    const PENDING_STATUSES = ["pending", "Pending", "PENDING"];
+    const APPROVED_STATUSES = ["approved", "Approved", "APPROVED"];
+    const REJECTED_STATUSES = ["rejected", "Rejected", "REJECTED"];
+
+    // Base check-in requirement: check-in requests require checkInTime
+    const checkInCondition = { checkInTime: { $ne: null } };
+
+    // Pending filter
+    const pendingQuery = {
+      ...baseFilter,
+      ...checkInCondition,
+      $or: [
+        { approvalStatus: { $in: PENDING_STATUSES } },
+        { status: { $in: PENDING_STATUSES } },
+        {
+          approvalStatus: { $nin: [...APPROVED_STATUSES, ...REJECTED_STATUSES] },
+          approvedAt: null,
+        },
+      ],
+    };
+
+    // Approved filter
+    const approvedQuery = {
+      ...baseFilter,
+      ...checkInCondition,
+      approvalStatus: { $in: APPROVED_STATUSES },
+    };
+
+    // Rejected filter
+    const rejectedQuery = {
+      ...baseFilter,
+      ...checkInCondition,
+      approvalStatus: { $in: REJECTED_STATUSES },
+    };
+
+    // 2. Fetch counts concurrently
+    const [pendingCount, approvedCount, rejectedCount] = await Promise.all([
+      Attendance.countDocuments(pendingQuery),
+      Attendance.countDocuments(approvedQuery),
+      Attendance.countDocuments(rejectedQuery),
+    ]);
+
+    // 3. Determine which list to return based on requested status tab
+    const requestedStatus = (
+      req.query?.status ||
+      req.query?.approvalStatus ||
+      req.query?.tab ||
+      req.query?.filter ||
+      "pending"
+    )
+      .toString()
+      .trim()
+      .toLowerCase();
+
+    let queryForData;
+    if (requestedStatus === "approved") {
+      queryForData = { ...approvedQuery, ...dateFilter };
+    } else if (requestedStatus === "rejected") {
+      queryForData = { ...rejectedQuery, ...dateFilter };
+    } else if (requestedStatus === "all") {
+      queryForData = {
+        ...baseFilter,
+        ...checkInCondition,
+        ...dateFilter,
+        $or: [
+          { approvalStatus: { $in: [...PENDING_STATUSES, ...APPROVED_STATUSES, ...REJECTED_STATUSES] } },
+          { status: { $in: PENDING_STATUSES } },
+        ],
+      };
+    } else {
+      // Default: "pending"
+      queryForData = { ...pendingQuery, ...dateFilter };
+    }
+
+    // 4. Fetch the target data
+    const rawRecords = await Attendance.find(queryForData)
+      .populate("userId", "name uniqueID role email department phone profileImage avatar employeeID")
+      .populate("approvedBy", "name uniqueID role")
+      .sort({ date: -1, checkInTime: -1, createdAt: -1 });
+
+    const User = require("../models/User");
+    const Employee = require("../models/Employee");
+
+    // 5. Format and enrich records
+    const data = await Promise.all(
+      rawRecords.map(async (doc) => {
+        const formatted = formatAttendanceDocument(doc);
+        let userObj = doc.userId;
+
+        if (!userObj || !userObj.name) {
+          const rawId = doc.userId?._id || doc.userId;
+          if (rawId && mongoose.isValidObjectId(rawId)) {
+            try {
+              userObj = await User.findById(rawId)
+                .select("name uniqueID role email department phone profileImage avatar")
+                .lean();
+              if (!userObj) {
+                const emp = await Employee.findById(rawId)
+                  .select("name uniqueID role email department phone userID")
+                  .lean();
+                if (emp) {
+                  userObj = {
+                    _id: emp._id,
+                    name: emp.name,
+                    uniqueID: emp.uniqueID,
+                    role: emp.role,
+                    department: emp.department,
+                    email: emp.email,
+                    phone: emp.phone,
+                  };
+                }
+              }
+            } catch (_) {}
+          }
+        }
+
+        const u = userObj || {};
+        const employeeDetails = {
+          _id: u._id || doc.userId,
+          name: u.name || "Unknown Employee",
+          uniqueID: u.uniqueID || u.employeeID || "",
+          role: u.role || doc.userType || "",
+          department: u.department || "",
+          email: u.email || "",
+          phone: u.phone || "",
+        };
+
+        return {
+          ...formatted,
+          userId: userObj || formatted.userId,
+          user: employeeDetails,
+          employee: employeeDetails,
+          employeeName: employeeDetails.name,
+          employeeId: employeeDetails.uniqueID || employeeDetails._id,
+          department: employeeDetails.department,
+          email: employeeDetails.email,
+        };
+      })
+    );
+
+    return res.status(200).json({
+      success: true,
+      count: data.length,
+      pendingCount,
+      approvedCount,
+      rejectedCount,
+      data,
+    });
+  } catch (err) {
+    console.error("GetPendingAttendance Error:", err);
+    return res.status(500).json({
+      success: false,
+      message: err.message,
+    });
+  }
+};
 
 exports.getMyAttendanceHistory =
   async (req, res) => {
@@ -4187,31 +4350,18 @@ exports.recalculateAllAttendance = async (req, res) => {
     let updatedCount = 0;
 
     for (const record of records) {
-      let newStatus = record.status;
-      let newIsLate = record.isLate;
-
-      if (!record.checkInTime) {
-        newStatus = "absent";
-        newIsLate = false;
-      } else {
-        const attStatus = determineAttendanceStatus(record.checkInTime, settings);
-        newIsLate = attStatus.isLate;
-
-        if (attStatus.isAbsentDueToLate) {
-          newStatus = "absent";
-        } else if (
-          attStatus.status === "half-day" ||
-          (record.totalWorkTime || 0) < settings.presentHours
-        ) {
-          newStatus = "half-day";
-        } else {
-          newStatus = "present";
-        }
-      }
+      const calculated = determineAttendanceStatus(
+        record,
+        settings,
+        { isEvaluationFinal: Boolean(record.checkOutTime) }
+      );
+      const newStatus = calculated.status;
+      const newIsLate = calculated.isLate;
 
       if (record.status !== newStatus || record.isLate !== newIsLate) {
         record.status = newStatus;
         record.isLate = newIsLate;
+        if (calculated.halfDayType) record.halfDayType = calculated.halfDayType;
         await record.save();
         updatedCount++;
       }
@@ -4346,21 +4496,22 @@ const executeAutoCheckout = async ({
       breakLimit: attendance.breakLimit,
     });
 
-    const attendanceStatus = calculateAttendanceStatus(
-      checkInTime,
-      settings
+    const calculatedStatus = determineAttendanceStatus(
+      {
+        checkInTime,
+        checkOutTime: attendance.checkOutTime || checkoutTime,
+        totalBreakTime: attendance.totalBreakTime,
+        totalWorkTime: attendance.totalWorkTime,
+      },
+      settings,
+      { isEvaluationFinal: true }
     );
-    attendance.isLate = attendanceStatus.isLate;
 
-    if (attendanceStatus.isAbsentDueToLate) {
-      attendance.status = "absent";
-    } else if (
-      attendanceStatus.status === "half-day" ||
-      attendance.totalWorkTime < (settings.presentHours || 8)
-    ) {
-      attendance.status = "half-day";
-    } else {
-      attendance.status = "present";
+    attendance.totalWorkTime = calculatedStatus.totalWorkTime;
+    attendance.isLate = calculatedStatus.isLate;
+    attendance.status = calculatedStatus.status;
+    if (calculatedStatus.halfDayType) {
+      attendance.halfDayType = calculatedStatus.halfDayType;
     }
 
     await attendance.save();
@@ -4836,6 +4987,93 @@ exports.getGeofenceConfig = async (req, res) => {
         fetchIntervalSeconds: LOCATION_FETCH_INTERVAL_SECONDS,
       },
       message: "Office geofence configuration fetched successfully",
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+/**
+ * Manually trigger daily attendance finalization (Admin / HR)
+ */
+exports.finalizeDailyAttendance = async (req, res) => {
+  try {
+    const { targetDate } = req.body || {};
+    const result = await runDailyAttendanceFinalization({
+      targetDate,
+      executionType: "MANUAL",
+      dryRun: false,
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: result.skipped ? result.summary.reason : `Daily attendance finalization executed successfully for ${result.summary.date}`,
+      data: result.summary,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+/**
+ * Preview daily attendance finalization without mutating database (Admin / HR)
+ */
+exports.previewDailyAttendanceFinalization = async (req, res) => {
+  try {
+    const targetDate = req.query?.date || req.body?.targetDate;
+    const result = await runDailyAttendanceFinalization({
+      targetDate,
+      executionType: "PREVIEW",
+      dryRun: true,
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: `Preview generated successfully for ${result.summary.date}`,
+      data: result.summary,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+/**
+ * Get Attendance Scheduler Execution Logs (Admin / HR)
+ */
+exports.getAttendanceSchedulerLogs = async (req, res) => {
+  try {
+    const { limit = 30, page = 1 } = req.query;
+    const skip = (Number(page) - 1) * Number(limit);
+    const AttendanceJobLog = require("../models/AttendanceJobLog");
+
+    const [logs, total] = await Promise.all([
+      AttendanceJobLog.find({})
+        .sort({ date: -1, executedAt: -1 })
+        .skip(skip)
+        .limit(Number(limit)),
+      AttendanceJobLog.countDocuments({}),
+    ]);
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        logs,
+        pagination: {
+          total,
+          page: Number(page),
+          limit: Number(limit),
+          totalPages: Math.ceil(total / Number(limit)),
+        },
+      },
     });
   } catch (error) {
     return res.status(500).json({

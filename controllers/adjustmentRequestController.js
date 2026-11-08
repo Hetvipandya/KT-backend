@@ -5,6 +5,7 @@ const TeamLead = require("../models/Team");
 const AdjustmentRequest = require("../models/AdjustmentRequest");
 const { notify } = require("../utils/sendNotification");
 const { recordAuditEvent } = require("../services/auditLog.service");
+const { determineAttendanceStatus } = require("../services/attendanceCalculationService");
 
 const normalizeAttendanceDate = (value) => {
   if (!value) return null;
@@ -114,51 +115,32 @@ const parseTimeToDate = (dateStr, timeStr) => {
 
 const applyCheckInStatus = (attendance) => {
   if (!attendance.checkInTime) {
-    attendance.isLate = false; 
+    attendance.isLate = false;
+    attendance.status = "absent";
     return;
   }
 
-  const istCheckIn = new Date(
-    attendance.checkInTime.getTime() +
-      5.5 * 60 * 60 * 1000
+  const calculated = determineAttendanceStatus(
+    {
+      checkInTime: attendance.checkInTime,
+      checkOutTime: attendance.checkOutTime,
+      totalWorkTime: attendance.totalWorkTime,
+      totalBreakTime: attendance.totalBreakTime,
+    },
+    {
+      presentHours: attendance.presentHours || 8,
+      halfDayHours: attendance.halfDayHours || 4,
+      lateCutoffTime: attendance.lateCutoffTime || "10:10",
+      halfDayCutoffTime: attendance.halfDayCutoffTime || "10:30",
+      absentCutoffTime: attendance.absentCutoffTime || "15:00",
+    },
+    { isEvaluationFinal: Boolean(attendance.checkOutTime) }
   );
 
-  const checkInMinutes =
-    istCheckIn.getUTCHours() * 60 +
-    istCheckIn.getUTCMinutes();
-
-  const OFFICE_START = 10 * 60 + 10; // 10:10 AM (610 mins)
-  const LATE_CUTOFF = 10 * 60 + 30;  // 10:30 AM (630 mins)
-  const HALF_DAY_CUTOFF = 15 * 60;   // 3:00 PM / 15:00 (900 mins)
-
-  // 1. 10:00 AM to 10:10 AM: Present & On Time
-  if (checkInMinutes <= OFFICE_START) {
-    attendance.isLate = false;
-    attendance.status = "present";
-  } 
-  // 2. 10:11 AM to 10:30 AM: Present & Late
-  else if (checkInMinutes <= LATE_CUTOFF) {
-    attendance.isLate = true;
-    attendance.status = "present";
-  } 
-  // 3. 10:31 AM to 3:00 PM (15:00): Half Day
-  else if (checkInMinutes <= HALF_DAY_CUTOFF) {
-    attendance.isLate = true;
-    attendance.status = "half-day";
-  } 
-  // 4. After 3:00 PM (15:00): Absent
-  else {
-    attendance.isLate = false;
-    attendance.status = "absent";
-  }
-
-  // Work Hours rule: If 8 hours are not completed (totalWorkTime > 0 and < 8), set status to half-day
-  if (
-    attendance.checkOutTime &&
-    attendance.totalWorkTime > 0 &&
-    attendance.totalWorkTime < 8
-  ) {
-    attendance.status = "half-day";
+  attendance.isLate = calculated.isLate;
+  attendance.status = calculated.status;
+  if (calculated.halfDayType) {
+    attendance.halfDayType = calculated.halfDayType;
   }
 };
 

@@ -139,6 +139,8 @@ const attendanceSchema = new mongoose.Schema(
       type: String,
       enum: ["pending", "approved", "rejected"],
       default: "pending",
+      lowercase: true,
+      trim: true,
     },
 
     approvedBy: {

@@ -209,8 +209,21 @@ const calculateMonthlyPayroll = async ({
         continue;
       }
 
-      // Avoid duplicate deductions: If day is already counted under approved leave, skip!
-      if (approvedLeaveDates.has(dStr)) {
+      // Avoid duplicate deductions:
+      const approvedPortion = approvedLeaveDates.get(dStr);
+      if (approvedPortion === 1) {
+        // Full day approved leave: skip attendance to avoid duplicate deduction
+        continue;
+      }
+      if (approvedPortion === 0.5) {
+        // If employee worked required portion (half-day or present), no extra deduction!
+        if (att.status === "half-day" || att.status === "present") {
+          continue;
+        }
+        // If employee was also absent for remaining portion, add 0.5 day unapproved absence
+        if (att.status === "absent") {
+          unapprovedHalfDays += 1;
+        }
         continue;
       }
 
@@ -284,10 +297,20 @@ const calculateMonthlyPayroll = async ({
         const dStr = att.date;
         const attDate = new Date(`${dStr}T00:00:00.000Z`);
         const dow = attDate.getDay();
-        if (dow === 0 || holidayMap.has(dStr) || approvedLeaveDates.has(dStr)) continue;
+        if (dow === 0 || holidayMap.has(dStr)) continue;
 
         // Pending approvals must not automatically trigger penalties
         if (pendingLeaveDates.has(dStr)) continue;
+
+        const approvedPortion = approvedLeaveDates.get(dStr);
+        if (approvedPortion === 1) continue;
+        if (approvedPortion === 0.5) {
+          if (att.status === "half-day" || att.status === "present") continue;
+          if (att.status === "absent") {
+            penaltyEligibleHalfDays += 1;
+          }
+          continue;
+        }
 
         if (att.status === "absent") {
           penaltyEligibleFullDays += 1;

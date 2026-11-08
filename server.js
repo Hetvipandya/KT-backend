@@ -336,6 +336,14 @@ const startServer = async () => {
       logger.warn(`⚠️ Reconcile/Payslip warning: ${reconcileErr.message}`);
     }
 
+    // 3. Initialize Daily 4:00 PM Asia/Kolkata Attendance Scheduler with catch-up
+    try {
+      const { startAttendanceScheduler } = require('./services/attendanceScheduler.service');
+      await startAttendanceScheduler();
+    } catch (schedErr) {
+      logger.warn(`⚠️ Attendance Scheduler warning: ${schedErr.message}`);
+    }
+
     // 3. Start Listening 
     const PORT = process.env.PORT || 5000;
     const server = app.listen(PORT, () => {
@@ -346,6 +354,10 @@ const startServer = async () => {
     // Graceful shutdown handling
     const gracefulShutdown = () => {
       logger.info('Received shutdown signal, closing server gracefully...');
+      try {
+        const { stopAttendanceScheduler } = require('./services/attendanceScheduler.service');
+        stopAttendanceScheduler();
+      } catch (_) {}
       server.close(async () => {
         logger.info('Closed all HTTP connections.');
         await disconnectDB();
