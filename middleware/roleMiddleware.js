@@ -9,11 +9,17 @@ exports.authorizeRoles = (...roles) => {
         });
       }
 
-      const normalizeRole = (role) =>
+      const normalizeRole = (role) => {
+        const compact =
         String(role || "")
           .trim()
           .toLowerCase()
           .replace(/[_\s-]+/g, "");
+        if (compact === "teamlead" || compact === "teamleader" || compact === "tl") return "teamlead";
+        if (compact === "superadmin") return "admin";
+        return compact;
+      };
+
 
       const userRole = normalizeRole(req.user.role);
 

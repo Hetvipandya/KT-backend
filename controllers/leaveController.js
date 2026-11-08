@@ -5,6 +5,10 @@ const Holiday = require("../models/Holiday");
 const User = require("../models/User");
 const Employee = require("../models/Employee");
 const Team = require("../models/Team");
+let Project = null;
+try { Project = require("../models/projectModel"); } catch (_) {}
+let TeamMember = null;
+try { TeamMember = require("../models/TeamMember"); } catch (_) {}
 const { calculateWorkingLeaveDays, toDateString } = require("../utils/leaveUtils");
 const { getTeamLeadForUser } = require("../utils/teamLeadLookup");
 const { notify } = require("../utils/sendNotification");
@@ -172,6 +176,72 @@ const enrichLeavesWithEmployeeDetails = async (leaves) => {
   return isSingle ? enriched[0] : enriched;
 };
 
+const normalizeRoleString = (r) => {
+  const compact = String(r || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[_s-]+/g, "");
+  if (compact === "teamlead" || compact === "teamleader" || compact === "tl") return "teamlead";
+  if (compact === "superadmin") return "admin";
+  return compact;
+};
+
+const isUserTeamLead = async (user, userId) => {
+  if (user) {
+    const roleNorm = normalizeRoleString(user.role);
+    if (roleNorm === "teamlead") return true;
+  }
+
+  if (!userId) return false;
+
+  const rawId = String(userId).trim();
+  const idQueries = [{ _id: rawId }, { userID: rawId }, { userId: rawId }];
+  if (user?.email) {
+    idQueries.push({ email: user.email.toLowerCase() });
+  }
+
+  try {
+    const emp = await Employee.findOne({ $or: idQueries })
+      .select("_id role isTeamLead designation")
+      .lean();
+    if (emp) {
+      const empRole = normalizeRoleString(emp.role);
+      const empDesignation = normalizeRoleString(emp.designation);
+      if (emp.isTeamLead === true || empRole === "teamlead" || empDesignation === "teamlead") {
+        return true;
+      }
+    }
+  } catch (_) {}
+
+  try {
+    const objectId = mongoose.Types.ObjectId.isValid(rawId) ? new mongoose.Types.ObjectId(rawId) : null;
+    const leadMatch = objectId ? [rawId, objectId] : [rawId];
+
+    const [hasTeam, hasSubordinate] = await Promise.all([
+      Team.exists({
+        $or: [
+          { teamLeadUser: { $in: leadMatch } },
+          { teamLeadEmployee: { $in: leadMatch } },
+          { teamLead: { $in: leadMatch } },
+          { teamLeadId: rawId },
+        ],
+      }),
+      Employee.exists({
+        $or: [
+          { teamLeadUser: { $in: leadMatch } },
+          { teamLeadEmployee: { $in: leadMatch } },
+          { teamLead: { $in: leadMatch } },
+          { teamLeadId: rawId },
+        ],
+      }),
+    ]);
+
+    if (hasTeam || hasSubordinate) return true;
+  } catch (_) {}
+
+  return false;
+};
+
 const getTeamLeadAssignedUserIds = async (teamLeadId) => {
   if (!teamLeadId) return [];
 
@@ -179,6 +249,7 @@ const getTeamLeadAssignedUserIds = async (teamLeadId) => {
   const leadUserIds = new Set([rawLeadId]);
   const leadEmployeeIds = new Set();
   const leadIdentifiers = new Set([rawLeadId]);
+  const leadEmails = new Set();
 
   let user = null;
   let leadEmployee = null;
@@ -219,6 +290,7 @@ const getTeamLeadAssignedUserIds = async (teamLeadId) => {
   if (user) {
     leadUserIds.add(String(user._id));
     if (user.uniqueID) leadIdentifiers.add(String(user.uniqueID));
+    if (user.email) leadEmails.add(String(user.email).toLowerCase().trim());
   }
   if (leadEmployee) {
     leadEmployeeIds.add(String(leadEmployee._id));
@@ -226,6 +298,7 @@ const getTeamLeadAssignedUserIds = async (teamLeadId) => {
     if (leadEmployee.userId) leadUserIds.add(String(leadEmployee.userId));
     if (leadEmployee.employeeID) leadIdentifiers.add(String(leadEmployee.employeeID));
     if (leadEmployee.employeeCode) leadIdentifiers.add(String(leadEmployee.employeeCode));
+    if (leadEmployee.email) leadEmails.add(String(leadEmployee.email).toLowerCase().trim());
   }
 
   // Linked employees by userID, userId or email
@@ -245,8 +318,22 @@ const getTeamLeadAssignedUserIds = async (teamLeadId) => {
       if (employee.userId) leadUserIds.add(String(employee.userId));
       if (employee.employeeID) leadIdentifiers.add(String(employee.employeeID));
       if (employee.employeeCode) leadIdentifiers.add(String(employee.employeeCode));
+      if (employee.email) leadEmails.add(String(employee.email).toLowerCase().trim());
     }
   } catch (_) {}
+
+  // Linked users by email
+  if (leadEmails.size > 0) {
+    try {
+      const linkedUsers = await User.find({
+        email: { $in: Array.from(leadEmails) },
+      }).select("_id uniqueID email").lean();
+      for (const u of linkedUsers) {
+        leadUserIds.add(String(u._id));
+        if (u.uniqueID) leadIdentifiers.add(String(u.uniqueID));
+      }
+    } catch (_) {}
+  }
 
   const leadUserObjectIds = Array.from(leadUserIds)
     .filter((id) => mongoose.Types.ObjectId.isValid(id))
@@ -260,98 +347,191 @@ const getTeamLeadAssignedUserIds = async (teamLeadId) => {
     leadEmployee?.name ||
     [leadEmployee?.firstName, leadEmployee?.lastName].filter(Boolean).join(" ");
 
-  let teams = [];
-  try {
-    teams = await Team.find({
-      $or: [
-        { teamLeadUser: teamLeadId },
-        { teamLeadUser: { $in: [...leadUserObjectIds, ...Array.from(leadUserIds)] } },
-        { teamLeadEmployee: teamLeadId },
-        { teamLeadEmployee: { $in: [...leadEmployeeObjectIds, ...Array.from(leadEmployeeIds)] } },
-        { teamLeadId: { $in: Array.from(leadIdentifiers) } },
-        ...(leadName ? [{ name: new RegExp(`^${leadName.trim()}\\s+Team$`, "i") }] : []),
-      ],
-    }).select("employees interns developers designers testers teamLeadUser teamLeadEmployee teamLeadId").lean();
-  } catch (_) {}
-
   const assignedUserIds = new Set(leadUserIds);
-  for (const team of teams) {
-    const rawMemberIds = [
-      ...(team.employees || []),
-      ...(team.interns || []),
-      ...(team.developers || []),
-      ...(team.designers || []),
-      ...(team.testers || []),
-    ].map(String);
+  const discoveredEmployeeIds = new Set();
+  const discoveredUserIds = new Set();
+  const discoveredEmails = new Set();
 
-    if (!rawMemberIds.length) continue;
-
-    for (const memberId of rawMemberIds) {
-      assignedUserIds.add(memberId);
+  // 1. Teams where this user is Team Lead
+  try {
+    const teamLeadMatchConditions = [
+      { teamLeadUser: { $in: [...leadUserObjectIds, ...Array.from(leadUserIds)] } },
+      { teamLeadEmployee: { $in: [...leadEmployeeObjectIds, ...Array.from(leadEmployeeIds)] } },
+      { teamLead: { $in: [...leadUserObjectIds, ...leadEmployeeObjectIds, ...Array.from(leadUserIds), ...Array.from(leadEmployeeIds)] } },
+      { teamLeadId: { $in: Array.from(leadIdentifiers) } },
+    ];
+    if (leadName) {
+      teamLeadMatchConditions.push({ name: new RegExp(`^${leadName.trim()}\\s+Team$`, "i") });
     }
 
-    const memberObjectIds = rawMemberIds
-      .filter((id) => mongoose.Types.ObjectId.isValid(id))
-      .map((id) => new mongoose.Types.ObjectId(id));
+    const teams = await Team.find({ $or: teamLeadMatchConditions })
+      .select("employees interns developers designers testers teamMembers teamLeadUser teamLeadEmployee teamLead teamLeadId")
+      .lean();
 
-    try {
-      const [members, linkedUsers] = await Promise.all([
-        Employee.find({
-          $or: [
-            { _id: { $in: [...memberObjectIds, ...rawMemberIds] } },
-            { userID: { $in: [...memberObjectIds, ...rawMemberIds] } },
-            { userId: { $in: [...memberObjectIds, ...rawMemberIds] } },
-          ],
-        }).select("_id userID userId email employeeID employeeCode").lean(),
-        User.find({
-          $or: [
-            { _id: { $in: [...memberObjectIds, ...rawMemberIds] } },
-          ],
-        }).select("_id email uniqueID").lean(),
-      ]);
+    for (const team of teams) {
+      const rawMemberIds = [
+        ...(team.employees || []),
+        ...(team.interns || []),
+        ...(team.developers || []),
+        ...(team.designers || []),
+        ...(team.testers || []),
+        ...(team.teamMembers || []),
+      ].map(String).filter(Boolean);
 
-      for (const member of members) {
-        assignedUserIds.add(String(member._id));
-        if (member.userID) assignedUserIds.add(String(member.userID));
-        if (member.userId) assignedUserIds.add(String(member.userId));
-        if (member.email) {
-          const u = await User.findOne({ email: member.email.toLowerCase() }).select("_id").lean();
-          if (u) assignedUserIds.add(String(u._id));
-        }
+      for (const memberId of rawMemberIds) {
+        assignedUserIds.add(memberId);
+        discoveredEmployeeIds.add(memberId);
+        discoveredUserIds.add(memberId);
       }
+    }
+  } catch (_) {}
 
-      for (const linkedUser of linkedUsers) {
-        assignedUserIds.add(String(linkedUser._id));
-        const emps = await Employee.find({
-          $or: [
-            { userID: linkedUser._id },
-            { userId: linkedUser._id },
-            ...(linkedUser.email ? [{ email: linkedUser.email.toLowerCase() }] : []),
-          ],
-        }).select("_id").lean();
-        for (const linkedEmp of emps) {
-          assignedUserIds.add(String(linkedEmp._id));
+  // 2. Direct reporting in Employee collection
+  try {
+    const directMembers = await Employee.find({
+      $or: [
+        { teamLeadUser: { $in: [...leadUserObjectIds, ...Array.from(leadUserIds)] } },
+        { teamLeadEmployee: { $in: [...leadEmployeeObjectIds, ...Array.from(leadEmployeeIds)] } },
+        { teamLeadId: { $in: Array.from(leadIdentifiers) } },
+        { teamLead: { $in: [...leadUserObjectIds, ...leadEmployeeObjectIds, ...Array.from(leadUserIds), ...Array.from(leadEmployeeIds)] } },
+        { reportingTo: { $in: [...leadUserObjectIds, ...leadEmployeeObjectIds, ...Array.from(leadUserIds), ...Array.from(leadEmployeeIds)] } },
+      ],
+    }).select("_id userID userId email employeeID employeeCode teamLeadUser teamLeadEmployee teamLeadId").lean();
+
+    for (const member of directMembers) {
+      assignedUserIds.add(String(member._id));
+      discoveredEmployeeIds.add(String(member._id));
+      if (member.userID) {
+        assignedUserIds.add(String(member.userID));
+        discoveredUserIds.add(String(member.userID));
+      }
+      if (member.userId) {
+        assignedUserIds.add(String(member.userId));
+        discoveredUserIds.add(String(member.userId));
+      }
+      if (member.email) {
+        discoveredEmails.add(String(member.email).toLowerCase().trim());
+      }
+    }
+  } catch (_) {}
+
+  // 3. Project and TeamMember assignments
+  if (Project) {
+    try {
+      const projects = await Project.find({
+        $or: [
+          { teamLeadUser: { $in: [...leadUserObjectIds, ...Array.from(leadUserIds)] } },
+          { teamLeadEmployee: { $in: [...leadEmployeeObjectIds, ...Array.from(leadEmployeeIds)] } },
+          { teamLead: { $in: [...leadUserObjectIds, ...leadEmployeeObjectIds, ...Array.from(leadUserIds), ...Array.from(leadEmployeeIds)] } },
+        ],
+      }).select("employees interns").lean();
+
+      for (const proj of projects) {
+        for (const empId of (proj.employees || [])) {
+          discoveredEmployeeIds.add(String(empId));
+          assignedUserIds.add(String(empId));
+        }
+        for (const intId of (proj.interns || [])) {
+          discoveredUserIds.add(String(intId));
+          assignedUserIds.add(String(intId));
         }
       }
     } catch (_) {}
   }
 
-  try {
-    const directMembers = await Employee.find({
-      $or: [
-        { teamLeadUser: { $in: leadUserObjectIds } },
-        { teamLeadEmployee: { $in: leadEmployeeObjectIds } },
-        { teamLeadId: { $in: Array.from(leadIdentifiers) } },
-      ],
-    }).select("_id userID userId teamLeadUser teamLeadEmployee teamLeadId").lean();
+  if (TeamMember) {
+    try {
+      const leadMemberships = await TeamMember.find({
+        userId: { $in: [...leadUserObjectIds, ...Array.from(leadUserIds)] },
+        role: { $in: ["Team Lead", "team lead", "teamlead", "Lead", "Project Manager"] },
+      }).select("projectId").lean();
 
-    for (const member of directMembers) {
-      assignedUserIds.add(String(member._id));
-      if (member.userID) assignedUserIds.add(String(member.userID));
-      if (member.userId) assignedUserIds.add(String(member.userId));
-    }
-  } catch (_) {}
- 
+      const projectIds = leadMemberships.map((m) => m.projectId).filter(Boolean);
+      if (projectIds.length > 0) {
+        const peerMembers = await TeamMember.find({
+          projectId: { $in: projectIds },
+        }).select("userId").lean();
+        for (const pm of peerMembers) {
+          if (pm.userId) {
+            discoveredUserIds.add(String(pm.userId));
+            assignedUserIds.add(String(pm.userId));
+          }
+        }
+      }
+    } catch (_) {}
+  }
+
+  // 4. Bidirectional Cross-Resolution (Employee <-> User <-> Email)
+  const allDiscoveredUserObjectIds = Array.from(discoveredUserIds)
+    .filter((id) => mongoose.Types.ObjectId.isValid(id))
+    .map((id) => new mongoose.Types.ObjectId(id));
+  const allDiscoveredEmployeeObjectIds = Array.from(discoveredEmployeeIds)
+    .filter((id) => mongoose.Types.ObjectId.isValid(id))
+    .map((id) => new mongoose.Types.ObjectId(id));
+
+  // Query Users for discovered IDs or emails
+  const userOrConditions = [];
+  if (allDiscoveredUserObjectIds.length) {
+    userOrConditions.push({ _id: { $in: allDiscoveredUserObjectIds } });
+  }
+  if (discoveredEmails.size) {
+    userOrConditions.push({ email: { $in: Array.from(discoveredEmails) } });
+  }
+  if (userOrConditions.length) {
+    try {
+      const foundUsers = await User.find({ $or: userOrConditions }).select("_id email uniqueID").lean();
+      for (const u of foundUsers) {
+        assignedUserIds.add(String(u._id));
+        discoveredUserIds.add(String(u._id));
+        if (u.email) discoveredEmails.add(String(u.email).toLowerCase().trim());
+      }
+    } catch (_) {}
+  }
+
+  // Query Employees for discovered employee IDs, user IDs, or emails
+  const empOrConditions = [];
+  if (allDiscoveredEmployeeObjectIds.length) {
+    empOrConditions.push({ _id: { $in: [...allDiscoveredEmployeeObjectIds, ...Array.from(discoveredEmployeeIds)] } });
+  }
+  if (allDiscoveredUserObjectIds.length) {
+    empOrConditions.push({ userID: { $in: [...allDiscoveredUserObjectIds, ...Array.from(discoveredUserIds)] } });
+    empOrConditions.push({ userId: { $in: [...allDiscoveredUserObjectIds, ...Array.from(discoveredUserIds)] } });
+  }
+  if (discoveredEmails.size) {
+    empOrConditions.push({ email: { $in: Array.from(discoveredEmails) } });
+  }
+  if (empOrConditions.length) {
+    try {
+      const foundEmployees = await Employee.find({ $or: empOrConditions }).select("_id userID userId email").lean();
+      for (const e of foundEmployees) {
+        assignedUserIds.add(String(e._id));
+        if (e.userID) {
+          assignedUserIds.add(String(e.userID));
+          discoveredUserIds.add(String(e.userID));
+        }
+        if (e.userId) {
+          assignedUserIds.add(String(e.userId));
+          discoveredUserIds.add(String(e.userId));
+        }
+        if (e.email) {
+          discoveredEmails.add(String(e.email).toLowerCase().trim());
+        }
+      }
+    } catch (_) {}
+  }
+
+  // Final lookup of Users if new emails were discovered from Employees
+  if (discoveredEmails.size) {
+    try {
+      const finalUsers = await User.find({
+        email: { $in: Array.from(discoveredEmails) },
+      }).select("_id").lean();
+      for (const u of finalUsers) {
+        assignedUserIds.add(String(u._id));
+      }
+    } catch (_) {}
+  }
+
   const result = [];
   for (const id of assignedUserIds) {
     result.push(id);
@@ -656,40 +836,39 @@ exports.applyLeave = async (req, res) => {
 exports.getAllLeaves = async (req, res) => {
   try {
     const { role, _id } = req.user || {};
-    const normalizedRole = String(role || "")
-      .toLowerCase()
-      .replace(/[\s_-]+/g, "");
+    const normalizedRole = normalizeRoleString(role);
 
     let filter = {};
 
-    // Employee & Intern → Only own leaves
-    if (normalizedRole === "employee" || normalizedRole === "intern") {
-      filter = { employeeId: _id };
+    let isTL = normalizedRole === "teamlead";
+    if (!isTL && _id) {
+      isTL = await isUserTeamLead(req.user, _id);
     }
 
-    // Team Lead, HR, Admin → All leaves
-    else if (normalizedRole === "hr") {
-      filter = { applicantRole: { $ne: "hr" } };
-    }
-
-    else if (normalizedRole === "teamlead") {
+    if (isTL) {
       const assignedUserIds = await getTeamLeadAssignedUserIds(_id);
       filter = {
         employeeId: { $in: assignedUserIds },
         applicantRole: { $ne: "hr" },
       };
-    }
-
-    // Admin → All leaves, including HR leaves
-    else if (normalizedRole === "admin") {
+    } else if (normalizedRole === "employee" || normalizedRole === "intern") {
+      filter = { employeeId: _id };
+    } else if (normalizedRole === "hr") {
+      filter = { applicantRole: { $ne: "hr" } };
+    } else if (normalizedRole === "admin") {
       filter = {};
-    }
-
-    else {
+    } else {
       return res.status(403).json({
         success: false,
         message: `Role "${role}" is not authorized to view leaves.`,
       });
+    }
+
+    if (req.query.status && req.query.status !== "all") {
+      filter.status = req.query.status;
+    }
+    if (req.query.leaveType && req.query.leaveType !== "all") {
+      filter.leaveType = req.query.leaveType;
     }
 
     const leaves = await Leave.find(filter)
@@ -705,6 +884,7 @@ exports.getAllLeaves = async (req, res) => {
       success: true,
       total: enrichedLeaves.length,
       data: enrichedLeaves,
+      leaves: enrichedLeaves,
     });
   } catch (error) {
     console.error("GET ALL LEAVES ERROR:", error);
@@ -725,28 +905,7 @@ exports.getTeamLeadPendingLeaves = async (req, res) => {
       user = await User.findById(userId);
     } catch (_) {}
 
-    let isTL = false;
-    if (user) {
-      const normalizedRole = String(user.role || "")
-        .toLowerCase()
-        .replace(/[\s_-]+/g, "");
-      isTL = normalizedRole === "teamlead";
-    }
-    if (!isTL) {
-      try {
-        const emp = await Employee.findOne({
-          $or: [{ _id: userId }, { userID: userId }, { userId: userId }],
-        });
-        if (emp) {
-          const empRole = String(emp.role || "").toLowerCase().replace(/[\s_-]+/g, "");
-          isTL = Boolean(emp.isTeamLead) || empRole === "teamlead";
-        }
-      } catch (_) {}
-    }
-    if (!isTL && req.user?.role) {
-      const reqRole = String(req.user.role || "").toLowerCase().replace(/[\s_-]+/g, "");
-      isTL = reqRole === "teamlead";
-    }
+    const isTL = await isUserTeamLead(user || req.user, userId);
 
     if (!isTL) {
       return res.status(403).json({
@@ -757,7 +916,7 @@ exports.getTeamLeadPendingLeaves = async (req, res) => {
 
     const assignedUserIds = await getTeamLeadAssignedUserIds(userId);
     const leaves = await Leave.find({
-      applicantRole: { $in: ["employee", "intern"] },
+      applicantRole: { $ne: "hr" },
       teamLeadStatus: "pending",
       status: "pending",
       employeeId: { $in: assignedUserIds },
@@ -774,6 +933,7 @@ exports.getTeamLeadPendingLeaves = async (req, res) => {
       success: true,
       total: enrichedLeaves.length,
       data: enrichedLeaves,
+      leaves: enrichedLeaves,
     });
   } catch (error) {
     return res.status(500).json({
