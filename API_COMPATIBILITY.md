@@ -16,7 +16,7 @@ The merged backend maintains **100% backward compatibility** for all existing KT
 | **Leaves** | `/api/leave/*` | `/api/leave/*` | **100% Preserved** | Applications, status checks, approvals |
 | **Company** | `/api/company/details` | `/api/company/details` | **100% Preserved** | Static company metadata |
 | **Departments**| `/api/department/*` | `/api/department/*` | **100% Preserved** | Action routes (`/addDepartment`, etc.) |
-| **Employees** | `/api/employee/*` | `/api/employee/*` | **100% Preserved** | Action routes (`/create`, `/all`, etc.) |
+| **Employees** | `/api/employee/*` | `/api/employee/*` | **100% Preserved** | Action routes (`/create`, `/all`, `/list`), soft-deactivation (`/:id/deactivate`), reactivation (`/:id/reactivate`), legacy delete routing to soft-deactivate |
 | **Expenses** | `/api/expense/*` | `/api/expense/*` | **100% Preserved** | HR expense claims (`/add`, `/my`, etc.) |
 | **Roles** | `/api/role/*` | `/api/role/*` | **100% Preserved** | Role permissions (`/addRole`, etc.) |
 | **CRM** | `/api/crm/*` | `/api/crm/*` | **100% Preserved** | Leads and pipelines |
@@ -58,3 +58,12 @@ For routes sharing a common base URL (`/api/company`, `/api/department`, `/api/e
 - Specific named routes from KT (`/create`, `/details`, `/addDepartment`, `/all`, etc.) match immediately without collision.
 - RESTful root/parameter routes from FIN (`/`, `/:id`, `/:id/status`) match corresponding Finance requests.
 - Both frontends interact with their respective endpoints transparently.
+
+---
+
+## 4. Employee Soft-Deactivation & Data Retention Compatibility
+- **Legacy Delete Endpoints**: Calls to `DELETE /api/employee/delete/:id`, `DELETE /api/employee/remove/:id`, or `DELETE /api/employee/:id` no longer purge records from the database. Instead, they safely execute soft-deactivation.
+- **Payload Compatibility**: The deletion response continues to return `{ success: true, message: "...", deletedEmployeeId: "<id>" }` alongside `{ isDeactivated: true }`, ensuring legacy client handlers operate seamlessly without breaking.
+- **Historical Data Preservation**: Attendance, payroll, deductions, leaves, documents, and audit logs retain their original `employeeId` / `userId` references.
+- **Reactivation**: Employees can be reactivated in place (`POST/PUT/PATCH /api/employee/:id/reactivate`) without creating duplicate records or altering existing history.
+- **Hard Delete Isolation**: Permanent erasure is isolated to `DELETE /api/employee/hard-delete/:id`, strictly requiring `Super Admin` authorization and `{ "confirmHardDelete": true }`.

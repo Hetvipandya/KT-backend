@@ -1,5 +1,6 @@
 const Role = require("../models/Role");
 const Permission = require("../models/Permission");
+const { recordAuditEvent } = require("../services/auditLog.service");
 
 // ==========================
 // CREATE ROLE
@@ -36,6 +37,18 @@ exports.createRole = async (req, res) => {
       roleName,
       description,
       permissions,
+    });
+
+    await recordAuditEvent({
+      req,
+      module: "ROLES",
+      action: "CREATE",
+      actionType: "ROLE_CREATED",
+      entityType: "Role",
+      entityId: role._id,
+      description: `Role ${role.roleName} created`,
+      newValues: role,
+      companyId: req.user?.companyId,
     });
 
     return res.status(201).json({
@@ -115,6 +128,7 @@ exports.updateRole = async (req, res) => {
         message: "Role not found",
       });
     }
+    const oldRoleData = role.toObject ? role.toObject() : { ...role };
 
     // ✅ validate permissions before update
     if (permissions && permissions.length > 0) {
@@ -135,6 +149,19 @@ exports.updateRole = async (req, res) => {
     role.permissions = permissions || role.permissions;
 
     await role.save();
+
+    await recordAuditEvent({
+      req,
+      module: "ROLES",
+      action: "UPDATE",
+      actionType: "ROLE_UPDATED",
+      entityType: "Role",
+      entityId: role._id,
+      description: `Role ${role.roleName} updated`,
+      oldValues: oldRoleData,
+      newValues: role,
+      companyId: req.user?.companyId,
+    });
 
     return res.status(200).json({
       success: true,
@@ -167,6 +194,18 @@ exports.deleteRole = async (req, res) => {
 
     role.isDeleted = true;
     await role.save();
+
+    await recordAuditEvent({
+      req,
+      module: "ROLES",
+      action: "DELETE",
+      actionType: "ROLE_DELETED",
+      entityType: "Role",
+      entityId: role._id,
+      description: `Role ${role.roleName} deleted`,
+      oldValues: role,
+      companyId: req.user?.companyId,
+    });
 
     return res.status(200).json({
       success: true,

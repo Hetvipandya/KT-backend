@@ -222,6 +222,34 @@ const employeeSchema = new mongoose.Schema(
       type: String,
       default: 'ACTIVE'
     },
+    isDeactivated: {
+      type: Boolean,
+      default: false,
+      index: true
+    },
+    deactivatedAt: {
+      type: Date,
+      default: null
+    },
+    deactivatedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      default: null
+    },
+    deactivationReason: {
+      type: String,
+      trim: true,
+      default: ''
+    },
+    reactivatedAt: {
+      type: Date,
+      default: null
+    },
+    reactivatedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      default: null
+    },
     currentAction: {
       type: String,
       default: 'created'

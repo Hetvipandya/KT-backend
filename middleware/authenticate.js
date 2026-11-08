@@ -135,6 +135,44 @@ const authenticate = async (req, res, next) => {
       user.userId = originalUserId;
     }
 
+    // Check if user account is disabled or deactivated
+    if (
+      user.isDeactivated === true ||
+      (user.isActive === false && String(user.status || '').toLowerCase() === 'inactive')
+    ) {
+      userCache.delete(String(userIdStr));
+      return res.status(403).json({
+        success: false,
+        message: 'Authentication failed: Account is disabled or deactivated'
+      });
+    }
+
+    if (user.role === 'employee' || user.role === 'team lead') {
+      try {
+        const Employee = require('../models/Employee');
+        const emp = await Employee.findOne({
+          $or: [
+            { userID: user._id },
+            { userId: user._id },
+            { email: user.email ? String(user.email).trim().toLowerCase() : null }
+          ].filter(Boolean)
+        }).select('employeeStatus status isDeactivated');
+
+        if (
+          emp &&
+          (emp.isDeactivated ||
+            (String(emp.employeeStatus || '').toLowerCase() === 'inactive' &&
+              String(emp.status || '').toLowerCase() === 'inactive'))
+        ) {
+          userCache.delete(String(userIdStr));
+          return res.status(403).json({
+            success: false,
+            message: 'Authentication failed: Account is disabled or deactivated'
+          });
+        }
+      } catch (_) {}
+    }
+
     // Check if user account is locked
     if (user.isLocked) {
       userCache.delete(userIdStr);

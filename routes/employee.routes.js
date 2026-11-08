@@ -35,8 +35,31 @@ router.get('/profile/:id', ktEmployeeController.getEmployeeProfile);
 router.put('/lifecycle/:id', ktEmployeeController.updateEmployeeLifecycle);
 router.put('/update/:id', ktEmployeeController.updateEmployee);
 router.put('/edit/:id', employeeDocuments, ktEmployeeController.editEmployee);
-router.delete('/delete/:id', ktEmployeeController.deleteEmployee);
-router.delete('/remove/:id', ktEmployeeController.removeEmployee);
+const { protect } = require('../middleware/authMiddleware');
+const { authorizeRoles } = require('../middleware/roleMiddleware');
+
+const requireAdminOrHr = [
+  protect,
+  authorizeRoles('admin', 'hr', 'super admin')
+];
+
+// ================= DEACTIVATION & REACTIVATION ENDPOINTS =================
+router.post('/:id/deactivate', requireAdminOrHr, ktEmployeeController.deactivateEmployee);
+router.put('/:id/deactivate', requireAdminOrHr, ktEmployeeController.deactivateEmployee);
+router.patch('/:id/deactivate', requireAdminOrHr, ktEmployeeController.deactivateEmployee);
+router.put('/deactivate/:id', requireAdminOrHr, ktEmployeeController.deactivateEmployee);
+
+router.post('/:id/reactivate', requireAdminOrHr, ktEmployeeController.reactivateEmployee);
+router.put('/:id/reactivate', requireAdminOrHr, ktEmployeeController.reactivateEmployee);
+router.patch('/:id/reactivate', requireAdminOrHr, ktEmployeeController.reactivateEmployee);
+router.put('/reactivate/:id', requireAdminOrHr, ktEmployeeController.reactivateEmployee);
+
+// Soft-delete routes (backward compatible with legacy delete calls)
+router.delete('/delete/:id', requireAdminOrHr, ktEmployeeController.deleteEmployee);
+router.delete('/remove/:id', requireAdminOrHr, ktEmployeeController.removeEmployee);
+router.delete('/hard-delete/:id', protect, authorizeRoles('super admin'), ktEmployeeController.hardDeleteEmployee);
+router.delete('/:id', requireAdminOrHr, ktEmployeeController.deleteEmployee);
+
 
 // ================= FINANCE EMPLOYEE ENDPOINTS =================
 router.post('/', authenticate, validate(createEmployeeSchema), access, finEmployeeController.create);

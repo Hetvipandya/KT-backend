@@ -14,6 +14,7 @@ const {
   lockDeductionsForPayroll,
   unlockDeductionsForPayroll,
 } = require("../services/deduction.service");
+const { recordAuditEvent } = require("../services/auditLog.service");
  
 const monthNames = [
   "January", "February", "March", "April", "May", "June",
@@ -398,6 +399,17 @@ const generateMonthlySalary = async (req, res) => {
         } catch (_) {}
       }
       await notifySalaryRecipient(monthlySalary, "generated");
+      await recordAuditEvent({
+        req,
+        module: "PAYROLL",
+        action: "CREATE",
+        actionType: "SALARY_GENERATED",
+        entityType: "MonthlySalary",
+        entityId: monthlySalary._id,
+        description: `Monthly salary generated for ${monthlySalary.salaryMonth}`,
+        newValues: monthlySalary,
+        companyId: monthlySalary.companyId || req.user?.companyId,
+      });
     }
 
     const populatedRecords = await MonthlySalary.find({
@@ -1146,11 +1158,24 @@ const approveMonthlySalary = async (req, res) => {
       salary.remarks = remarks;
     }
 
+    const previousApproveStatus = salary.status;
     salary.status = "Approved";
     salary.approvedAt = new Date();
     salary.approvedBy = req.user ? req.user._id : null;
 
     await salary.save();
+    await recordAuditEvent({
+      req,
+      module: "PAYROLL",
+      action: "APPROVE",
+      actionType: "SALARY_APPROVED",
+      entityType: "MonthlySalary",
+      entityId: salary._id,
+      description: `Monthly salary approved for ${salary.salaryMonth}`,
+      oldValues: { status: previousApproveStatus },
+      newValues: { status: "Approved", approvedAt: salary.approvedAt },
+      companyId: salary.companyId || req.user?.companyId,
+    });
     await notifySalaryRecipient(salary, "approved");
 
     let companyDoc = null;
@@ -1248,6 +1273,7 @@ const payMonthlySalary = async (req, res) => {
       salary.branchId = branchId;
     }
 
+    const previousPayStatus = salary.status;
     salary.status = "Paid";
     salary.paidAt = paidAt ? new Date(paidAt) : new Date();
     salary.paidBy = req.user ? req.user._id : null;
@@ -1255,6 +1281,18 @@ const payMonthlySalary = async (req, res) => {
     if (remarks) salary.remarks = remarks;
 
     await salary.save();
+    await recordAuditEvent({
+      req,
+      module: "PAYROLL",
+      action: "UPDATE",
+      actionType: "SALARY_PAID",
+      entityType: "MonthlySalary",
+      entityId: salary._id,
+      description: `Monthly salary marked as Paid for ${salary.salaryMonth}`,
+      oldValues: { status: previousPayStatus },
+      newValues: { status: "Paid", paymentMode: salary.paymentMode, paidAt: salary.paidAt },
+      companyId: salary.companyId || req.user?.companyId,
+    });
     await notifySalaryRecipient(salary, "paid");
 
     let paidSalary = null;
@@ -1302,11 +1340,24 @@ const cancelMonthlySalary = async (req, res) => {
       });
     }
 
+    const previousCancelStatus = salary.status;
     salary.status = "Cancelled";
     try {
       await unlockDeductionsForPayroll(salary._id, req.user ? req.user._id : null);
     } catch (_) {}
     await salary.save();
+    await recordAuditEvent({
+      req,
+      module: "PAYROLL",
+      action: "UPDATE",
+      actionType: "SALARY_CANCELLED",
+      entityType: "MonthlySalary",
+      entityId: salary._id,
+      description: `Monthly salary cancelled for ${salary.salaryMonth}`,
+      oldValues: { status: previousCancelStatus },
+      newValues: { status: "Cancelled" },
+      companyId: salary.companyId || req.user?.companyId,
+    });
 
     return res.status(200).json({
       success: true,

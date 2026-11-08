@@ -254,6 +254,7 @@ app.use('/api/company', finCompanyRoutes);
 // Unified Module Routes (Combining HRMS + Finance Endpoints)
 app.use('/api/department', finDepartmentRoutes);
 app.use('/api/employee', finEmployeeRoutes);
+app.use('/api/employees', finEmployeeRoutes);
 app.use('/api/expense', finExpenseRoutes);
 app.use('/api/role', finRoleRoutes);
 
@@ -266,6 +267,7 @@ app.use('/api/bank-account', finBankAccountRoutes);
 app.use('/api/customer', finCustomerRoutes);
 app.use('/api/product', finProductRoutes);
 app.use('/api/audit-log', finAuditLogRoutes);
+app.use('/api/audit-logs', finAuditLogRoutes);
 app.use('/api/tax', finTaxRoutes);
 app.use('/api/gst', finGstRoutes);
 app.get('/api/returns-summary', authenticate, checkCompanyAccess, require('./controllers/gst.controller').getGstReturnsSummary);

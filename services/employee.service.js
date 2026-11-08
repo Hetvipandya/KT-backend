@@ -23,6 +23,20 @@ const shape = (emp, detail = false) => ({
   departmentId: id(emp.departmentId),
   userId: id(emp.userId),
   status: emp.status,
+  employeeStatus: emp.employeeStatus || (emp.isDeactivated || String(emp.status || '').toLowerCase() === 'inactive' ? 'Inactive' : 'Active'),
+  isDeactivated: Boolean(
+    emp.isDeactivated ||
+    String(emp.employeeStatus || '').toLowerCase() === 'inactive' ||
+    String(emp.status || '').toLowerCase() === 'inactive'
+  ),
+  isActive: !Boolean(
+    emp.isDeactivated ||
+    String(emp.employeeStatus || '').toLowerCase() === 'inactive' ||
+    String(emp.status || '').toLowerCase() === 'inactive'
+  ),
+  deactivatedAt: emp.deactivatedAt || null,
+  deactivationReason: emp.deactivationReason || null,
+  reactivatedAt: emp.reactivatedAt || null,
   createdAt: emp.createdAt,
   updatedAt: emp.updatedAt,
   ...(detail ? {
@@ -114,7 +128,20 @@ const createEmployee = async (data, creatorId) => {
 const listEmployees = async (companyId, query = {}) => {
   const filter = { companyId };
   if (query.status) {
-    filter.status = query.status;
+    const qStatus = String(query.status).trim().toUpperCase();
+    if (qStatus === 'ACTIVE') {
+      filter.$and = [
+        { status: 'ACTIVE' },
+        { isDeactivated: { $ne: true } }
+      ];
+    } else if (qStatus === 'INACTIVE') {
+      filter.$or = [
+        { status: 'INACTIVE' },
+        { isDeactivated: true }
+      ];
+    } else {
+      filter.status = query.status;
+    }
   }
   if (query.departmentId) {
     filter.departmentId = query.departmentId;

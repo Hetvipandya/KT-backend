@@ -18,6 +18,25 @@ const {
 const sanitizeUserUpdatePayload = require("../utils/userPayloadSanitizer");
 const generateEmployeeID = require("../utils/employeeId");
 const { cascadeDeleteUser } = require("../utils/userCascadeDelete");
+const { recordAuditEvent } = require("../services/auditLog.service");
+
+
+const checkAdminOrHrAuth = (req) => {
+  if (!req.user) {
+    return { authorized: false, status: 401, message: "Not authenticated." };
+  }
+  const normalize = (r) => String(r || "").trim().toLowerCase().replace(/[_\s-]+/g, "");
+  const role = normalize(req.user.role);
+  const allowed = ["admin", "hr", "superadmin", "super admin"];
+  if (!allowed.includes(role)) {
+    return {
+      authorized: false,
+      status: 403,
+      message: `Role "${req.user.role}" is not authorized to access this resource.`,
+    };
+  }
+  return { authorized: true };
+};
 
 const resolveDepartmentName = async (departmentValue) => {
   if (!departmentValue) return "";
@@ -182,6 +201,7 @@ exports.editEmployee = async (req, res) => {
 
     // Find employee
     const employee = await Employee.findById(employeeId);
+    const oldEmployeeData = employee && (employee.toObject ? employee.toObject() : { ...employee });
 
     if (!employee) {
       return res.status(404).json({
@@ -189,6 +209,8 @@ exports.editEmployee = async (req, res) => {
         message: "Employee not found",
       });
     }
+    const previousAction = employee.currentAction;
+    const previousEmployeeStatus = employee.employeeStatus;
 
     // ==========================================
     // UPDATE EMPLOYEE DATA
@@ -463,6 +485,19 @@ exports.editEmployee = async (req, res) => {
       } employee details updated`,
     });
 
+    await recordAuditEvent({
+      req,
+      module: "EMPLOYEE",
+      action: "UPDATE",
+      actionType: "EMPLOYEE_UPDATED",
+      entityType: "Employee",
+      entityId: employeeId,
+      description: `Employee ${updatedEmployee?.employeeID || employeeId} updated`,
+      oldValues: oldEmployeeData,
+      newValues: updatedEmployee,
+      companyId: updatedEmployee?.companyId || req.user?.companyId,
+    });
+
     // ==========================================
     // RESPONSE
     // ==========================================
@@ -482,15 +517,34 @@ exports.editEmployee = async (req, res) => {
   }
 };
 
-// ================= DELETE EMPLOYEE =================
-exports.deleteEmployee = async (req, res) => {
+// ================= DEACTIVATE EMPLOYEE (SOFT-DEACTIVATION) =================
+exports.deactivateEmployee = async (req, res) => {
   try {
-    const employeeId = req.params.id;
+    const authCheck = checkAdminOrHrAuth(req);
+    if (!authCheck.authorized) {
+      return res.status(authCheck.status).json({
+        success: false,
+        message: authCheck.message,
+      });
+    }
 
-    // ==========================================
-    // FIND EMPLOYEE
-    // ==========================================
-    const employee = await Employee.findById(employeeId);
+    const employeeId = req.params?.id || req.params?.employeeId || req.body?.employeeId;
+    if (!employeeId) {
+      return res.status(400).json({
+        success: false,
+        message: "Employee ID is required",
+      });
+    }
+
+    let employee = null;
+    if (mongoose.Types.ObjectId.isValid(employeeId)) {
+      employee = await Employee.findById(employeeId);
+    }
+    if (!employee) {
+      employee = await Employee.findOne({
+        $or: [{ employeeID: employeeId }, { employeeCode: employeeId }],
+      });
+    }
 
     if (!employee) {
       return res.status(404).json({
@@ -499,51 +553,367 @@ exports.deleteEmployee = async (req, res) => {
       });
     }
 
-    // ==========================================
-    // FIND RELATED USER
-    // ==========================================
-    let user = null;
+    // Prevent self-deactivation by administrative users
+    if (req.user) {
+      const reqUserIdStr = String(req.user._id || req.user.id || "");
+      const empUserIdStr = String(employee.userID || employee.userId || "");
+      const isSameUser =
+        (reqUserIdStr && empUserIdStr && reqUserIdStr === empUserIdStr) ||
+        (req.user.email &&
+          employee.email &&
+          String(req.user.email).trim().toLowerCase() === String(employee.email).trim().toLowerCase());
 
-    if (employee.userID) {
-      user = await User.findById(employee.userID);
+      if (isSameUser) {
+        return res.status(400).json({
+          success: false,
+          message: "Administrators cannot deactivate their own account",
+        });
+      }
     }
 
-    // Fallback: find user using email
-    if (!user && employee.email) {
-      user = await User.findOne({
-        email: employee.email,
+    const isAlreadyInactive =
+      Boolean(employee.isDeactivated) ||
+      String(employee.employeeStatus || "").toLowerCase() === "inactive" ||
+      String(employee.status || "").toLowerCase() === "inactive";
+
+    if (isAlreadyInactive) {
+      return res.status(400).json({
+        success: false,
+        message: "Employee is already inactive/deactivated",
+        data: {
+          employeeId: employee._id,
+          employeeCode: employee.employeeCode || employee.employeeID,
+          employeeStatus: employee.employeeStatus,
+          status: employee.status,
+          isDeactivated: true,
+        },
       });
     }
 
-    await cascadeDeleteUser(user || employee._id, {
-      employeeId: employee._id,
-    });
+    const oldValues = employee.toObject ? employee.toObject() : { ...employee };
 
-    // ==========================================
-    // DELETE RELATED USER
-    // ==========================================
-    if (user) {
-      await User.findByIdAndDelete(user._id);
+    employee.employeeStatus = "Inactive";
+    employee.status = "INACTIVE";
+    employee.isDeactivated = true;
+    employee.deactivatedAt = new Date();
+    employee.deactivatedBy = req.user?._id || null;
+    employee.deactivationReason =
+      req.body?.reason || req.body?.deactivationReason || "Administrative deactivation";
+    employee.currentAction = "deactivated";
+    await employee.save();
+
+    // Sync linked user
+    let user = null;
+    if (employee.userID || employee.userId) {
+      user = await User.findById(employee.userID || employee.userId);
+    }
+    if (!user && employee.email) {
+      user = await User.findOne({ email: String(employee.email).trim().toLowerCase() });
     }
 
-    // ==========================================
-    // RESPONSE
-    // ==========================================
-    res.status(200).json({
+    if (user) {
+      user.isActive = false;
+      user.status = "Inactive";
+      user.isDeactivated = true;
+      user.deactivatedAt = new Date();
+      user.deactivatedBy = req.user?._id || null;
+      user.refreshTokens = [];
+      user.refreshToken = null;
+      await user.save();
+
+      try {
+        const { invalidateUserCache } = require("../middleware/authenticate");
+        if (typeof invalidateUserCache === "function") {
+          invalidateUserCache(user._id);
+        }
+      } catch (_) {}
+    }
+
+    // Append to EmployeeHistory
+    await EmployeeHistory.create({
+      employeeID: employee._id,
+      action: "deactivated",
+      message: `Employee ${employee.firstName || ""} ${employee.lastName || ""} deactivated`,
+      actionBy: req.user?._id || null,
+    }).catch((err) => console.error("EmployeeHistory error on deactivation:", err));
+
+    // Audit log
+    await recordAuditEvent({
+      req,
+      module: "EMPLOYEE",
+      action: "DEACTIVATE",
+      actionType: "EMPLOYEE_DEACTIVATED",
+      entityType: "Employee",
+      entityId: employee._id,
+      description: `Employee ${employee.employeeID || employee.employeeCode || employee._id} deactivated`,
+      oldValues: {
+        employeeStatus: oldValues.employeeStatus,
+        status: oldValues.status,
+        isDeactivated: oldValues.isDeactivated,
+      },
+      newValues: {
+        employeeStatus: "Inactive",
+        status: "INACTIVE",
+        isDeactivated: true,
+      },
+      companyId: employee.companyId || req.user?.companyId,
+    });
+
+    return res.status(200).json({
       success: true,
-      message: "Employee deleted successfully",
-      deletedEmployeeId: employeeId,
+      message: "Employee deactivated successfully",
+      data: {
+        employeeId: employee._id,
+        employeeCode: employee.employeeCode || employee.employeeID,
+        employeeStatus: employee.employeeStatus,
+        status: employee.status,
+        isDeactivated: true,
+        deactivatedAt: employee.deactivatedAt,
+        userId: user?._id || null,
+      },
+      // Backward compatibility fields for legacy callers:
+      deletedEmployeeId: employee._id,
       deletedUserId: user?._id || null,
     });
   } catch (error) {
-    console.error("Delete Employee Error:", error);
-
-    res.status(500).json({
+    console.error("Deactivate Employee Error:", error);
+    return res.status(500).json({
       success: false,
       message: error.message,
     });
   }
 };
+
+// ================= REACTIVATE EMPLOYEE =================
+exports.reactivateEmployee = async (req, res) => {
+  try {
+    const authCheck = checkAdminOrHrAuth(req);
+    if (!authCheck.authorized) {
+      return res.status(authCheck.status).json({
+        success: false,
+        message: authCheck.message,
+      });
+    }
+
+    const employeeId = req.params?.id || req.params?.employeeId || req.body?.employeeId;
+    if (!employeeId) {
+      return res.status(400).json({
+        success: false,
+        message: "Employee ID is required",
+      });
+    }
+
+    let employee = null;
+    if (mongoose.Types.ObjectId.isValid(employeeId)) {
+      employee = await Employee.findById(employeeId);
+    }
+    if (!employee) {
+      employee = await Employee.findOne({
+        $or: [{ employeeID: employeeId }, { employeeCode: employeeId }],
+      });
+    }
+
+    if (!employee) {
+      return res.status(404).json({
+        success: false,
+        message: "Employee not found",
+      });
+    }
+
+    const isAlreadyActive =
+      !employee.isDeactivated &&
+      String(employee.employeeStatus || "").toLowerCase() === "active" &&
+      String(employee.status || "").toLowerCase() === "active";
+
+    if (isAlreadyActive) {
+      return res.status(400).json({
+        success: false,
+        message: "Employee is already active",
+        data: {
+          employeeId: employee._id,
+          employeeCode: employee.employeeCode || employee.employeeID,
+          employeeStatus: employee.employeeStatus,
+          status: employee.status,
+          isDeactivated: false,
+        },
+      });
+    }
+
+    const oldValues = employee.toObject ? employee.toObject() : { ...employee };
+
+    employee.employeeStatus = "Active";
+    employee.status = "ACTIVE";
+    employee.isDeactivated = false;
+    employee.reactivatedAt = new Date();
+    employee.reactivatedBy = req.user?._id || null;
+    employee.currentAction = "reactivated";
+    await employee.save();
+
+    // Sync linked user without recreating or duplicating any records
+    let user = null;
+    if (employee.userID || employee.userId) {
+      user = await User.findById(employee.userID || employee.userId);
+    }
+    if (!user && employee.email) {
+      user = await User.findOne({ email: String(employee.email).trim().toLowerCase() });
+    }
+
+    if (user) {
+      user.isActive = true;
+      user.status = "Active";
+      user.isDeactivated = false;
+      user.reactivatedAt = new Date();
+      user.reactivatedBy = req.user?._id || null;
+      await user.save();
+
+      try {
+        const { invalidateUserCache } = require("../middleware/authenticate");
+        if (typeof invalidateUserCache === "function") {
+          invalidateUserCache(user._id);
+        }
+      } catch (_) {}
+    }
+
+    // Append to EmployeeHistory
+    await EmployeeHistory.create({
+      employeeID: employee._id,
+      action: "reactivated",
+      message: `Employee ${employee.firstName || ""} ${employee.lastName || ""} reactivated`,
+      actionBy: req.user?._id || null,
+    }).catch((err) => console.error("EmployeeHistory error on reactivation:", err));
+
+    // Audit log
+    await recordAuditEvent({
+      req,
+      module: "EMPLOYEE",
+      action: "REACTIVATE",
+      actionType: "EMPLOYEE_REACTIVATED",
+      entityType: "Employee",
+      entityId: employee._id,
+      description: `Employee ${employee.employeeID || employee.employeeCode || employee._id} reactivated`,
+      oldValues: {
+        employeeStatus: oldValues.employeeStatus,
+        status: oldValues.status,
+        isDeactivated: oldValues.isDeactivated,
+      },
+      newValues: {
+        employeeStatus: "Active",
+        status: "ACTIVE",
+        isDeactivated: false,
+      },
+      companyId: employee.companyId || req.user?.companyId,
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Employee reactivated successfully",
+      data: {
+        employeeId: employee._id,
+        employeeCode: employee.employeeCode || employee.employeeID,
+        employeeStatus: employee.employeeStatus,
+        status: employee.status,
+        isDeactivated: false,
+        reactivatedAt: employee.reactivatedAt,
+        userId: user?._id || null,
+      },
+    });
+  } catch (error) {
+    console.error("Reactivate Employee Error:", error);
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+// ================= HARD DELETE EMPLOYEE (SUPER ADMIN ONLY) =================
+exports.hardDeleteEmployee = async (req, res) => {
+  try {
+    if (!req.user) {
+      return res.status(401).json({ success: false, message: "Not authenticated." });
+    }
+    const normalize = (r) => String(r || "").trim().toLowerCase().replace(/[_\s-]+/g, "");
+    const userRole = normalize(req.user.role);
+    if (userRole !== "superadmin") {
+      return res.status(403).json({
+        success: false,
+        message: "Forbidden: Hard deletion is strictly restricted to Super Admin",
+      });
+    }
+
+    const confirmed =
+      req.body?.confirmHardDelete === true ||
+      req.headers["x-confirm-hard-delete"] === "true";
+
+    if (!confirmed) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Hard deletion requires explicit confirmation (set confirmHardDelete: true in request body or header x-confirm-hard-delete: true)",
+      });
+    }
+
+    const employeeId = req.params?.id || req.body?.employeeId;
+    let employee = null;
+    if (mongoose.Types.ObjectId.isValid(employeeId)) {
+      employee = await Employee.findById(employeeId);
+    }
+    if (!employee) {
+      employee = await Employee.findOne({
+        $or: [{ employeeID: employeeId }, { employeeCode: employeeId }],
+      });
+    }
+
+    if (!employee) {
+      return res.status(404).json({ success: false, message: "Employee not found" });
+    }
+
+    const oldEmployeeData = employee.toObject ? employee.toObject() : { ...employee };
+
+    let user = null;
+    if (employee.userID || employee.userId) {
+      user = await User.findById(employee.userID || employee.userId);
+    }
+    if (!user && employee.email) {
+      user = await User.findOne({ email: employee.email });
+    }
+
+    await cascadeDeleteUser(user || employee._id, { employeeId: employee._id });
+
+    if (user) {
+      await User.findByIdAndDelete(user._id);
+    }
+    await Employee.findByIdAndDelete(employee._id);
+
+    await recordAuditEvent({
+      req,
+      module: "EMPLOYEE",
+      action: "DELETE",
+      actionType: "EMPLOYEE_HARD_DELETED",
+      entityType: "Employee",
+      entityId: employee._id,
+      description: `Employee ${oldEmployeeData?.employeeID || employee._id} PERMANENTLY deleted by Super Admin`,
+      oldValues: oldEmployeeData,
+      companyId: oldEmployeeData?.companyId || req.user?.companyId,
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Employee permanently deleted successfully",
+      deletedEmployeeId: employee._id,
+      deletedUserId: user?._id || null,
+    });
+  } catch (error) {
+    console.error("Hard Delete Employee Error:", error);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// ================= DELETE EMPLOYEE (DELEGATES TO DEACTIVATE FOR SOFT-DELETION) =================
+exports.deleteEmployee = async (req, res) => {
+  return exports.deactivateEmployee(req, res);
+};
+
 
 exports.removeTeamLead = async (req, res) => {
   try {
@@ -956,6 +1326,18 @@ exports.addEmployee = async (req, res) => {
       message: `${firstName} ${lastName} added`,
     });
 
+    await recordAuditEvent({
+      req,
+      module: "EMPLOYEE",
+      action: "CREATE",
+      actionType: "EMPLOYEE_CREATED",
+      entityType: "Employee",
+      entityId: employee._id,
+      description: `Employee ${employee.employeeID || firstName} added`,
+      newValues: employee,
+      companyId: employee.companyId || req.user?.companyId,
+    });
+
     res.status(201).json({
       success: true,
       message: "Employee added successfully",
@@ -998,7 +1380,26 @@ exports.addEmployee = async (req, res) => {
 // ================= EMPLOYEE LIST =================
 exports.getEmployeeList = async (req, res) => {
   try {
-    const employees = await Employee.find().sort({ createdAt: -1 });
+    const filter = {};
+    if (req.query?.status) {
+      const qStatus = String(req.query.status).trim().toLowerCase();
+      if (qStatus === "active") {
+        filter.$and = [
+          { employeeStatus: { $in: ["Active", "ACTIVE"] } },
+          { isDeactivated: { $ne: true } },
+        ];
+      } else if (qStatus === "inactive" || qStatus === "deactivated") {
+        filter.$or = [
+          { employeeStatus: { $in: ["Inactive", "INACTIVE"] } },
+          { status: { $in: ["INACTIVE", "Inactive"] } },
+          { isDeactivated: true },
+        ];
+      } else if (qStatus !== "all") {
+        filter.employeeStatus = req.query.status;
+      }
+    }
+
+    const employees = await Employee.find(filter).sort({ createdAt: -1 });
 
     const employeesWithDepartmentName = await Promise.all(
       employees.map(async (employee) => {
@@ -1024,9 +1425,19 @@ exports.getEmployeeList = async (req, res) => {
           Employee.findByIdAndUpdate(employee._id, { designation: linkedUser.designation }).catch(() => {});
         }
 
+        const isDeactivated = Boolean(
+          employeeData.isDeactivated ||
+          String(employeeData.employeeStatus || "").toLowerCase() === "inactive" ||
+          String(employeeData.status || "").toLowerCase() === "inactive"
+        );
+
         const empImg = employeeData.profileImage || employeeData.profileImg || linkedUser?.profileImage || linkedUser?.profileImg || "";
         return {
           ...employeeData,
+          isDeactivated,
+          isActive: !isDeactivated,
+          employeeStatus: employeeData.employeeStatus || (isDeactivated ? "Inactive" : "Active"),
+          status: employeeData.status || (isDeactivated ? "INACTIVE" : "ACTIVE"),
           profileImage: empImg,
           profileImg: empImg,
           profilePhoto: empImg,
@@ -1195,6 +1606,19 @@ exports.updateEmployeeLifecycle = async (req, res) => {
       action: historyAction,
       message: historyMessage,
       actionBy: req.user?._id || null,
+    });
+
+    await recordAuditEvent({
+      req,
+      module: "EMPLOYEE",
+      action: "UPDATE",
+      actionType: "EMPLOYEE_LIFECYCLE_UPDATED",
+      entityType: "Employee",
+      entityId: employee._id,
+      description: `Employee ${employee.employeeID || employee._id} lifecycle updated to ${currentAction}`,
+      oldValues: { currentAction: previousAction, employeeStatus: previousEmployeeStatus },
+      newValues: { currentAction, employeeStatus: employee.employeeStatus },
+      companyId: employee.companyId || req.user?.companyId,
     });
 
     res.status(200).json({
@@ -1390,68 +1814,7 @@ exports.updateEmployee = async (req, res) => {
   }
 };
 
-// ================= REMOVE EMPLOYEE =================
-exports.removeEmployee =
-  async (req, res) => {
-    try {
-      const employeeId =
-        req.params.id;
-
-      const employee =
-        await Employee.findById(
-          employeeId
-        );
-
-      if (
-        !employee
-      ) {
-        return res
-          .status(404)
-          .json({
-            success: false,
-            message:
-              "Employee not found",
-          });
-      }
-
-      // DELETE DOCUMENTS
-      await EmployeeDocument.deleteOne(
-        {
-          employeeID:
-            employeeId,
-        }
-      );
-
-      // HISTORY
-     await EmployeeHistory.create({
-  employeeID: employeeId,
-  action: "exit",
-  message: `${employee.firstName} ${employee.lastName} removed from company`,
-});
-
-      // DELETE FROM TEAMMEMBER
-      await TeamMember.deleteMany({
-        userId: { $in: [employee._id, employee.userID, employee.userId].filter(Boolean) },
-      });
-
-      // DELETE EMPLOYEE
-      await Employee.findByIdAndDelete(
-        employeeId
-      );
-
-
-      res.status(200).json({
-        success: true,
-        message:
-          "Employee removed successfully",
-      });
-    } catch (error) {
-      console.log(error);
-
-      res.status(500).json({
-        success: false,
-        message:
-          error.message,
-      });
-    }
-  };
+// ================= REMOVE EMPLOYEE (DELEGATES TO DEACTIVATE FOR SOFT-DELETION) =================
+exports.removeEmployee = async (req, res) => {
+  return exports.deactivateEmployee(req, res);
+};

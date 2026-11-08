@@ -20,6 +20,8 @@ const employeeHistorySchema = new mongoose.Schema(
         "resignation",
         "joining",
         "start_probation",
+        "deactivated",
+        "reactivated",
       ],
       required: true,
     },

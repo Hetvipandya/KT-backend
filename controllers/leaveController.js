@@ -8,6 +8,7 @@ const Team = require("../models/Team");
 const { calculateWorkingLeaveDays, toDateString } = require("../utils/leaveUtils");
 const { getTeamLeadForUser } = require("../utils/teamLeadLookup");
 const { notify } = require("../utils/sendNotification");
+const { recordAuditEvent } = require("../services/auditLog.service");
 
 const enrichLeavesWithEmployeeDetails = async (leaves) => {
   if (!leaves) return leaves;
@@ -620,6 +621,18 @@ exports.applyLeave = async (req, res) => {
 
     const enrichedLeave = await enrichLeavesWithEmployeeDetails(leave);
 
+    await recordAuditEvent({
+      req,
+      module: "LEAVE",
+      action: "CREATE",
+      actionType: "LEAVE_APPLIED",
+      entityType: "Leave",
+      entityId: leave._id,
+      description: `Leave applied by ${user.name || 'User'} (${leaveType}: ${startDate} to ${endDate})`,
+      newValues: leave,
+      companyId: user?.companyId || req.user?.companyId,
+    });
+
     res.status(201).json({
       success: true,
       message: "Leave request sent successfully",
@@ -918,7 +931,20 @@ exports.teamLeadApproval = async (req, res) => {
       leave.hrStatus = "rejected";
     }
 
+    const oldLeaveData = leave.toObject ? leave.toObject() : { ...leave };
     await leave.save();
+    await recordAuditEvent({
+      req,
+      module: "LEAVE",
+      action: status === "approved" ? "APPROVE" : "REJECT",
+      actionType: status === "approved" ? "LEAVE_TL_APPROVED" : "LEAVE_TL_REJECTED",
+      entityType: "Leave",
+      entityId: leave._id,
+      description: `Leave ${status} by Team Lead: ${remarkText}`,
+      oldValues: oldLeaveData,
+      newValues: leave,
+      companyId: leave.companyId || req.user?.companyId,
+    });
     await notifyLeaveDecision(leave, "TEAM_LEAD", status, remarkText);
 
     const enrichedLeave = await enrichLeavesWithEmployeeDetails(leave);
@@ -1053,7 +1079,20 @@ exports.hrApproval = async (req, res) => {
       leave.hrRemark = remarkText;
     }
 
+    const oldLeaveData = leave.toObject ? leave.toObject() : { ...leave };
     await leave.save();
+    await recordAuditEvent({
+      req,
+      module: "LEAVE",
+      action: status === "approved" ? "APPROVE" : "REJECT",
+      actionType: status === "approved" ? "LEAVE_HR_APPROVED" : "LEAVE_HR_REJECTED",
+      entityType: "Leave",
+      entityId: leave._id,
+      description: `Leave ${status} by HR: ${remarkText}`,
+      oldValues: oldLeaveData,
+      newValues: leave,
+      companyId: leave.companyId || req.user?.companyId,
+    });
     await notifyLeaveDecision(leave, "HR", status, remarkText);
 
     const enrichedLeave = await enrichLeavesWithEmployeeDetails(leave);
@@ -1180,7 +1219,20 @@ exports.adminApproval = async (req, res) => {
     leave.adminApprovedBy = req.user._id;
     leave.adminApprovedAt = new Date();
 
+    const oldLeaveData = leave.toObject ? leave.toObject() : { ...leave };
     await leave.save();
+    await recordAuditEvent({
+      req,
+      module: "LEAVE",
+      action: status === "approved" ? "APPROVE" : "REJECT",
+      actionType: status === "approved" ? "LEAVE_ADMIN_APPROVED" : "LEAVE_ADMIN_REJECTED",
+      entityType: "Leave",
+      entityId: leave._id,
+      description: `Leave ${status} by Admin: ${remarkText}`,
+      oldValues: oldLeaveData,
+      newValues: leave,
+      companyId: leave.companyId || req.user?.companyId,
+    });
     await notifyLeaveDecision(leave, "ADMIN", status, remarkText);
 
     const enrichedLeave = await enrichLeavesWithEmployeeDetails(leave);

@@ -1881,6 +1881,35 @@ const loginUser = async (req, res) => {
       });
     }
 
+    if (user.isDeactivated || !user.isActive || String(user.status || "").toLowerCase() === "inactive") {
+      return res.status(403).json({
+        success: false,
+        message: "Your account is inactive",
+      });
+    }
+
+    if (user.role === "employee" || user.role === "team lead") {
+      const linkedEmp = await Employee.findOne({
+        $or: [
+          { userID: user._id },
+          { userId: user._id },
+          { email: user.email ? String(user.email).trim().toLowerCase() : null }
+        ].filter(Boolean)
+      }).select("employeeStatus status currentAction isDeactivated");
+
+      if (
+        linkedEmp &&
+        (linkedEmp.isDeactivated ||
+          (String(linkedEmp.employeeStatus || "").toLowerCase() === "inactive" &&
+            String(linkedEmp.status || "").toLowerCase() === "inactive"))
+      ) {
+        return res.status(403).json({
+          success: false,
+          message: "Your account is inactive",
+        });
+      }
+    }
+
     if (!user.isActive) {
       return res.status(403).json({
         success: false,

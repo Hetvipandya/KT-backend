@@ -317,11 +317,40 @@ const login = async (req, res, next) => {
         message: "Invalid email or password",
       });
     }
-    if (approvalIsRequired(user.role) && (user.isApproved === false || user.isActive === false)) {
+    if (approvalIsRequired(user.role) && user.isApproved === false) {
       return res.status(403).json({
         success: false,
         message: "Admin Approval Pending",
       });
+    }
+
+    if (user.isActive === false || user.isDeactivated === true || String(user.status || "").toLowerCase() === "inactive") {
+      return res.status(403).json({
+        success: false,
+        message: "Your account is inactive",
+      });
+    }
+
+    if (user.role === "employee" || user.role === "team lead") {
+      const linkedEmployee = await Employee.findOne({
+        $or: [
+          { userID: user._id },
+          { userId: user._id },
+          { email: user.email ? String(user.email).trim().toLowerCase() : null }
+        ].filter(Boolean)
+      }).select("employeeStatus status currentAction isDeactivated");
+
+      if (
+        linkedEmployee &&
+        (linkedEmployee.isDeactivated ||
+          String(linkedEmployee.employeeStatus || "").toLowerCase() === "inactive" ||
+          String(linkedEmployee.status || "").toLowerCase() === "inactive")
+      ) {
+        return res.status(403).json({
+          success: false,
+          message: "Your account is inactive",
+        });
+      }
     }
 
     if (user.isActive === false) {

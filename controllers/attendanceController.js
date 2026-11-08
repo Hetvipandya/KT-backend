@@ -3,6 +3,7 @@ const Attendance = require("../models/Attendance");
 const { buildAttendanceTimeline } = require("../utils/attendanceTimeline");
 const { notifyAutoCheckoutSuccess } = require("../utils/attendanceNotifications");
 const { notify } = require("../utils/sendNotification");
+const { recordAuditEvent } = require("../services/auditLog.service");
 const User = require("../models/User");
 const {
   OFFICE_LOCATION,
@@ -1842,6 +1843,17 @@ exports.approveAttendance =
         attendanceStatus.status;
 
       await attendance.save();
+      await recordAuditEvent({
+        req,
+        module: "ATTENDANCE",
+        action: "APPROVE",
+        actionType: "ATTENDANCE_APPROVED",
+        entityType: "Attendance",
+        entityId: attendance._id,
+        description: `Attendance check-in approved for date ${attendance.date}`,
+        newValues: attendance,
+        companyId: approver?.companyId || req.user?.companyId,
+      });
       await notify({
         userId: attendance.userId,
         type: "ATTENDANCE_APPROVED",
@@ -2678,6 +2690,17 @@ exports.rejectAttendance =
       attendance.approvedCheckInTime = null;
 
       await attendance.save();
+      await recordAuditEvent({
+        req,
+        module: "ATTENDANCE",
+        action: "REJECT",
+        actionType: "ATTENDANCE_REJECTED",
+        entityType: "Attendance",
+        entityId: attendance._id,
+        description: `Attendance check-in rejected for date ${attendance.date}: ${rejectionText}`,
+        newValues: attendance,
+        companyId: approver?.companyId || req.user?.companyId,
+      });
       await notify({
         userId: attendance.userId,
         type: "ATTENDANCE_REJECTED",

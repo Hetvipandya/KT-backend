@@ -149,33 +149,43 @@ const unlockDeductionsForPayroll = async (monthlySalaryId, userId = null) => {
  * Safe Audit Logger Helper for deduction events
  */
 const logDeductionAudit = async (req, actionType, entity, description, metadata = {}) => {
-  try {
-    if (typeof recordAuditEvent !== "function") return;
-    const companyId = entity?.companyId || req?.user?.companyId;
-    if (!companyId) return;
+  if (typeof recordAuditEvent !== "function") return;
+  const companyId = entity?.companyId || req?.user?.companyId || null;
+  const entityType = entity?.deductionRecordId ? "EmployeeDeduction" : "DeductionMaster";
 
-    await recordAuditEvent({
-      companyId,
-      branchId: entity?.branchId || req?.user?.branchId || null,
-      userId: req?.user?._id || null,
-      module: "HRMS_DEDUCTIONS",
-      actionType,
-      entityId: entity?._id || null,
-      entityType: entity?.deductionRecordId ? "EmployeeDeduction" : "DeductionMaster",
-      description,
-      metadata: {
-        deductionRecordId: entity?.deductionRecordId,
-        code: entity?.code,
-        status: entity?.status,
-        amount: entity?.amount,
-        ...metadata,
-      },
-      ipAddress: req?.ip || "",
-      userAgent: req?.get ? req.get("user-agent") : "",
-    });
-  } catch (err) {
-    // Non-blocking audit logger
-  }
+  let action = "UPDATE";
+  const upperAction = String(actionType || "").toUpperCase();
+  if (upperAction.includes("CREATE")) action = "CREATE";
+  else if (upperAction.includes("DELETE") || upperAction.includes("DEACTIVATE")) action = "DELETE";
+  else if (upperAction.includes("APPROVE")) action = "APPROVE";
+  else if (upperAction.includes("REJECT")) action = "REJECT";
+
+  const oldValues = metadata.oldValues || (action === "DELETE" ? entity : null);
+  const newValues = metadata.newValues || (action === "DELETE" ? null : entity);
+
+  await recordAuditEvent({
+    req,
+    companyId,
+    branchId: entity?.branchId || req?.user?.branchId || null,
+    userId: req?.user?._id || null,
+    module: "HRMS_DEDUCTIONS",
+    action,
+    actionType,
+    entityId: entity?._id || null,
+    entityType,
+    description,
+    oldValues,
+    newValues,
+    metadata: {
+      deductionRecordId: entity?.deductionRecordId,
+      code: entity?.code,
+      status: entity?.status,
+      amount: entity?.amount,
+      ...metadata,
+    },
+    ipAddress: req?.ip || "",
+    userAgent: req?.get ? req.get("user-agent") : "",
+  });
 };
 
 /**

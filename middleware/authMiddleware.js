@@ -117,6 +117,38 @@ exports.protect = async (req, res, next) => {
     }
 
     // ================= ACTIVE CHECK =================
+    if (
+      user.isDeactivated === true ||
+      (user.isActive === false && String(user.status || "").toLowerCase() === "inactive")
+    ) {
+      return res.status(403).json({
+        success: false,
+        message: "User account disabled",
+      });
+    }
+
+    if (user.role === "employee" || user.role === "team lead") {
+      const emp = await Employee.findOne({
+        $or: [
+          { userID: user._id },
+          { userId: user._id },
+          { email: user.email ? String(user.email).trim().toLowerCase() : null },
+        ].filter(Boolean),
+      }).select("employeeStatus status isDeactivated");
+
+      if (
+        emp &&
+        (emp.isDeactivated ||
+          (String(emp.employeeStatus || "").toLowerCase() === "inactive" &&
+            String(emp.status || "").toLowerCase() === "inactive"))
+      ) {
+        return res.status(403).json({
+          success: false,
+          message: "User account disabled",
+        });
+      }
+    }
+
     if (user.isActive === false && user.status === "Inactive") {
       return res.status(403).json({
         success: false,

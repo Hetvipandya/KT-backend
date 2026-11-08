@@ -16,6 +16,9 @@ const {
   updateEmployeeLifecycle,
   deleteEmployee,
   removeEmployee,
+  deactivateEmployee,
+  reactivateEmployee,
+  hardDeleteEmployee,
 
   getEmployeeList,
   getEmployeeProfile,
@@ -181,7 +184,33 @@ router.put(
 // DELETE / REMOVE EMPLOYEE
 // ============================================================
 
-// Delete employee + documents + related user/team
+const { protect } = require("../middleware/authMiddleware");
+const { authorizeRoles } = require("../middleware/roleMiddleware");
+
+const requireAdminOrHr = [
+  protect,
+  authorizeRoles("admin", "hr", "super admin")
+];
+
+// Deactivation routes
+router.post("/:id/deactivate", requireAdminOrHr, deactivateEmployee);
+router.put("/:id/deactivate", requireAdminOrHr, deactivateEmployee);
+router.patch("/:id/deactivate", requireAdminOrHr, deactivateEmployee);
+router.put("/deactivate/:id", requireAdminOrHr, deactivateEmployee);
+
+// Reactivation routes
+router.post("/:id/reactivate", requireAdminOrHr, reactivateEmployee);
+router.put("/:id/reactivate", requireAdminOrHr, reactivateEmployee);
+router.patch("/:id/reactivate", requireAdminOrHr, reactivateEmployee);
+router.put("/reactivate/:id", requireAdminOrHr, reactivateEmployee);
+
+// Soft-delete routes (backward compatible with legacy delete calls)
+router.delete("/delete/:id", requireAdminOrHr, deleteEmployee);
+router.delete("/remove/:id", requireAdminOrHr, removeEmployee);
+router.delete("/hard-delete/:id", protect, authorizeRoles("super admin"), hardDeleteEmployee);
+router.delete("/:id", requireAdminOrHr, deleteEmployee);
+
+// Delete employee + documents + related user/team (legacy compatibility)
 router.delete(
   "/delete/:id",
   deleteEmployee

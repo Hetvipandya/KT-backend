@@ -206,6 +206,8 @@ const userSchema =
       role: {
         type: String,
         enum: [
+          "super admin",
+          "superadmin",
           "admin",
           "hr",
           "employee",
@@ -266,6 +268,34 @@ const userSchema =
         type: String,
         default: null,
         trim: true,
+      },
+
+      isDeactivated: {
+        type: Boolean,
+        default: false,
+        index: true,
+      },
+
+      deactivatedAt: {
+        type: Date,
+        default: null,
+      },
+
+      deactivatedBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+        default: null,
+      },
+
+      reactivatedAt: {
+        type: Date,
+        default: null,
+      },
+
+      reactivatedBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+        default: null,
       },
 
       // ================= JWT =================

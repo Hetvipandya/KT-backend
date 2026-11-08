@@ -1,5 +1,6 @@
 const Holiday =
   require("../models/Holiday");
+const { recordAuditEvent } = require("../services/auditLog.service");
 
   // ================= ADD HOLIDAY =================
 exports.addHoliday =
@@ -28,6 +29,18 @@ exports.addHoliday =
           holidayName,
           holidayDate,
         });
+
+      await recordAuditEvent({
+        req,
+        module: "HOLIDAY",
+        action: "CREATE",
+        actionType: "HOLIDAY_CREATED",
+        entityType: "Holiday",
+        entityId: holiday._id,
+        description: `Holiday ${holiday.holidayName || holiday.name} added`,
+        newValues: holiday,
+        companyId: req.user?.companyId,
+      });
 
       res.status(201).json({
         success: true,
@@ -174,6 +187,9 @@ exports.updateHoliday =
       const { id } =
         req.params;
 
+      const oldHoliday = await Holiday.findById(id);
+      const oldHolidayData = oldHoliday && (oldHoliday.toObject ? oldHoliday.toObject() : { ...oldHoliday });
+
       const holiday =
         await Holiday.findByIdAndUpdate(
           id,
@@ -190,6 +206,19 @@ exports.updateHoliday =
               "Holiday not found",
           });
       }
+
+      await recordAuditEvent({
+        req,
+        module: "HOLIDAY",
+        action: "UPDATE",
+        actionType: "HOLIDAY_UPDATED",
+        entityType: "Holiday",
+        entityId: holiday._id,
+        description: `Holiday ${holiday.holidayName || holiday.name} updated`,
+        oldValues: oldHolidayData,
+        newValues: holiday,
+        companyId: req.user?.companyId,
+      });
 
       res.status(200).json({
         success: true,
@@ -213,6 +242,9 @@ exports.deleteHoliday =
       const { id } =
         req.params;
 
+      const oldHoliday = await Holiday.findById(id);
+      const oldHolidayData = oldHoliday && (oldHoliday.toObject ? oldHoliday.toObject() : { ...oldHoliday });
+
       const holiday =
         await Holiday.findByIdAndDelete(
           id
@@ -227,6 +259,18 @@ exports.deleteHoliday =
               "Holiday not found",
           });
       }
+
+      await recordAuditEvent({
+        req,
+        module: "HOLIDAY",
+        action: "DELETE",
+        actionType: "HOLIDAY_DELETED",
+        entityType: "Holiday",
+        entityId: id,
+        description: `Holiday ${oldHolidayData?.holidayName || oldHolidayData?.name || id} deleted`,
+        oldValues: oldHolidayData,
+        companyId: req.user?.companyId,
+      });
 
       res.status(200).json({
         success: true,

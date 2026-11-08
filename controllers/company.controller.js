@@ -1,4 +1,5 @@
 const Company = require('../models/Company');
+const { recordAuditEvent } = require('../services/auditLog.service');
 const User = require('../models/User');
 const Employee = require('../models/Employee');
 const Department = require('../models/Department');
@@ -421,7 +422,20 @@ const updateCompany = async (req, res, next) => {
       }
     });
 
+    const oldCompanyData = company.toObject ? company.toObject() : { ...company };
     await company.save();
+    await recordAuditEvent({
+      req,
+      module: "SETTINGS",
+      action: "UPDATE",
+      actionType: "COMPANY_SETTINGS_UPDATED",
+      entityType: "Company",
+      entityId: company._id,
+      description: `Company profile updated for ${company.name}`,
+      oldValues: oldCompanyData,
+      newValues: company,
+      companyId: company._id,
+    });
 
     return res.status(200).json({
       success: true,

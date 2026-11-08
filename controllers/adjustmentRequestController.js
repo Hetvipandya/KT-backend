@@ -4,6 +4,7 @@ const User = require("../models/User");
 const TeamLead = require("../models/Team");
 const AdjustmentRequest = require("../models/AdjustmentRequest");
 const { notify } = require("../utils/sendNotification");
+const { recordAuditEvent } = require("../services/auditLog.service");
 
 const normalizeAttendanceDate = (value) => {
   if (!value) return null;
@@ -756,6 +757,18 @@ exports.patchAttendanceAdjustment = async (req, res) => {
         meta: { adjustmentId: adjustment && adjustment._id ? adjustment._id.toString() : null, attendanceId: attendance._id ? attendance._id.toString() : null, status: "approved", date: attendanceDate },
       });
     }
+
+    await recordAuditEvent({
+      req,
+      module: "ATTENDANCE",
+      action: "UPDATE",
+      actionType: "ATTENDANCE_ADJUSTMENT",
+      entityType: "Attendance",
+      entityId: attendance._id,
+      description: `Attendance adjusted for employee ${employeeId} on ${attendanceDate}`,
+      newValues: attendance,
+      companyId: userObj?.companyId || req.user?.companyId,
+    });
 
     return res.status(200).json({
       success: true,

@@ -4,6 +4,7 @@ const Attendance = require("../models/Attendance");
 const Session = require("../models/Session");
 const Screenshot = require("../models/Screenshot");
 const MonitoringSettings = require("../models/MonitoringSettings");
+const { recordAuditEvent } = require("../services/auditLog.service");
 const InactivityEvent = require("../models/InactivityEvent");
 const TaskManagement = require("../models/taskModel");
 const DailyReport = require("../models/DailyReport");
@@ -829,12 +830,26 @@ exports.updateScreenshotSettings = async (req, res) => {
     if (!settings) {
       settings = new MonitoringSettings();
     }
+    const oldSettingsData = settings.toObject ? settings.toObject() : { ...settings };
     if (intervalSeconds) settings.intervalSeconds = intervalSeconds;
     if (typeof isMonitoringEnabled === "boolean")
       settings.isMonitoringEnabled = isMonitoringEnabled;
     settings.updatedBy = req.user._id;
 
     await settings.save();
+    await recordAuditEvent({
+      req,
+      module: "SETTINGS",
+      action: "UPDATE",
+      actionType: "MONITORING_SETTINGS_UPDATED",
+      entityType: "MonitoringSettings",
+      entityId: settings._id,
+      description: "Monitoring system settings updated",
+      oldValues: oldSettingsData,
+      newValues: settings,
+      companyId: req.user?.companyId,
+    });
+
     return res.status(200).json({
       success: true,
       message: "Monitoring settings updated",

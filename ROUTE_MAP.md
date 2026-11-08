@@ -38,6 +38,8 @@
 ## HRMS, Attendance, Leave & Payroll (KT)
 | Method | Endpoint | Source | Description |
 | :--- | :--- | :--- | :--- |
+| `POST/GET/PUT/DELETE` | `/api/employee/*` | KT & FIN | Employee CRUD, soft-deactivation (`/deactivate`), reactivation (`/reactivate`), status filtering, and Super Admin hard-delete (`/hard-delete`) |
+| `GET` | `/api/employees` | KT & FIN | Alias for employee listing with active/inactive filtering (`?status=active|inactive|all`) |
 | `POST/GET` | `/api/attendance/*` | KT | Clock-in, clock-out, geofencing, daily records |
 | `POST/GET` | `/api/leave/*` | KT | Leave applications, balance calculation, approvals |
 | `POST/GET` | `/api/payroll/*` | KT | Salary structures, payslip generation, disbursements |
