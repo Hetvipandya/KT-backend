@@ -39,6 +39,15 @@ const createSalaryStructure = async (req, res) => {
       yearsOfService,
       autoCalculateStatutory,
       isActive,
+      structureType,
+      fixedSalary,
+      extraAllowance,
+      incentive,
+      bonus,
+      isPfApplicable,
+      isEsicApplicable,
+      isPtApplicable,
+      isTdsApplicable,
     } = req.body;
 
     const targetUserId = employeeId || userId;
@@ -82,7 +91,16 @@ const createSalaryStructure = async (req, res) => {
       branchId: branchId || user.branchId || null,
       financialYearId: financialYearId || null,
       effectiveFrom: effectiveFrom ? new Date(effectiveFrom) : new Date(),
-      basicSalary: basicSalary ?? 0,
+      structureType: structureType || (fixedSalary > 0 && !hra && !specialAllowance && !allowance ? "SIMPLE_FIXED" : "COMPONENT_BASED"),
+      fixedSalary: fixedSalary ?? (structureType === "SIMPLE_FIXED" ? (basicSalary ?? 0) : 0),
+      extraAllowance: extraAllowance ?? 0,
+      incentive: incentive ?? 0,
+      bonus: bonus ?? 0,
+      isPfApplicable: isPfApplicable ?? null,
+      isEsicApplicable: isEsicApplicable ?? null,
+      isPtApplicable: isPtApplicable ?? null,
+      isTdsApplicable: isTdsApplicable ?? null,
+      basicSalary: basicSalary ?? fixedSalary ?? 0,
       hra: hra ?? 0,
       conveyanceAllowance: conveyanceAllowance ?? 0,
       medicalAllowance: medicalAllowance ?? 0,
@@ -616,6 +634,15 @@ const updateSalaryStructure = async (req, res) => {
       yearsOfService,
       autoCalculateStatutory,
       isActive,
+      structureType,
+      fixedSalary,
+      extraAllowance,
+      incentive,
+      bonus,
+      isPfApplicable,
+      isEsicApplicable,
+      isPtApplicable,
+      isTdsApplicable,
     } = req.body;
 
     if (monthlySalaryId && !mongoose.Types.ObjectId.isValid(monthlySalaryId)) {
@@ -636,6 +663,15 @@ const updateSalaryStructure = async (req, res) => {
         branchId: existingStructure.branchId,
         financialYearId: existingStructure.financialYearId,
         effectiveFrom: effectiveFrom ? new Date(effectiveFrom) : new Date(),
+        structureType: structureType ?? existingStructure.structureType,
+        fixedSalary: fixedSalary ?? existingStructure.fixedSalary,
+        extraAllowance: extraAllowance ?? existingStructure.extraAllowance,
+        incentive: incentive ?? existingStructure.incentive,
+        bonus: bonus ?? existingStructure.bonus,
+        isPfApplicable: isPfApplicable ?? existingStructure.isPfApplicable,
+        isEsicApplicable: isEsicApplicable ?? existingStructure.isEsicApplicable,
+        isPtApplicable: isPtApplicable ?? existingStructure.isPtApplicable,
+        isTdsApplicable: isTdsApplicable ?? existingStructure.isTdsApplicable,
         basicSalary: basicSalary ?? existingStructure.basicSalary,
         hra: hra ?? existingStructure.hra,
         conveyanceAllowance: conveyanceAllowance ?? existingStructure.conveyanceAllowance,
@@ -682,6 +718,15 @@ const updateSalaryStructure = async (req, res) => {
     }
 
     // Direct in-place update
+    if (structureType !== undefined) existingStructure.structureType = structureType;
+    if (fixedSalary !== undefined) existingStructure.fixedSalary = fixedSalary;
+    if (extraAllowance !== undefined) existingStructure.extraAllowance = extraAllowance;
+    if (incentive !== undefined) existingStructure.incentive = incentive;
+    if (bonus !== undefined) existingStructure.bonus = bonus;
+    if (isPfApplicable !== undefined) existingStructure.isPfApplicable = isPfApplicable;
+    if (isEsicApplicable !== undefined) existingStructure.isEsicApplicable = isEsicApplicable;
+    if (isPtApplicable !== undefined) existingStructure.isPtApplicable = isPtApplicable;
+    if (isTdsApplicable !== undefined) existingStructure.isTdsApplicable = isTdsApplicable;
     if (basicSalary !== undefined) existingStructure.basicSalary = basicSalary;
     if (hra !== undefined) existingStructure.hra = hra;
     if (conveyanceAllowance !== undefined) existingStructure.conveyanceAllowance = conveyanceAllowance;

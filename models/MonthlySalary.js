@@ -67,6 +67,102 @@ const monthlySalarySchema = new mongoose.Schema(
       default: {},
     },
 
+    structureType: {
+      type: String,
+      enum: ["SIMPLE_FIXED", "COMPONENT_BASED"],
+      default: "COMPONENT_BASED",
+    },
+
+    fixedSalary: {
+      type: Number,
+      default: 0,
+    },
+
+    monthlySalary: {
+      type: Number,
+      default: 0,
+    },
+
+    extraAllowance: {
+      type: Number,
+      default: 0,
+    },
+
+    incentive: {
+      type: Number,
+      default: 0,
+    },
+
+    bonus: {
+      type: Number,
+      default: 0,
+    },
+
+    extraEarnings: {
+      type: Number,
+      default: 0,
+    },
+
+    unpaidLeaveDays: {
+      type: Number,
+      default: 0,
+    },
+
+    unpaidLeaveDeduction: {
+      type: Number,
+      default: 0,
+    },
+
+    unapprovedLeaveDays: {
+      type: Number,
+      default: 0,
+    },
+
+    unapprovedLeavePenalty: {
+      type: Number,
+      default: 0,
+    },
+
+    isPenaltyApproved: {
+      type: Boolean,
+      default: false,
+    },
+
+    legallyApprovedPenalties: {
+      type: Number,
+      default: 0,
+    },
+
+    statutoryDeductions: {
+      type: Number,
+      default: 0,
+    },
+
+    approvedOtherDeductions: {
+      type: Number,
+      default: 0,
+    },
+
+    isPfApplicable: {
+      type: Boolean,
+      default: null,
+    },
+
+    isEsicApplicable: {
+      type: Boolean,
+      default: null,
+    },
+
+    isPtApplicable: {
+      type: Boolean,
+      default: null,
+    },
+
+    isTdsApplicable: {
+      type: Boolean,
+      default: null,
+    },
+
     calculationMode: {
       type: String,
       enum: ["CALENDAR_DAYS", "THIRTY_DAYS", "WORKING_DAYS"],

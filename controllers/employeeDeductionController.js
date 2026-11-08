@@ -872,8 +872,9 @@ const unlockEmployeeDeduction = async (req, res) => {
 // =====================================================
 const previewPayrollWithDeductions = async (req, res) => {
   try {
-    const { employeeId, userId, month, year } = req.body;
-    const targetEmpId = employeeId || userId;
+    const targetEmpId = req.body?.employeeId || req.query?.employeeId || req.body?.userId || req.query?.userId;
+    const month = req.body?.month || req.query?.month;
+    const year = req.body?.year || req.query?.year;
 
     if (!targetEmpId || !month || !year) {
       return res.status(400).json({
@@ -887,39 +888,23 @@ const previewPayrollWithDeductions = async (req, res) => {
       return res.status(404).json({ success: false, message: "Employee not found" });
     }
 
-    const monthNum = Number(month);
-    const yearNum = Number(year);
+    const { calculateMonthlyPayroll } = require("../services/payrollCalculationService");
 
-    const activeStructure = await SalaryStructure.findOne({
-      $or: [{ userId: user._id }, { employeeId: user._id }],
-      isActive: true,
+    const payrollData = await calculateMonthlyPayroll({
+      user,
+      month: Number(month),
+      year: Number(year),
+      calculationMode: req.body?.calculationMode || req.query?.calculationMode || "CALENDAR_DAYS",
+      manualWorkingDays: req.body?.workingDays || req.query?.workingDays,
+      manualLopDays: req.body?.lopDays || req.query?.lopDays,
+      extraAllowance: req.body?.extraAllowance || req.query?.extraAllowance,
+      incentive: req.body?.incentive || req.query?.incentive,
+      bonus: req.body?.bonus || req.body?.extraBonus || req.query?.bonus || req.query?.extraBonus,
+      extraBonus: req.body?.extraBonus || req.query?.extraBonus,
+      extraDeduction: req.body?.extraDeduction || req.query?.extraDeduction,
+      isPenaltyApproved: req.body?.isPenaltyApproved || req.query?.isPenaltyApproved,
+      options: { ...req.query, ...req.body },
     });
-
-    const basic = activeStructure ? activeStructure.basicSalary || 0 : 0;
-    const hra = activeStructure ? activeStructure.hra || 0 : 0;
-    const conveyance = activeStructure ? activeStructure.conveyanceAllowance || 0 : 0;
-    const special = activeStructure ? activeStructure.specialAllowance || activeStructure.allowance || 0 : 0;
-    const da = activeStructure ? activeStructure.dearnessAllowance || 0 : 0;
-    const otherAllowances = activeStructure ? activeStructure.otherAllowances || 0 : 0;
-    const fixedBonus = activeStructure ? activeStructure.fixedBonus || 0 : 0;
-
-    const grossSalary = Number((basic + hra + conveyance + special + da + otherAllowances + fixedBonus).toFixed(2));
-    const basicForPf = basic + da;
-
-    const pfDeduction = activeStructure ? activeStructure.pfDeduction || Math.round(basicForPf * 0.12) : 0;
-    const esicDeduction = activeStructure ? activeStructure.esicDeduction || Math.round(grossSalary * 0.0075) : 0;
-    const professionalTax = activeStructure ? activeStructure.professionalTax || (grossSalary > 12000 ? 200 : 0) : 0;
-    const tds = activeStructure ? activeStructure.tds || 0 : 0;
-    const fixedDeduction = activeStructure ? activeStructure.fixedDeduction || 0 : 0;
-
-    // Fetch and partition employee deductions
-    const { validDeductions, totalCustomDeductions, excludedDeductions } =
-      await getApprovedLegallyPermissibleDeductions(user._id, monthNum, yearNum);
-
-    const totalDeductions = Number(
-      (pfDeduction + esicDeduction + professionalTax + tds + fixedDeduction + totalCustomDeductions).toFixed(2)
-    );
-    const netSalary = Math.max(0, Number((grossSalary - totalDeductions).toFixed(2)));
 
     return res.status(200).json({
       success: true,
@@ -931,39 +916,40 @@ const previewPayrollWithDeductions = async (req, res) => {
           email: user.email,
           uniqueID: user.uniqueID,
         },
-        payPeriod: { month: monthNum, year: yearNum },
+        payPeriod: payrollData.payPeriod,
+        structureType: payrollData.structureType,
+        calculationMode: payrollData.calculationMode,
+        days: payrollData.days,
+        perDaySalary: payrollData.perDaySalary,
         earnings: {
-          basicSalary: basic,
-          hra,
-          conveyanceAllowance: conveyance,
-          specialAllowance: special,
-          dearnessAllowance: da,
-          otherAllowances,
-          fixedBonus,
-          grossSalary,
+          basicSalary: payrollData.baseEarnings.basicSalary,
+          hra: payrollData.baseEarnings.hra,
+          conveyanceAllowance: payrollData.baseEarnings.conveyanceAllowance,
+          specialAllowance: payrollData.baseEarnings.specialAllowance,
+          dearnessAllowance: payrollData.baseEarnings.dearnessAllowance,
+          otherAllowances: payrollData.baseEarnings.otherAllowances,
+          fixedBonus: payrollData.baseEarnings.fixedBonus,
+          grossSalary: payrollData.grossSalary,
         },
+        extraEarnings: payrollData.extraEarnings,
+        leaveDeductions: payrollData.leaveDeductions,
         statutoryDeductions: {
-          basicForPf,
-          pfDeduction,
-          esicDeduction,
-          professionalTax,
-          tds,
-          fixedDeduction,
+          basicForPf: payrollData.statutoryDeductions.basicForPf,
+          pfDeduction: payrollData.statutoryDeductions.pfDeduction,
+          esicDeduction: payrollData.statutoryDeductions.esicDeduction,
+          professionalTax: payrollData.statutoryDeductions.professionalTax,
+          tds: payrollData.statutoryDeductions.tds,
+          fixedDeduction: payrollData.statutoryDeductions.fixedDeduction,
         },
         customDeductions: {
-          approvedAndPermissible: validDeductions,
-          totalApprovedCustomDeductions: totalCustomDeductions,
-          excludedDeductions, // Unapproved or not legally permissible
+          approvedAndPermissible: payrollData.customDeductions.approvedAndPermissible,
+          totalApprovedCustomDeductions: payrollData.customDeductions.totalApprovedCustomDeductions,
+          excludedDeductions: payrollData.customDeductions.excludedDeductions || [],
         },
-        summary: {
-          grossSalary,
-          totalDeductions,
-          netSalary,
-          legalCompliance: {
-            isPermissibleOnly: true,
-            wageCeilingCompliant: totalDeductions <= grossSalary * 0.5,
-          },
-        },
+        summary: payrollData.summary,
+        totalDeductions: payrollData.totalDeductions,
+        netSalary: payrollData.netSalary,
+        employerContributions: payrollData.employerContributions,
       },
     });
   } catch (error) {

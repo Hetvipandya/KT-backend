@@ -35,9 +35,11 @@ const parseLocalDate = (dateStr) => {
 
 /**
  * Centralized calculation of working leave days.
- * Excludes:
- * 1. Sundays (Day 0)
- * 2. Company-declared holidays from Holiday model
+ * Dynamic Saturday & Holiday Rules:
+ * - Sundays remain weekly holidays (Day 0)
+ * - All Saturdays are working by default unless configured in Holiday Master
+ * - Hardcoded 2nd/4th Saturday exclusions removed
+ * - Company-declared holidays from Holiday model
  *
  * @param {string|Date} startDate - Leave start date
  * @param {string|Date} endDate - Leave end date
@@ -47,6 +49,7 @@ const parseLocalDate = (dateStr) => {
  *   totalDays: number,
  *   totalCalendarDays: number,
  *   excludedSundays: number,
+ *   excludedSaturdays: number,
  *   excludedHolidays: number,
  *   workingDates: string[],
  *   excludedDates: Array<{ date: string, reason: string, name?: string }>,
@@ -63,6 +66,7 @@ const calculateWorkingLeaveDays = async (startDate, endDate, isHalfDay = false) 
       totalDays: 0,
       totalCalendarDays: 0,
       excludedSundays: 0,
+      excludedSaturdays: 0,
       excludedHolidays: 0,
       workingDates: [],
       excludedDates: [],
@@ -120,39 +124,29 @@ const calculateWorkingLeaveDays = async (startDate, endDate, isHalfDay = false) 
     totalCalendarDays++;
     const currentStr = toDateString(current);
     const dayOfWeek = current.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
-    const dayOfMonth = current.getDate();
-
-    const isSecondOrFourthSaturday =
-      dayOfWeek === 6 &&
-      ((dayOfMonth >= 8 && dayOfMonth <= 14) || (dayOfMonth >= 22 && dayOfMonth <= 28));
 
     if (dayOfWeek === 0) {
-      // 1. Sunday Exclusion
+      // 1. Sunday Exclusion (Weekly Holiday)
       excludedSundays++;
       excludedDates.push({
         date: currentStr,
         reason: "Sunday",
       });
-    } else if (isSecondOrFourthSaturday) {
-      // 2. 2nd & 4th Saturday Exclusion
-      excludedSaturdays++;
-      const satReason = dayOfMonth <= 14 ? "2nd Saturday" : "4th Saturday";
-      excludedDates.push({
-        date: currentStr,
-        reason: satReason,
-      });
     } else if (holidayMap.has(currentStr)) {
-      // 3. Company Holiday Exclusion
+      // 2. Holiday Master Exclusion (Company Holiday / Configured Saturday Holiday)
       excludedHolidays++;
       const hol = holidayMap.get(currentStr);
+      if (dayOfWeek === 6) {
+        excludedSaturdays++;
+      }
       excludedDates.push({
         date: currentStr,
-        reason: "Company Holiday",
+        reason: dayOfWeek === 6 ? (hol.holidayName || "Saturday Holiday") : "Company Holiday",
         name: hol.holidayName,
       });
       holidayDetails.push(hol);
     } else {
-      // 4. Valid Working Day
+      // 3. Valid Working Day (All Saturdays are working by default unless in Holiday Master)
       workingDates.push(currentStr);
     }
 

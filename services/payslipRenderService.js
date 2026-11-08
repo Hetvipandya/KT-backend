@@ -51,6 +51,8 @@ const renderPayslipHtml = (payslip, employeeData = {}, companyData = {}) => {
   const joiningDate = employeeData.joiningDate || employeeData.dateOfJoining ? new Date(employeeData.joiningDate || employeeData.dateOfJoining).toLocaleDateString("en-IN") : "N/A";
   const pan = employeeData.pan || employeeData.panNumber || "N/A";
 
+  const isSimpleFixed = payslip.structureType === "SIMPLE_FIXED";
+  const monthlySalary = payslip.monthlySalary || payslip.fixedSalary || (isSimpleFixed ? payslip.basicSalary : 0) || 0;
   const basic = payslip.basicSalary || 0;
   const hra = payslip.hra || 0;
   const conveyance = payslip.conveyanceAllowance || 0;
@@ -59,24 +61,30 @@ const renderPayslipHtml = (payslip, employeeData = {}, companyData = {}) => {
   const da = payslip.dearnessAllowance || 0;
   const otherAllowance = payslip.otherAllowances || 0;
   const fixedBonus = payslip.fixedBonus || 0;
+  const extraAllowance = payslip.extraAllowance || 0;
+  const incentive = payslip.incentive || 0;
+  const bonus = payslip.bonus || payslip.extraBonus || 0;
   const extraBonus = payslip.extraBonus || 0;
   
   // Formula 1: Gross Salary
-  const gross = payslip.grossSalary || (basic + hra + conveyance + medical + special + da + otherAllowance + fixedBonus + extraBonus);
+  const gross = payslip.grossSalary || (isSimpleFixed ? (monthlySalary + extraAllowance + incentive + bonus) : (basic + hra + conveyance + medical + special + da + otherAllowance + fixedBonus + extraAllowance + incentive + bonus));
 
   // Formula 9: Basic for PF
   const basicForPf = payslip.basicForPf || (basic + da);
 
-  const lopDeduction = payslip.lopDeduction || 0;
+  const unpaidLeaveDays = payslip.unpaidLeaveDays !== undefined ? payslip.unpaidLeaveDays : (Number(payslip.lopDays || 0) + Number(payslip.leaveDays || 0));
+  const unpaidLeaveDeduction = payslip.unpaidLeaveDeduction !== undefined ? payslip.unpaidLeaveDeduction : (payslip.lopDeduction || 0);
+  const legallyApprovedPenalties = payslip.legallyApprovedPenalties || 0;
+  const lopDeduction = unpaidLeaveDeduction;
   
   // Formula 2: PF Employee 12%
-  const pf = payslip.pfDeduction || Math.round(basicForPf * 0.12);
+  const pf = payslip.pfDeduction !== undefined ? payslip.pfDeduction : (payslip.isPfApplicable === false ? 0 : Math.round(basicForPf * 0.12));
   
   // Formula 4: ESI Employee 0.75%
-  const esic = payslip.esicDeduction || Math.round(gross * 0.0075);
+  const esic = payslip.esicDeduction !== undefined ? payslip.esicDeduction : ((payslip.isEsicApplicable === false || gross > 21000) ? 0 : Math.round(gross * 0.0075));
   
   // Formula 5: PT As per State Rules
-  const pt = payslip.professionalTax || (gross > 12000 ? 200 : 0);
+  const pt = payslip.professionalTax !== undefined ? payslip.professionalTax : (payslip.isPtApplicable === false ? 0 : (gross > 12000 ? 200 : 0));
   
   const tds = payslip.tdsAmount || payslip.tds || 0;
   const fixedDeduction = payslip.fixedDeduction || 0;
@@ -84,10 +92,10 @@ const renderPayslipHtml = (payslip, employeeData = {}, companyData = {}) => {
   const otherDeduction = payslip.otherDeductions || 0;
   
   // Formula 6: Total Deductions
-  const totalDeduction = payslip.totalDeduction || (lopDeduction + pf + esic + pt + tds + fixedDeduction + extraDeduction + otherDeduction);
+  const totalDeduction = payslip.totalDeduction || (unpaidLeaveDeduction + legallyApprovedPenalties + pf + esic + pt + tds + fixedDeduction + extraDeduction + otherDeduction);
 
   // Formula 7: Net Salary
-  const netSalary = payslip.netSalary || Math.max(0, gross - totalDeduction);
+  const netSalary = payslip.netSalary !== undefined ? payslip.netSalary : Math.max(0, gross - totalDeduction);
   const netSalaryWords = numberToWords(netSalary);
 
   // Employer Contributions
@@ -315,10 +323,11 @@ const renderPayslipHtml = (payslip, employeeData = {}, companyData = {}) => {
           </tr>
         </thead>
         <tbody>
-          ${lopDeduction > 0 ? `<tr><td>LOP / Absent Deduction</td><td class="text-right amount-col">${formatCurrency(lopDeduction)}</td></tr>` : ''}
-          <tr><td>PF Employee (12% of Basic+DA)</td><td class="text-right amount-col">${formatCurrency(pf)}</td></tr>
-          <tr><td>ESI Employee (0.75% of Gross)</td><td class="text-right amount-col">${formatCurrency(esic)}</td></tr>
-          <tr><td>Professional Tax (PT)</td><td class="text-right amount-col">${formatCurrency(pt)}</td></tr>
+          ${unpaidLeaveDeduction > 0 ? `<tr><td>Unpaid Leave Deduction (${unpaidLeaveDays} Days)</td><td class="text-right amount-col">${formatCurrency(unpaidLeaveDeduction)}</td></tr>` : ''}
+          ${legallyApprovedPenalties > 0 ? `<tr><td>Legally Approved Penalty</td><td class="text-right amount-col">${formatCurrency(legallyApprovedPenalties)}</td></tr>` : ''}
+          ${pf > 0 ? `<tr><td>PF Employee (12% of Basic+DA)</td><td class="text-right amount-col">${formatCurrency(pf)}</td></tr>` : ''}
+          ${esic > 0 ? `<tr><td>ESI Employee (0.75% of Gross)</td><td class="text-right amount-col">${formatCurrency(esic)}</td></tr>` : ''}
+          ${pt > 0 ? `<tr><td>Professional Tax (PT)</td><td class="text-right amount-col">${formatCurrency(pt)}</td></tr>` : ''}
           ${tds > 0 ? `<tr><td>TDS / Income Tax</td><td class="text-right amount-col">${formatCurrency(tds)}</td></tr>` : ''}
           ${fixedDeduction > 0 ? `<tr><td>Fixed Deductions</td><td class="text-right amount-col">${formatCurrency(fixedDeduction)}</td></tr>` : ''}
           ${extraDeduction > 0 ? `<tr><td>Extra Deductions</td><td class="text-right amount-col">${formatCurrency(extraDeduction)}</td></tr>` : ''}
@@ -400,6 +409,8 @@ const renderPayslipPdf = (res, payslip, employeeData = {}, companyData = {}) => 
   const joiningDate = employeeData.joiningDate || employeeData.dateOfJoining ? new Date(employeeData.joiningDate || employeeData.dateOfJoining).toLocaleDateString("en-IN") : "N/A";
   const pan = employeeData.pan || employeeData.panNumber || "N/A";
 
+  const isSimpleFixed = payslip.structureType === "SIMPLE_FIXED";
+  const monthlySalary = payslip.monthlySalary || payslip.fixedSalary || (isSimpleFixed ? payslip.basicSalary : 0) || 0;
   const basic = payslip.basicSalary || 0;
   const hra = payslip.hra || 0;
   const conveyance = payslip.conveyanceAllowance || 0;
@@ -408,24 +419,30 @@ const renderPayslipPdf = (res, payslip, employeeData = {}, companyData = {}) => 
   const da = payslip.dearnessAllowance || 0;
   const otherAllowance = payslip.otherAllowances || 0;
   const fixedBonus = payslip.fixedBonus || 0;
+  const extraAllowance = payslip.extraAllowance || 0;
+  const incentive = payslip.incentive || 0;
+  const bonus = payslip.bonus || payslip.extraBonus || 0;
   const extraBonus = payslip.extraBonus || 0;
 
   // Formula 1: Gross Salary
-  const gross = payslip.grossSalary || (basic + hra + conveyance + medical + special + da + otherAllowance + fixedBonus + extraBonus);
+  const gross = payslip.grossSalary || (isSimpleFixed ? (monthlySalary + extraAllowance + incentive + bonus) : (basic + hra + conveyance + medical + special + da + otherAllowance + fixedBonus + extraAllowance + incentive + bonus));
 
   // Formula 9: Basic for PF
   const basicForPf = payslip.basicForPf || (basic + da);
 
-  const lopDeduction = payslip.lopDeduction || 0;
+  const unpaidLeaveDays = payslip.unpaidLeaveDays !== undefined ? payslip.unpaidLeaveDays : (Number(payslip.lopDays || 0) + Number(payslip.leaveDays || 0));
+  const unpaidLeaveDeduction = payslip.unpaidLeaveDeduction !== undefined ? payslip.unpaidLeaveDeduction : (payslip.lopDeduction || 0);
+  const legallyApprovedPenalties = payslip.legallyApprovedPenalties || 0;
+  const lopDeduction = unpaidLeaveDeduction;
   
   // Formula 2: PF Employee 12%
-  const pf = payslip.pfDeduction || Math.round(basicForPf * 0.12);
+  const pf = payslip.pfDeduction !== undefined ? payslip.pfDeduction : (payslip.isPfApplicable === false ? 0 : Math.round(basicForPf * 0.12));
   
   // Formula 4: ESI Employee 0.75%
-  const esic = payslip.esicDeduction || Math.round(gross * 0.0075);
+  const esic = payslip.esicDeduction !== undefined ? payslip.esicDeduction : ((payslip.isEsicApplicable === false || gross > 21000) ? 0 : Math.round(gross * 0.0075));
   
   // Formula 5: Professional Tax (PT)
-  const pt = payslip.professionalTax || (gross > 12000 ? 200 : 0);
+  const pt = payslip.professionalTax !== undefined ? payslip.professionalTax : (payslip.isPtApplicable === false ? 0 : (gross > 12000 ? 200 : 0));
   
   const tds = payslip.tdsAmount || payslip.tds || 0;
   const fixedDeduction = payslip.fixedDeduction || 0;
@@ -433,10 +450,10 @@ const renderPayslipPdf = (res, payslip, employeeData = {}, companyData = {}) => 
   const otherDeduction = payslip.otherDeductions || 0;
 
   // Formula 6: Total Deductions
-  const totalDeduction = payslip.totalDeduction || (lopDeduction + pf + esic + pt + tds + fixedDeduction + extraDeduction + otherDeduction);
+  const totalDeduction = payslip.totalDeduction || (unpaidLeaveDeduction + legallyApprovedPenalties + pf + esic + pt + tds + fixedDeduction + extraDeduction + otherDeduction);
 
   // Formula 7: Net Salary
-  const netSalary = payslip.netSalary || Math.max(0, gross - totalDeduction);
+  const netSalary = payslip.netSalary !== undefined ? payslip.netSalary : Math.max(0, gross - totalDeduction);
   const netSalaryWords = numberToWords(netSalary);
 
   // Employer Contributions (Formula 3 & 10)
@@ -535,10 +552,11 @@ const renderPayslipPdf = (res, payslip, employeeData = {}, companyData = {}) => 
   ];
 
   const deductionsList = [
-    ...(lopDeduction > 0 ? [{ label: "LOP / Absent Deduction", val: lopDeduction }] : []),
-    { label: "PF Employee (12% of Basic+DA)", val: pf },
-    { label: "ESI Employee (0.75% of Gross)", val: esic },
-    { label: "Professional Tax (PT)", val: pt },
+    ...(unpaidLeaveDeduction > 0 ? [{ label: `Unpaid Leave Deduction (${unpaidLeaveDays} Days)`, val: unpaidLeaveDeduction }] : []),
+    ...(legallyApprovedPenalties > 0 ? [{ label: "Legally Approved Penalty", val: legallyApprovedPenalties }] : []),
+    ...(pf > 0 ? [{ label: "PF Employee (12% of Basic+DA)", val: pf }] : []),
+    ...(esic > 0 ? [{ label: "ESI Employee (0.75% of Gross)", val: esic }] : []),
+    ...(pt > 0 ? [{ label: "Professional Tax (PT)", val: pt }] : []),
     ...(tds > 0 ? [{ label: "TDS / Income Tax", val: tds }] : []),
     ...(fixedDeduction > 0 ? [{ label: "Fixed Deductions", val: fixedDeduction }] : []),
     ...(extraDeduction > 0 ? [{ label: "Extra Deductions", val: extraDeduction }] : []),

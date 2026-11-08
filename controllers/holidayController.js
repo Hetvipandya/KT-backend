@@ -73,10 +73,8 @@ exports.getAllHolidays = async (req, res) => {
 
     const holidays = [];
 
-    // Generate Sundays + 2nd & 4th Saturdays
+    // Generate default weekly holidays (Sundays only; Saturdays are working unless configured)
     for (let month = 0; month < 12; month++) {
-      let saturdayCount = 0;
-
       const lastDay = new Date(year, month + 1, 0).getDate();
 
       for (let day = 1; day <= lastDay; day++) {
@@ -91,23 +89,6 @@ exports.getAllHolidays = async (req, res) => {
             isPublicHoliday: true,
             isDefault: true,
           });
-        }
-
-        // Saturday
-        if (weekDay === 6) {
-          saturdayCount++;
-
-          if (saturdayCount === 2 || saturdayCount === 4) {
-            holidays.push({
-              holidayName:
-                saturdayCount === 2
-                  ? "2nd Saturday"
-                  : "4th Saturday",
-              holidayDate: date,
-              isPublicHoliday: true,
-              isDefault: true,
-            });
-          }
         }
       }
     }

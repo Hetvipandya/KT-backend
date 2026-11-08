@@ -41,10 +41,55 @@ const salaryStructureSchema = new mongoose.Schema(
       default: Date.now,
     },
 
+    structureType: {
+      type: String,
+      enum: ["SIMPLE_FIXED", "COMPONENT_BASED"],
+      default: "COMPONENT_BASED",
+    },
+
+    fixedSalary: {
+      type: Number,
+      default: 0,
+    },
+
+    extraAllowance: {
+      type: Number,
+      default: 0,
+    },
+
+    incentive: {
+      type: Number,
+      default: 0,
+    },
+
+    bonus: {
+      type: Number,
+      default: 0,
+    },
+
+    isPfApplicable: {
+      type: Boolean,
+      default: null,
+    },
+
+    isEsicApplicable: {
+      type: Boolean,
+      default: null,
+    },
+
+    isPtApplicable: {
+      type: Boolean,
+      default: null,
+    },
+
+    isTdsApplicable: {
+      type: Boolean,
+      default: null,
+    },
+
     // 1. EARNINGS COMPONENTS
     basicSalary: {
       type: Number,
-      required: true,
       default: 0,
     },
 
@@ -190,6 +235,64 @@ salaryStructureSchema.pre("save", async function () {
   if (!this.employeeId && this.userId) this.employeeId = this.userId;
   if (!this.userId && this.employeeId) this.userId = this.employeeId;
 
+  if (this.structureType === "SIMPLE_FIXED") {
+    const fixedVal = Number(this.fixedSalary || this.basicSalary || 0);
+    this.fixedSalary = fixedVal;
+    this.basicSalary = fixedVal;
+    this.hra = 0;
+    this.conveyanceAllowance = 0;
+    this.medicalAllowance = 0;
+    this.specialAllowance = 0;
+    this.allowance = 0;
+    this.dearnessAllowance = 0;
+    this.otherAllowances = 0;
+    this.grossSalary = fixedVal;
+    this.basicForPf = fixedVal;
+
+    // Statutory deductions only when verified applicable
+    if (this.isPfApplicable === true) {
+      this.pfDeduction = Number(this.pfDeduction || Math.round(this.basicForPf * 0.12));
+    } else {
+      this.pfDeduction = 0;
+    }
+
+    if (this.isEsicApplicable === true && this.grossSalary <= 21000) {
+      this.esicDeduction = Number(this.esicDeduction || Math.round(this.grossSalary * 0.0075));
+    } else {
+      this.esicDeduction = 0;
+    }
+
+    if (this.isPtApplicable === true || (this.isPtApplicable !== false && this.grossSalary > 12000)) {
+      this.professionalTax = this.grossSalary > 12000 ? 200 : 0;
+    } else {
+      this.professionalTax = 0;
+    }
+
+    if (this.isTdsApplicable === true && this.tds > 0) {
+      this.tds = Number(this.tds);
+    } else {
+      this.tds = 0;
+    }
+
+    this.employerContributions = {
+      pf: this.isPfApplicable === true ? Math.round(this.basicForPf * 0.12) : 0,
+      esic: (this.isEsicApplicable === true && this.grossSalary <= 21000) ? Math.round(this.grossSalary * 0.0325) : 0,
+      gratuity: 0,
+      other: 0,
+    };
+
+    this.totalDeduction =
+      Number(this.pfDeduction || 0) +
+      Number(this.esicDeduction || 0) +
+      Number(this.professionalTax || 0) +
+      Number(this.tds || 0) +
+      Number(this.fixedDeduction || 0) +
+      Number(this.otherDeductions || 0);
+
+    this.netSalary = Math.max(0, Number((this.grossSalary - this.totalDeduction).toFixed(2)));
+    return;
+  }
+
   if (this.allowance && !this.specialAllowance) {
     this.specialAllowance = this.allowance;
   }
@@ -217,7 +320,9 @@ salaryStructureSchema.pre("save", async function () {
   const employerPf = Math.round(this.basicForPf * 0.12);
 
   // Formula 4: ESI (Employee) = Gross Salary * 0.75%
-  if (this.autoCalculateStatutory && (!this.esicDeduction || this.isModified("basicSalary") || this.isModified("grossSalary"))) {
+  if (this.isEsicApplicable === false) {
+    this.esicDeduction = 0;
+  } else if (this.autoCalculateStatutory && (!this.esicDeduction || this.isModified("basicSalary") || this.isModified("grossSalary"))) {
     this.esicDeduction = Math.round(this.grossSalary * 0.0075);
   }
 
@@ -287,7 +392,7 @@ const syncSalaryStructureToMonthlySalaries = async (structure, options = {}) => 
   };
   const unpaidSalaryQuery = {
     $and: [
-      { status: { $nin: ["Paid", "paid", "PAID"] } },
+      { status: { $nin: ["Paid", "paid", "PAID", "Approved", "approved", "APPROVED"] } },
       {
         $or: [
           { paidAt: null },

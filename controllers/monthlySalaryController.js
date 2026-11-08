@@ -15,6 +15,7 @@ const {
   unlockDeductionsForPayroll,
 } = require("../services/deduction.service");
 const { recordAuditEvent } = require("../services/auditLog.service");
+const { calculateMonthlyPayroll } = require("../services/payrollCalculationService");
  
 const monthNames = [
   "January", "February", "March", "April", "May", "June",
@@ -158,6 +159,28 @@ const generateMonthlySalary = async (req, res) => {
     const totalWorkingDays = manualWorkingDays ? Number(manualWorkingDays) : totalDaysInMonth;
 
     for (const user of targetUsers) {
+      // PREVENT REGENERATION: Check if salary record for this period is already Approved or Paid
+      const existingSalary = await MonthlySalary.findOne({
+        employeeId: user._id,
+        month: monthNum,
+        year: yearNum,
+      });
+
+      if (existingSalary && (existingSalary.status === "Approved" || existingSalary.status === "Paid")) {
+        if (targetEmployeeId) {
+          return res.status(400).json({
+            success: false,
+            message: `Salary record for ${user.name || "employee"} for ${monthNum}/${yearNum} is already ${existingSalary.status} and cannot be regenerated. Historical records are preserved.`,
+          });
+        }
+        skippedUsers.push({
+          userId: user._id,
+          name: user.name,
+          reason: `Payroll for this period is already ${existingSalary.status} and cannot be regenerated`,
+        });
+        continue;
+      }
+
       const activeStructure = await SalaryStructure.findOne({
         $or: [{ userId: user._id }, { employeeId: user._id }],
         isActive: true,
@@ -172,156 +195,56 @@ const generateMonthlySalary = async (req, res) => {
         continue;
       }
 
-      const monthStartStr = `${yearNum}-${String(monthNum).padStart(2, "0")}-01`;
-      const monthEndStr = `${yearNum}-${String(monthNum).padStart(2, "0")}-${String(getDaysInMonth(monthNum, yearNum)).padStart(2, "0")}`;
-      const monthStart = new Date(yearNum, monthNum - 1, 1);
-      const monthEnd = new Date(yearNum, monthNum, 0, 23, 59, 59, 999);
-      const approvedLeaves = await Leave.find({
-        employeeId: user._id,
-        status: "approved",
-        startDate: { $lte: monthEnd },
-        endDate: { $gte: monthStart },
+      // Centralized payroll calculation engine
+      const calcResult = await calculateMonthlyPayroll({
+        user,
+        activeStructure,
+        month: monthNum,
+        year: yearNum,
+        calculationMode,
+        manualWorkingDays,
+        manualLopDays,
+        extraAllowance: req.body.extraAllowance,
+        incentive: req.body.incentive,
+        bonus: req.body.bonus || extraBonus,
+        extraBonus,
+        extraDeduction,
+        isPenaltyApproved: req.body.isPenaltyApproved,
+        options: req.body,
       });
 
-      let leaveDays = 0;
-      for (const leave of approvedLeaves) {
-        const leaveStartStr = toDateString(leave.startDate);
-        const leaveEndStr = toDateString(leave.endDate || leave.startDate);
-        if (!leaveStartStr || !leaveEndStr) continue;
-
-        const clippedStartStr = leaveStartStr < monthStartStr ? monthStartStr : leaveStartStr;
-        const clippedEndStr = leaveEndStr > monthEndStr ? monthEndStr : leaveEndStr;
-        if (clippedStartStr === leaveStartStr && clippedEndStr === leaveEndStr) {
-          leaveDays += Number(leave.totalDays) || 0;
-          continue;
-        }
-
-        const partialLeave = await calculateWorkingLeaveDays(
-          clippedStartStr,
-          clippedEndStr,
-          leave.isHalfDay && clippedStartStr === clippedEndStr
-        );
-        leaveDays += partialLeave.workingDays;
-      }
-
-      // Calculate Attendance Present and LOP Days
-      let finalLopDays = 0;
-      if (manualLopDays !== undefined && manualLopDays !== null) {
-        finalLopDays = Number(manualLopDays) || 0;
-      } else {
-        const startDateStr = monthStartStr;
-        const endDateStr = `${yearNum}-${String(monthNum).padStart(2, "0")}-${String(totalDaysInMonth).padStart(2, "0")}`;
-
-        const attendanceRecords = await Attendance.find({
-          userId: user._id,
-          date: { $gte: startDateStr, $lte: endDateStr },
-        });
-
-        let absentCount = 0;
-        let halfDayCount = 0;
-        attendanceRecords.forEach((att) => {
-          if (att.status === "absent") absentCount += 1;
-          if (att.status === "half-day") halfDayCount += 1;
-        });
-
-        finalLopDays = absentCount + halfDayCount * 0.5;
-      }
-
-      const workingDays = Math.round(totalWorkingDays);
-      const presentDays = Math.max(0, workingDays - leaveDays - finalLopDays);
-      const daysPayable = presentDays;
-
-      // Earnings Components
-      const basic = activeStructure.basicSalary || 0;
-      const hra = activeStructure.hra || 0;
-      const conveyance = activeStructure.conveyanceAllowance || 0;
-      const medical = activeStructure.medicalAllowance || 0;
-      const special = activeStructure.specialAllowance || activeStructure.allowance || 0;
-      const da = activeStructure.dearnessAllowance || 0;
-      const otherAllowances = activeStructure.otherAllowances || 0;
-      const fixedBonus = activeStructure.fixedBonus || 0;
-
-      // Formula 1: GROSS SALARY = Basic + HRA + Conveyance + Special + DA + Other Allowances + Fixed Bonus + Extra Bonus
-      const grossSalary = Number(
-        (basic + hra + conveyance + medical + special + da + otherAllowances + fixedBonus + Number(extraBonus)).toFixed(2)
-      );
- 
-      // Formula 9: BASIC FOR PF = Basic + DA
-      const basicForPf = basic + da;
-
-      // Per Day Salary & LOP Deduction
-      const perDaySalary = totalDaysInMonth > 0 ? grossSalary / totalDaysInMonth : 0;
-      // Approved leave days are included in the LOP/absent deduction.
-      const lopDeduction = Number(
-        (perDaySalary * (finalLopDays + leaveDays)).toFixed(2)
-      );
-
-      // Formula 2: PF (Employee) = (Basic + DA) * 12%
-      const pfDeduction = activeStructure.pfDeduction || Math.round(basicForPf * 0.12);
-
-      // Formula 3: PF (Employer) = (Basic + DA) * 12%
-      const employerPf = Math.round(basicForPf * 0.12);
-
-      // Formula 4: ESI (Employee) = Gross Salary * 0.75%
-      const esicDeduction = activeStructure.esicDeduction || Math.round(grossSalary * 0.0075);
-      const employerEsic = Math.round(grossSalary * 0.0325);
-
-      // Formula 5: PROFESSIONAL TAX = As per State Rules (Gross > 12000 => 200)
-      const professionalTax = activeStructure.professionalTax || (grossSalary > 12000 ? 200 : 0);
-
-      // TDS & Other Deductions
-      const tds = activeStructure.tds || 0;
-      const fixedDeduction = activeStructure.fixedDeduction || 0;
-      const otherDeductions = activeStructure.otherDeductions || 0;
-
-      // Fetch only approved and legally permissible employee deductions
-      let customDeductionsAmount = 0;
-      let validCustomDeductions = [];
-      try {
-        const deductionRes = await getApprovedLegallyPermissibleDeductions(user._id, monthNum, yearNum);
-        if (deductionRes) {
-          customDeductionsAmount = deductionRes.totalCustomDeductions || 0;
-          validCustomDeductions = deductionRes.validDeductions || [];
-        }
-      } catch (_) {}
-
-      // Formula 6: TOTAL DEDUCTIONS = PF + ESI + PT + LOP Deduction + TDS + Fixed + Extra + Other Deductions + Approved Custom Deductions
-      const totalDeduction = Number(
-        (lopDeduction + pfDeduction + esicDeduction + professionalTax + tds + fixedDeduction + Number(extraDeduction) + otherDeductions + customDeductionsAmount).toFixed(2)
-      );
-
-      // Formula 7: NET SALARY = Gross Salary - Total Deductions
-      const netSalary = Math.max(0, Number((grossSalary - totalDeduction).toFixed(2)));
-
-      // Formula 10: GRATUITY = ((Basic + DA) * 15 * Years) / 26
-      const gratuityVal = Math.round((basicForPf * 15 * (activeStructure.yearsOfService || 1)) / 26);
-
-      const salaryMonthStr = `${monthNames[monthNum - 1]} ${yearNum}`;
-
       const snapshot = {
-        basicSalary: basic,
-        hra,
-        conveyanceAllowance: conveyance,
-        medicalAllowance: medical,
-        specialAllowance: special,
-        dearnessAllowance: da,
-        otherAllowances,
-        fixedBonus,
-        grossSalary,
-        basicForPf,
-        pfDeduction,
-        esicDeduction,
-        professionalTax,
-        tds,
-        customDeductions: customDeductionsAmount,
-        customDeductionsList: validCustomDeductions,
-        totalDeduction,
-        netSalary,
-        employerContributions: {
-          pf: employerPf,
-          esic: employerEsic,
-          gratuity: gratuityVal,
-        },
+        structureType: calcResult.structureType,
+        monthlySalary: calcResult.baseEarnings.monthlySalary,
+        basicSalary: calcResult.baseEarnings.basicSalary,
+        hra: calcResult.baseEarnings.hra,
+        conveyanceAllowance: calcResult.baseEarnings.conveyanceAllowance,
+        medicalAllowance: calcResult.baseEarnings.medicalAllowance,
+        specialAllowance: calcResult.baseEarnings.specialAllowance,
+        dearnessAllowance: calcResult.baseEarnings.dearnessAllowance,
+        otherAllowances: calcResult.baseEarnings.otherAllowances,
+        fixedBonus: calcResult.baseEarnings.fixedBonus,
+        extraAllowance: calcResult.extraEarnings.extraAllowance,
+        incentive: calcResult.extraEarnings.incentive,
+        bonus: calcResult.extraEarnings.bonus,
+        totalExtraEarnings: calcResult.extraEarnings.totalExtraEarnings,
+        grossSalary: calcResult.grossSalary,
+        unpaidLeaveDays: calcResult.leaveDeductions.unpaidLeaveDays,
+        unpaidLeaveDeduction: calcResult.leaveDeductions.unpaidLeaveDeduction,
+        unapprovedLeaveDays: calcResult.leaveDeductions.unapprovedLeaveDays,
+        unapprovedLeavePenalty: calcResult.leaveDeductions.proposedPenaltyAmount,
+        isPenaltyApproved: calcResult.leaveDeductions.isPenaltyApproved,
+        legallyApprovedPenalties: calcResult.leaveDeductions.legallyApprovedPenalties,
+        basicForPf: calcResult.statutoryDeductions.basicForPf,
+        pfDeduction: calcResult.statutoryDeductions.pfDeduction,
+        esicDeduction: calcResult.statutoryDeductions.esicDeduction,
+        professionalTax: calcResult.statutoryDeductions.professionalTax,
+        tds: calcResult.statutoryDeductions.tds,
+        customDeductions: calcResult.customDeductions.totalApprovedCustomDeductions,
+        customDeductionsList: calcResult.customDeductions.approvedAndPermissible,
+        totalDeduction: calcResult.totalDeductions,
+        netSalary: calcResult.netSalary,
+        employerContributions: calcResult.employerContributions,
       };
 
       const monthlySalary = await MonthlySalary.findOneAndUpdate(
@@ -338,57 +261,73 @@ const generateMonthlySalary = async (req, res) => {
           userId: user._id,
           month: monthNum,
           year: yearNum,
-          salaryMonth: salaryMonthStr,
+          salaryMonth: calcResult.payPeriod.salaryMonth,
           salaryStructureId: activeStructure._id,
           salaryStructureSnapshot: snapshot,
+          structureType: calcResult.structureType,
           calculationMode,
-          totalDays: totalDaysInMonth,
-          workingDays,
-          presentDays,
-          daysPayable,
-          leaveDays,
-          lopDays: finalLopDays,
-          perDaySalary: Number(perDaySalary.toFixed(2)),
-          lopDeduction,
-          basicSalary: basic,
-          hra,
-          conveyanceAllowance: conveyance,
-          medicalAllowance: medical,
-          specialAllowance: special,
-          allowance: special,
-          dearnessAllowance: da,
-          otherAllowances,
-          fixedBonus,
-          extraBonus: Number(extraBonus),
-          grossSalary,
-          basicForPf,
-          pfDeduction,
-          esicDeduction,
-          professionalTax,
-          tds,
-        customDeductions: customDeductionsAmount,
-        customDeductionsList: validCustomDeductions,
+          totalDays: calcResult.days.totalDays,
+          workingDays: calcResult.days.workingDays,
+          presentDays: calcResult.days.presentDays,
+          daysPayable: calcResult.days.daysPayable,
+          leaveDays: calcResult.days.leaveDays,
+          lopDays: calcResult.days.unapprovedLeaveDays,
+          perDaySalary: calcResult.perDaySalary,
+          lopDeduction: calcResult.leaveDeductions.unpaidLeaveDeduction,
+          unpaidLeaveDays: calcResult.leaveDeductions.unpaidLeaveDays,
+          unpaidLeaveDeduction: calcResult.leaveDeductions.unpaidLeaveDeduction,
+          unapprovedLeaveDays: calcResult.leaveDeductions.unapprovedLeaveDays,
+          unapprovedLeavePenalty: calcResult.leaveDeductions.proposedPenaltyAmount,
+          isPenaltyApproved: calcResult.leaveDeductions.isPenaltyApproved,
+          legallyApprovedPenalties: calcResult.leaveDeductions.legallyApprovedPenalties,
+          fixedSalary: calcResult.structureType === "SIMPLE_FIXED" ? calcResult.baseEarnings.monthlySalary : undefined,
+          monthlySalary: calcResult.baseEarnings.monthlySalary,
+          basicSalary: calcResult.baseEarnings.basicSalary,
+          hra: calcResult.baseEarnings.hra,
+          conveyanceAllowance: calcResult.baseEarnings.conveyanceAllowance,
+          medicalAllowance: calcResult.baseEarnings.medicalAllowance,
+          specialAllowance: calcResult.baseEarnings.specialAllowance,
+          allowance: calcResult.baseEarnings.specialAllowance,
+          dearnessAllowance: calcResult.baseEarnings.dearnessAllowance,
+          otherAllowances: calcResult.baseEarnings.otherAllowances,
+          fixedBonus: calcResult.baseEarnings.fixedBonus,
+          extraAllowance: calcResult.extraEarnings.extraAllowance,
+          incentive: calcResult.extraEarnings.incentive,
+          bonus: calcResult.extraEarnings.bonus,
+          extraBonus: calcResult.extraEarnings.bonus,
+          extraEarnings: calcResult.extraEarnings.totalExtraEarnings,
+          grossSalary: calcResult.grossSalary,
+          basicForPf: calcResult.statutoryDeductions.basicForPf,
+          pfDeduction: calcResult.statutoryDeductions.pfDeduction,
+          esicDeduction: calcResult.statutoryDeductions.esicDeduction,
+          professionalTax: calcResult.statutoryDeductions.professionalTax,
+          tds: calcResult.statutoryDeductions.tds,
+          tdsAmount: calcResult.statutoryDeductions.tds,
           tdsPercentage: activeStructure.tdsPercentage || 0,
-          tdsAmount: tds,
-          fixedDeduction,
-          extraDeduction: Number(extraDeduction),
-          otherDeductions,
-          totalDeduction,
-          netSalary,
-          employerContributions: {
-            pf: employerPf,
-            esic: employerEsic,
-            gratuity: gratuityVal,
-          },
+          isPfApplicable: calcResult.statutoryDeductions.isPfApplicable,
+          isEsicApplicable: calcResult.statutoryDeductions.isEsicApplicable,
+          isPtApplicable: calcResult.statutoryDeductions.isPtApplicable,
+          isTdsApplicable: calcResult.statutoryDeductions.isTdsApplicable,
+          statutoryDeductions: calcResult.statutoryDeductions.totalStatutoryDeductions,
+          customDeductions: calcResult.customDeductions.totalApprovedCustomDeductions,
+          customDeductionsList: calcResult.customDeductions.approvedAndPermissible,
+          fixedDeduction: calcResult.customDeductions.fixedDeduction,
+          extraDeduction: calcResult.customDeductions.extraDeduction,
+          otherDeductions: calcResult.customDeductions.otherDeductions,
+          approvedOtherDeductions: calcResult.customDeductions.totalOtherDeductions,
+          totalDeduction: calcResult.totalDeductions,
+          netSalary: calcResult.netSalary,
+          employerContributions: calcResult.employerContributions,
           status: "Generated",
           generatedAt: new Date(),
           generatedBy: req.user ? req.user._id : null,
-          remarks: remarks || `Generated for ${salaryMonthStr} as per HR Payroll Formulas`,
+          remarks: remarks || `Generated for ${calcResult.payPeriod.salaryMonth} as per HR Payroll Formulas`,
         },
         { upsert: true, new: true, runValidators: true }
       );
 
       generatedRecords.push(monthlySalary);
+      const validCustomDeductions = calcResult.customDeductions.approvedAndPermissible || [];
       if (validCustomDeductions.length > 0 && monthlySalary) {
         try {
           await lockDeductionsForPayroll(
@@ -929,6 +868,8 @@ const updateMonthlySalary = async (req, res) => {
         : body;
     const numericFields = [
       "basicSalary",
+      "fixedSalary",
+      "monthlySalary",
       "hra",
       "conveyanceAllowance",
       "medicalAllowance",
@@ -938,6 +879,9 @@ const updateMonthlySalary = async (req, res) => {
       "otherAllowances",
       "fixedBonus",
       "extraBonus",
+      "extraAllowance",
+      "incentive",
+      "bonus",
       "pfDeduction",
       "esicDeduction",
       "professionalTax",
@@ -947,7 +891,12 @@ const updateMonthlySalary = async (req, res) => {
       "fixedDeduction",
       "extraDeduction",
       "otherDeductions",
-      "lopDays", 
+      "lopDays",
+      "unpaidLeaveDays",
+      "unpaidLeaveDeduction",
+      "unapprovedLeaveDays",
+      "unapprovedLeavePenalty",
+      "legallyApprovedPenalties",
     ];
     const editableStatuses = ["Draft", "Generated", "pending", "processed"];
     const providedFields = numericFields.filter((field) =>
@@ -1006,17 +955,31 @@ const updateMonthlySalary = async (req, res) => {
     }
     salary.allowance = Number(salary.specialAllowance || 0);
 
-    // Recompute Gross, Deductions, Net
-    salary.grossSalary =
-      Number(salary.basicSalary || 0) +
-      Number(salary.hra || 0) +
-      Number(salary.conveyanceAllowance || 0) +
-      Number(salary.medicalAllowance || 0) +
-      Number(salary.specialAllowance || 0) +
-      Number(salary.dearnessAllowance || 0) +
-      Number(salary.otherAllowances || 0) +
-      Number(salary.fixedBonus || 0) +
-      Number(salary.extraBonus || 0);
+    // Recompute Extra Earnings, Gross, Deductions, Net
+    const finalExtraAllowance = Number(salary.extraAllowance || 0);
+    const finalIncentive = Number(salary.incentive || 0);
+    const finalBonus = Number(salary.bonus || salary.extraBonus || 0);
+    salary.extraEarnings = Number((finalExtraAllowance + finalIncentive + finalBonus).toFixed(2));
+
+    const isSimpleFixed = salary.structureType === "SIMPLE_FIXED";
+    if (isSimpleFixed) {
+      salary.monthlySalary = Number(salary.fixedSalary || salary.basicSalary || salary.monthlySalary || 6000);
+      salary.grossSalary = Number((salary.monthlySalary + salary.extraEarnings).toFixed(2));
+    } else {
+      salary.monthlySalary = Number(
+        (
+          Number(salary.basicSalary || 0) +
+          Number(salary.hra || 0) +
+          Number(salary.conveyanceAllowance || 0) +
+          Number(salary.medicalAllowance || 0) +
+          Number(salary.specialAllowance || 0) +
+          Number(salary.dearnessAllowance || 0) +
+          Number(salary.otherAllowances || 0) +
+          Number(salary.fixedBonus || 0)
+        ).toFixed(2)
+      );
+      salary.grossSalary = Number((salary.monthlySalary + salary.extraEarnings).toFixed(2));
+    }
 
     if (Object.prototype.hasOwnProperty.call(updates, "tds")) {
       salary.tdsAmount = Number(salary.tds || 0);
@@ -1032,23 +995,28 @@ const updateMonthlySalary = async (req, res) => {
     salary.basicForPf = Number(salary.basicSalary || 0) + Number(salary.dearnessAllowance || 0);
 
     salary.perDaySalary =
-      salary.totalDays > 0 ? Number((salary.grossSalary / salary.totalDays).toFixed(2)) : 0;
-    salary.lopDeduction = Number(
+      salary.totalDays > 0 ? Number((salary.monthlySalary / salary.totalDays).toFixed(2)) : 0;
+    
+    const totalAbsenceDays = Number(salary.unpaidLeaveDays !== undefined ? salary.unpaidLeaveDays : (Number(salary.lopDays || 0) + Number(salary.leaveDays || 0)));
+    salary.unpaidLeaveDeduction = Number((salary.perDaySalary * totalAbsenceDays).toFixed(2));
+    salary.lopDeduction = salary.unpaidLeaveDeduction;
+
+    const legallyApprovedPenalties = Number(salary.legallyApprovedPenalties || 0);
+
+    salary.totalDeduction = Number(
       (
-        salary.perDaySalary *
-        (Number(salary.lopDays || 0) + Number(salary.leaveDays || 0))
+        Number(salary.pfDeduction || 0) +
+        Number(salary.esicDeduction || 0) +
+        Number(salary.professionalTax || 0) +
+        Number(salary.tds || 0) +
+        Number(salary.fixedDeduction || 0) +
+        Number(salary.extraDeduction || 0) +
+        Number(salary.otherDeductions || 0) +
+        Number(salary.customDeductions || 0) +
+        Number(salary.unpaidLeaveDeduction || 0) +
+        legallyApprovedPenalties
       ).toFixed(2)
     );
-
-    salary.totalDeduction =
-      Number(salary.pfDeduction || 0) +
-      Number(salary.esicDeduction || 0) +
-      Number(salary.professionalTax || 0) +
-      Number(salary.tds || 0) +
-      Number(salary.fixedDeduction || 0) +
-      Number(salary.extraDeduction || 0) +
-      Number(salary.otherDeductions || 0) +
-      Number(salary.lopDeduction || 0);
 
     salary.netSalary = Math.max(0, Number((salary.grossSalary - salary.totalDeduction).toFixed(2)));
 
