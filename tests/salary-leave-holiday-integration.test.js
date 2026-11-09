@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+jest.setTimeout(60000);
 const request = require("supertest");
 const express = require("express");
 const { MongoMemoryServer } = require("mongodb-memory-server");
@@ -238,7 +239,7 @@ describe("Salary, Leave & Holiday Integration Test Suite", () => {
   // 2. DYNAMIC SATURDAY HOLIDAY RULES
   // =========================================================================
   describe("2. Dynamic Saturday Holiday Rules", () => {
-    test("2.1 By default, 2nd Saturday and 4th Saturday are WORKING days", async () => {
+    test("2.1 By default, 2nd Saturday and 4th Saturday are default holidays", async () => {
       // November 2026:
       // 14 Nov 2026 is 2nd Saturday
       // 28 Nov 2026 is 4th Saturday
@@ -251,14 +252,17 @@ describe("Salary, Leave & Holiday Integration Test Suite", () => {
 
       // Total calendar days in Nov = 30.
       // Sundays in Nov 2026: 1, 8, 15, 22, 29 = 5 Sundays.
-      // Configured holidays: 0.
-      // Standard working days = 30 - 5 = 25 working days. (All 4 Saturdays are working!)
+      // Default 2nd and 4th Saturday holidays = 2 (14 Nov, 28 Nov).
+      // Configured other holidays: 0.
+      // Standard working days = 30 - 5 - 2 = 23 working days.
       expect(novWorkingCheck.days.sundaysCount).toBe(5);
+      expect(novWorkingCheck.days.saturdayHolidaysCount).toBe(2);
       expect(novWorkingCheck.days.configuredHolidaysCount).toBe(0);
-      expect(novWorkingCheck.days.workingDays).toBe(25);
+      expect(novWorkingCheck.days.workingDays).toBe(23);
+      expect(novWorkingCheck.calculationDivisor).toBe(23);
     });
 
-    test("2.2 Saturday is a holiday ONLY if configured in Holiday Master (3rd Saturday configured)", async () => {
+    test("2.2 Saturday is configured in Holiday Master (e.g. 3rd Saturday configured)", async () => {
       // 21 Nov 2026 is 3rd Saturday
       await Holiday.create({
         holidayName: "Special Saturday Holiday",
@@ -274,12 +278,105 @@ describe("Salary, Leave & Holiday Integration Test Suite", () => {
       });
 
       expect(novWithSatHoliday.days.sundaysCount).toBe(5);
-      expect(novWithSatHoliday.days.configuredHolidaysCount).toBe(1);
+      expect(novWithSatHoliday.days.saturdayHolidaysCount).toBe(1);
+      expect(novWithSatHoliday.days.configuredHolidaysCount).toBe(0);
       // Standard working days = 30 - 5 Sundays - 1 Configured Sat Holiday = 24
       expect(novWithSatHoliday.days.workingDays).toBe(24);
+      expect(novWithSatHoliday.calculationDivisor).toBe(24);
 
       // Clean up holiday
       await Holiday.deleteMany({});
+    });
+
+    test("2.3 Matches Specification Example: 31 Calendar Days, 5 Sundays, 2 Sat Holidays => 24 Working Days, Per Day = ₹500", async () => {
+      // May 2026: 31 Calendar Days, 5 Sundays (3, 10, 17, 24, 31), 2 Saturday Holidays (9, 23 May)
+      // 31 - 5 - 2 = 24 Working Days
+      const exampleUser = await User.create({
+        name: "Example Employee",
+        email: "example@kevalon.com",
+        phoneNumber: "9876543298",
+        password: "password123",
+        role: "employee",
+        uniqueID: "EMP-EX-001",
+        companyId,
+        branchId,
+        isApproved: true,
+        status: "Active",
+      });
+
+      await SalaryStructure.create({
+        userId: exampleUser._id,
+        structureType: "SIMPLE_FIXED",
+        fixedSalary: 12000,
+        isPfApplicable: false,
+        isEsicApplicable: false,
+        isPtApplicable: false,
+        isTdsApplicable: false,
+        effectiveFrom: new Date("2026-01-01"),
+      });
+
+      // 1 Approved Full Day = 1 day (₹500)
+      // 1 Approved Half Day = 0.5 day (₹250)
+      // 1 Unauthorized Full Day = 1 day (₹500)
+      // 1 Unauthorized Half Day = 0.5 day (₹250)
+      // Actual Absence = 1 + 0.5 + 1 + 0.5 = 3 days
+      // Payable Days = 24 - 3 = 21
+      // LOP = 3 * ₹500 = ₹1,500
+      // Earned Base Salary = ₹12,000 - ₹1,500 = ₹10,500
+      // Proposed Penalty = 2 incidents * 0.5 * ₹500 = ₹500
+
+      // Case A: Before Penalty Authorization
+      const beforeAuth = await calculateMonthlyPayroll({
+        user: exampleUser,
+        month: 5,
+        year: 2026,
+        calculationMode: "CALENDAR_DAYS",
+        approvedLeaveDays: 1.5,
+        unauthorizedFullDays: 1,
+        unauthorizedHalfDays: 1,
+        isPenaltyApproved: false,
+      });
+
+      expect(beforeAuth.calendarDays).toBe(31);
+      expect(beforeAuth.days.sundaysCount).toBe(5);
+      expect(beforeAuth.days.saturdayHolidaysCount).toBe(2);
+      expect(beforeAuth.days.configuredHolidaysCount).toBe(0);
+      expect(beforeAuth.workingDays).toBe(24);
+      expect(beforeAuth.calculationDivisor).toBe(24);
+      expect(beforeAuth.perDaySalary).toBe(500);
+
+      expect(beforeAuth.approvedLeaveDays).toBe(1.5);
+      expect(beforeAuth.unauthorizedFullDayCount).toBe(1);
+      expect(beforeAuth.unauthorizedHalfDayCount).toBe(1);
+      expect(beforeAuth.penaltyEligibleIncidentCount).toBe(2);
+      expect(beforeAuth.actualAbsenceDays).toBe(3);
+      expect(beforeAuth.payableDays).toBe(21);
+
+      expect(beforeAuth.monthlySalary).toBe(12000);
+      expect(beforeAuth.lop).toBe(1500);
+      expect(beforeAuth.earnedBaseSalary).toBe(10500);
+      expect(beforeAuth.gross).toBe(12000);
+      expect(beforeAuth.proposedPenalty).toBe(500);
+      expect(beforeAuth.appliedPenalty).toBe(0);
+      expect(beforeAuth.totalAppliedDeductions).toBe(1500);
+      expect(beforeAuth.netSalary).toBe(10500);
+
+      // Case B: After Penalty Authorization
+      const afterAuth = await calculateMonthlyPayroll({
+        user: exampleUser,
+        month: 5,
+        year: 2026,
+        calculationMode: "CALENDAR_DAYS",
+        approvedLeaveDays: 1.5,
+        unauthorizedFullDays: 1,
+        unauthorizedHalfDays: 1,
+        isPenaltyApproved: true,
+      });
+
+      expect(afterAuth.payableDays).toBe(21); // Payable days remains 21!
+      expect(afterAuth.appliedPenalty).toBe(500);
+      expect(afterAuth.totalAppliedDeductions).toBe(2000);
+      expect(afterAuth.netSalary).toBe(10000);
     });
   });
 

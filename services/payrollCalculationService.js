@@ -23,19 +23,36 @@ const canQueryModel = (model, method = "find") => {
  *
  * Implements:
  * 1. Dynamic Salary Structure: SIMPLE_FIXED & COMPONENT_BASED
- * 2. Leave Deduction Rules:
- *    - All approved leaves are unpaid (Full Day = 1 Day LOP, Half Day = 0.5 Day LOP, 0 penalty)
- *    - Unapproved absence: Full Day = 1 Day LOP + 0.5 Day penalty; Half Day = 0.5 Day LOP + 0.5 Day penalty
- *    - Pending leaves do not trigger penalties
- *    - Avoid duplicate deductions between Attendance and Leave
- *    - Extra 0.5 day penalty is tracked separately and applied only after legal/authorization check
- *    - Do not classify the extra 0.5 day penalty as actual absence (presentDays remains workingDays - actualAbsence)
- * 3. Dynamic Saturday Holiday Rules:
- *    - Sunday remains weekly holiday
- *    - All Saturdays are working by default
- *    - Saturday is holiday only if configured in Holiday Master
+ * 2. Working Days & Holiday Rules:
+ *    - All Sundays in the month are off
+ *    - 2nd and 4th Saturday are default holidays; actual dates from Holiday Master / options
+ *    - If Saturday holiday is changed for any month, calculate according to configured dates
+ *    - Other configured holidays from Holiday Master are excluded
+ *    - Sunday and Holiday overlap on the same date is deducted only once (Unique Non-working Dates)
+ *    - Do not hardcode fixed 6/7 holidays
+ *    - Working Days = Calendar Days − Unique Non-working Dates
+ *    - Calculation Divisor = Working Days
+ *    - Per Day Salary = Monthly Salary ÷ Working Days
+ *    - If present on all working days, employee gets full monthly salary
+ * 3. Leave Deduction & Penalty Rules:
+ *    - Approved Full Day: 1 day LOP, 0 penalty
+ *    - Approved Half Day: 0.5 day LOP, 0 penalty
+ *    - Unauthorized Full Day: 1 day LOP + 0.5 day penalty
+ *    - Unauthorized Half Day: 0.5 day LOP + 0.5 day penalty
+ *    - Fixed 0.5-day penalty for each eligible unauthorized incident
+ *    - Penalty days are NOT added into Actual Absence Days or subtracted from Payable Days
+ *    - Only authorized penalty is deducted from Net Salary
+ *    - No duplicate deductions between Attendance and Leave
+ *    - Actual Absence Days = Approved Leave Days + Unauthorized Full-Day Count + Unauthorized Half-Day Count × 0.5
+ *    - Payable Days = Working Days − Actual Absence Days
+ *    - LOP = Actual Absence Days × Per Day Salary
+ *    - Proposed Penalty = Eligible Unauthorized Incident Count × 0.5 × Per Day Salary
  * 4. Payroll Formula:
- *    Net Salary = Monthly Salary − Unpaid Leave Deduction + Extra Earnings − Statutory Deductions − Approved Other Deductions − Legally Approved Penalties
+ *    - Gross = Monthly Salary + Extra Earnings
+ *    - Earned Base Salary = Monthly Salary − LOP
+ *    - Total Applied Deductions = LOP + Statutory Deductions + Approved Other Deductions + Authorized Penalty
+ *    - Net = Gross − LOP − Statutory Deductions − Approved Other Deductions − Authorized Penalty
+ *    - LOP is deducted only once
  */
 const calculateMonthlyPayroll = async ({
   user: userParam,
@@ -108,7 +125,14 @@ const calculateMonthlyPayroll = async ({
   const monthStart = new Date(yearNum, monthNum - 1, 1);
   const monthEnd = new Date(yearNum, monthNum, 0, 23, 59, 59, 999);
 
-  // 3. Dynamic Holiday Master Lookup (Sundays off, Saturdays working unless configured)
+  // 3. Dynamic Holiday Master Lookup & Saturday Holiday Rules
+  // - All Sundays of the month are off
+  // - 2nd and 4th Saturday default holidays; actual dates from Holiday Master / options
+  // - If Saturday holiday is changed for any month, calculate according to configured dates
+  // - Other configured holidays from Holiday Master are also excluded
+  // - If Sunday and holiday fall on the same date, deduct only once
+  // - Do not hardcode fixed 6/7 holidays
+  // - Working Days = Calendar Days − Unique Non-working Dates
   let holidayRecords = [];
   if (canQueryModel(Holiday, "find")) {
     try {
@@ -121,17 +145,14 @@ const calculateMonthlyPayroll = async ({
     } catch (_) {}
   }
 
-  const holidayMap = new Map();
-  holidayRecords.forEach((h) => {
-    const dStr = toDateString(h.holidayDate);
-    if (dStr) {
-      holidayMap.set(dStr, h.holidayName || "Company Holiday");
-    }
+  const monthHolidayRecords = (holidayRecords || []).filter((h) => {
+    if (!h.holidayDate) return false;
+    const d = new Date(h.holidayDate);
+    return d.getFullYear() === yearNum && d.getMonth() + 1 === monthNum;
   });
 
-  let totalSundays = 0;
-  let totalConfiguredHolidays = 0;
-  let standardWorkingDaysCount = 0;
+  const sundaysInMonth = [];
+  const saturdaysInMonth = [];
 
   for (let day = 1; day <= calendarDays; day++) {
     const curDate = new Date(yearNum, monthNum - 1, day);
@@ -139,17 +160,102 @@ const calculateMonthlyPayroll = async ({
     const dayOfWeek = curDate.getDay(); // 0 = Sun, 6 = Sat
 
     if (dayOfWeek === 0) {
-      totalSundays++;
-    } else if (holidayMap.has(dateStr)) {
-      totalConfiguredHolidays++;
-    } else {
-      standardWorkingDaysCount++;
+      sundaysInMonth.push(dateStr);
+    } else if (dayOfWeek === 6) {
+      saturdaysInMonth.push(dateStr);
     }
   }
 
-  const workingDays = manualWorkingDays
-    ? Number(manualWorkingDays)
-    : (options.workingDays ? Number(options.workingDays) : (calculationMode === "THIRTY_DAYS" || options.calculationMode === "THIRTY_DAYS" ? 30 : standardWorkingDaysCount));
+  // 2nd and 4th Saturday default holidays
+  const defaultSaturdayHolidays = [];
+  if (saturdaysInMonth.length >= 2) {
+    defaultSaturdayHolidays.push(saturdaysInMonth[1]); // 2nd Saturday
+  }
+  if (saturdaysInMonth.length >= 4) {
+    defaultSaturdayHolidays.push(saturdaysInMonth[3]); // 4th Saturday
+  }
+
+  // Check if Saturday holidays are configured in options or Holiday Master
+  let saturdayHolidayDates = [];
+  if (Array.isArray(options.saturdayDates) && options.saturdayDates.length > 0) {
+    saturdayHolidayDates = options.saturdayDates.map((d) => toDateString(d)).filter(Boolean);
+  } else if (Array.isArray(options.saturdayHolidays) && options.saturdayHolidays.length > 0) {
+    saturdayHolidayDates = options.saturdayHolidays
+      .map((ord) => saturdaysInMonth[Number(ord) - 1])
+      .filter(Boolean);
+  } else {
+    // Check if Holiday Master has configured Saturday holidays for this month
+    const masterSaturdayHolidays = monthHolidayRecords.filter((h) => {
+      const d = new Date(h.holidayDate);
+      return (
+        d.getDay() === 6 &&
+        (/saturday|sat/i.test(h.holidayName || "") || h.isSaturdayHoliday === true)
+      );
+    });
+
+    if (masterSaturdayHolidays.length > 0) {
+      // Configured Saturday holidays override defaults for this month
+      saturdayHolidayDates = masterSaturdayHolidays
+        .map((h) => toDateString(h.holidayDate))
+        .filter(Boolean);
+    } else {
+      // Default to 2nd and 4th Saturday
+      saturdayHolidayDates = defaultSaturdayHolidays;
+    }
+  }
+
+  // Other configured holidays from Holiday Master (excluding any already captured in saturdayHolidayDates)
+  const otherConfiguredHolidays = monthHolidayRecords.filter((h) => {
+    const dStr = toDateString(h.holidayDate);
+    return dStr && !saturdayHolidayDates.includes(dStr);
+  });
+
+  // Holiday map for quick lookup / date reasons
+  const holidayMap = new Map();
+  monthHolidayRecords.forEach((h) => {
+    const dStr = toDateString(h.holidayDate);
+    if (dStr) holidayMap.set(dStr, h.holidayName || "Company Holiday");
+  });
+  saturdayHolidayDates.forEach((dStr) => {
+    if (!holidayMap.has(dStr)) {
+      holidayMap.set(dStr, "Saturday Holiday");
+    }
+  });
+
+  // Unique Non-working Dates Set (deduplicates Sunday & Holiday overlaps)
+  const uniqueNonWorkingDates = new Set();
+  sundaysInMonth.forEach((d) => uniqueNonWorkingDates.add(d));
+  saturdayHolidayDates.forEach((d) => uniqueNonWorkingDates.add(d));
+  otherConfiguredHolidays.forEach((h) => {
+    const dStr = toDateString(h.holidayDate);
+    if (dStr) uniqueNonWorkingDates.add(dStr);
+  });
+
+  const totalSundays = sundaysInMonth.length;
+  const totalSaturdayHolidays = saturdayHolidayDates.length;
+  // Unique other holidays not falling on Sunday or Saturday holiday
+  const totalConfiguredHolidays = otherConfiguredHolidays.filter((h) => {
+    const dStr = toDateString(h.holidayDate);
+    return !sundaysInMonth.includes(dStr) && !saturdayHolidayDates.includes(dStr);
+  }).length;
+
+  const standardWorkingDaysCount = Math.max(0, calendarDays - uniqueNonWorkingDates.size);
+
+  const workingDays =
+    manualWorkingDays !== undefined && manualWorkingDays !== null
+      ? Number(manualWorkingDays)
+      : options.workingDays !== undefined && options.workingDays !== null
+      ? Number(options.workingDays)
+      : calculationMode === "THIRTY_DAYS" || options.calculationMode === "THIRTY_DAYS"
+      ? 30
+      : standardWorkingDaysCount;
+
+  const calculationDivisor =
+    workingDays > 0
+      ? workingDays
+      : calculationMode === "THIRTY_DAYS" || options.calculationMode === "THIRTY_DAYS"
+      ? 30
+      : calendarDays;
 
   // 4. Leave Records (Approved, Pending)
   let approvedLeaves = [];
@@ -379,12 +485,17 @@ const calculateMonthlyPayroll = async ({
   }
 
   // Per Day Salary & Leave Deduction
-  const perDaySalary = totalDays > 0 ? Number((monthlySalary / totalDays).toFixed(2)) : 0;
-  const unpaidLeaveDeduction = Number((perDaySalary * totalAbsenceDays).toFixed(2));
+  const rawPerDaySalary = calculationDivisor > 0 ? monthlySalary / calculationDivisor : 0;
+  const perDaySalary = Number(rawPerDaySalary.toFixed(2));
+  const unpaidLeaveDeduction = Number((rawPerDaySalary * totalAbsenceDays).toFixed(2));
+  const lopDeduction = unpaidLeaveDeduction;
+
+  // Earned Base Salary = Monthly Salary − LOP
+  const earnedBaseSalary = Math.max(0, Number((monthlySalary - lopDeduction).toFixed(2)));
 
   // Proposed Penalty = (Unauthorized Full-Day Count + Unauthorized Half-Day Count) * 0.5 * Per Day Salary
-  const penaltyDayUnits = penaltyEligibleFullDays + penaltyEligibleHalfDays;
-  const proposedPenaltyAmount = Number((perDaySalary * 0.5 * penaltyDayUnits).toFixed(2));
+  const penaltyEligibleIncidentCount = penaltyEligibleFullDays + penaltyEligibleHalfDays;
+  const proposedPenaltyAmount = Number((rawPerDaySalary * 0.5 * penaltyEligibleIncidentCount).toFixed(2));
 
   // Extra penalty must be tracked separately and applied only after confirming legal permissibility and authorization
   const applyPenalties = Boolean(
@@ -514,30 +625,30 @@ const calculateMonthlyPayroll = async ({
   );
 
   // 10. Net Salary Formula:
-  // Net Salary = Monthly Salary − Unpaid Leave Deduction + Extra Earnings − Statutory Deductions − Approved Other Deductions − Legally Approved Penalties
-  const netSalary = Math.max(
-    0,
-    Number(
-      (
-        monthlySalary -
-        unpaidLeaveDeduction +
-        totalExtraEarnings -
-        totalStatutoryDeductions -
-        approvedOtherDeductions -
-        legallyApprovedPenalties
-      ).toFixed(2)
-    )
-  );
-
-  // Total Deductions for reporting
-  const totalDeductions = Number(
+  // Gross = Monthly Salary + Extra Earnings
+  // Earned Base Salary = Monthly Salary − LOP
+  // Net = Gross − LOP − Existing Applicable Deductions − Authorized Penalty
+  // Total Applied Deductions = LOP + Statutory Deductions + Approved Other Deductions + Authorized Penalty
+  const totalAppliedDeductions = Number(
     (
-      unpaidLeaveDeduction +
+      lopDeduction +
       totalStatutoryDeductions +
       approvedOtherDeductions +
       legallyApprovedPenalties
     ).toFixed(2)
   );
+
+  const netSalary = Math.max(
+    0,
+    Number(
+      (
+        grossSalary -
+        totalAppliedDeductions
+      ).toFixed(2)
+    )
+  );
+
+  const totalDeductions = totalAppliedDeductions;
 
   // Employer Contributions
   const employerPf = struct.isPfApplicable === false ? 0 : Math.round(basicForPf * 0.12);
@@ -568,11 +679,20 @@ const calculateMonthlyPayroll = async ({
     structureType: isSimpleFixed ? "SIMPLE_FIXED" : "COMPONENT_BASED",
     calculationMode,
     days: {
+      calendarDays,
       totalCalendarDays: calendarDays,
-      totalDays,
+      totalDays: calendarDays,
+      sundays: totalSundays,
+      sundaysCount: totalSundays,
+      saturdayHolidays: totalSaturdayHolidays,
+      saturdayHolidaysCount: totalSaturdayHolidays,
+      configuredHolidays: totalConfiguredHolidays,
+      configuredHolidaysCount: totalConfiguredHolidays,
       workingDays,
+      calculationDivisor,
       presentDays,
       daysPayable,
+      payableDays: daysPayable,
       approvedLeaveDays,
       leaveDays: approvedLeaveDays,
       unauthorizedFullDayCount: unapprovedFullDays,
@@ -580,26 +700,56 @@ const calculateMonthlyPayroll = async ({
       unauthorizedFullDays: unapprovedFullDays,
       unauthorizedHalfDays: unapprovedHalfDays,
       unapprovedLeaveDays,
+      penaltyEligibleIncidentCount,
+      incidentCount: penaltyEligibleIncidentCount,
       actualAbsenceDays: totalAbsenceDays,
       totalAbsenceDays,
-      sundaysCount: totalSundays,
-      configuredHolidaysCount: totalConfiguredHolidays,
     },
+    calendarDays,
+    totalCalendarDays: calendarDays,
+    sundays: totalSundays,
+    sundaysCount: totalSundays,
+    saturdayHolidays: totalSaturdayHolidays,
+    saturdayHolidaysCount: totalSaturdayHolidays,
+    configuredHolidays: totalConfiguredHolidays,
+    configuredHolidaysCount: totalConfiguredHolidays,
+    workingDays,
+    calculationDivisor,
     perDaySalary,
     approvedLeaveDays,
     unauthorizedFullDayCount: unapprovedFullDays,
     unauthorizedHalfDayCount: unapprovedHalfDays,
     unauthorizedFullDays: unapprovedFullDays,
     unauthorizedHalfDays: unapprovedHalfDays,
+    penaltyEligibleIncidentCount,
+    incidentCount: penaltyEligibleIncidentCount,
     actualAbsenceDays: totalAbsenceDays,
-    leaveDeduction: unpaidLeaveDeduction,
+    totalAbsenceDays,
+    payableDays: daysPayable,
+    daysPayable,
+    presentDays,
+    monthlySalary,
+    earnedBaseSalary,
+    gross: grossSalary,
+    grossSalary,
+    lop: lopDeduction,
+    lopDeduction,
+    leaveDeduction: lopDeduction,
+    unpaidLeaveDeduction: lopDeduction,
     proposedPenalty: proposedPenaltyAmount,
+    proposedPenaltyAmount,
     appliedPenalty: legallyApprovedPenalties,
-    totalDeduction: totalDeductions,
+    legallyApprovedPenalties,
+    statutoryDeductions: totalStatutoryDeductions,
+    otherDeductions: approvedOtherDeductions,
+    customDeductions: approvedOtherDeductions,
+    totalAppliedDeductions,
+    totalDeduction: totalAppliedDeductions,
     totalDeductions,
     netSalary,
     baseEarnings: {
       monthlySalary,
+      earnedBaseSalary,
       basicSalary,
       hra,
       conveyanceAllowance,
@@ -625,17 +775,20 @@ const calculateMonthlyPayroll = async ({
       unauthorizedHalfDayCount: unapprovedHalfDays,
       unauthorizedFullDays: unapprovedFullDays,
       unauthorizedHalfDays: unapprovedHalfDays,
+      penaltyEligibleIncidentCount,
+      incidentCount: penaltyEligibleIncidentCount,
       unapprovedFullDays,
       unapprovedHalfDays,
       actualAbsenceDays: totalAbsenceDays,
       unpaidLeaveDays: totalAbsenceDays,
       unapprovedLeaveDays,
       unauthorizedAbsenceDays: unapprovedLeaveDays,
-      approvedLeaveDeduction: Number((perDaySalary * approvedLeaveDays).toFixed(2)),
-      unauthorizedAbsenceDeduction: Number((perDaySalary * unapprovedLeaveDays).toFixed(2)),
-      leaveDeduction: unpaidLeaveDeduction,
-      unpaidLeaveDeduction,
-      lopDeduction: unpaidLeaveDeduction,
+      approvedLeaveDeduction: Number((rawPerDaySalary * approvedLeaveDays).toFixed(2)),
+      unauthorizedAbsenceDeduction: Number((rawPerDaySalary * unapprovedLeaveDays).toFixed(2)),
+      lop: lopDeduction,
+      lopDeduction,
+      leaveDeduction: lopDeduction,
+      unpaidLeaveDeduction: lopDeduction,
       proposedPenalty: proposedPenaltyAmount,
       proposedPenaltyAmount,
       unapprovedLeavePenalty: proposedPenaltyAmount,
@@ -667,22 +820,37 @@ const calculateMonthlyPayroll = async ({
       totalOtherDeductions: approvedOtherDeductions,
     },
     summary: {
-      monthlySalary,
-      grossSalary,
+      calendarDays,
+      sundays: totalSundays,
+      saturdayHolidays: totalSaturdayHolidays,
+      configuredHolidays: totalConfiguredHolidays,
+      workingDays,
+      calculationDivisor,
+      perDaySalary,
       approvedLeaveDays,
       unauthorizedFullDayCount: unapprovedFullDays,
       unauthorizedHalfDayCount: unapprovedHalfDays,
+      penaltyEligibleIncidentCount,
+      incidentCount: penaltyEligibleIncidentCount,
       actualAbsenceDays: totalAbsenceDays,
-      perDaySalary,
-      leaveDeduction: unpaidLeaveDeduction,
+      payableDays: daysPayable,
+      monthlySalary,
+      earnedBaseSalary,
+      gross: grossSalary,
+      grossSalary,
+      lop: lopDeduction,
+      leaveDeduction: lopDeduction,
       proposedPenalty: proposedPenaltyAmount,
       appliedPenalty: legallyApprovedPenalties,
-      totalDeduction: totalDeductions,
+      statutoryDeductions: totalStatutoryDeductions,
+      otherDeductions: approvedOtherDeductions,
+      totalAppliedDeductions,
+      totalDeduction: totalAppliedDeductions,
       totalDeductions,
       netSalary,
       legalCompliance: {
         isPermissibleOnly: true,
-        wageCeilingCompliant: totalDeductions <= grossSalary * 0.5,
+        wageCeilingCompliant: totalAppliedDeductions <= grossSalary * 0.5,
       },
     },
     employerContributions: {

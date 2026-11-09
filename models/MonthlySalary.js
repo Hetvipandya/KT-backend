@@ -245,12 +245,52 @@ const monthlySalarySchema = new mongoose.Schema(
       default: 30,
     },
 
+    calculationDivisor: {
+      type: Number,
+      default: 30,
+    },
+
+    sundaysCount: {
+      type: Number,
+      default: 0,
+    },
+
+    saturdayHolidaysCount: {
+      type: Number,
+      default: 0,
+    },
+
+    configuredHolidaysCount: {
+      type: Number,
+      default: 0,
+    },
+
+    earnedBaseSalary: {
+      type: Number,
+      default: 0,
+    },
+
+    penaltyEligibleIncidentCount: {
+      type: Number,
+      default: 0,
+    },
+
+    totalAppliedDeductions: {
+      type: Number,
+      default: 0,
+    },
+
     presentDays: {
       type: Number,
       default: 30,
     },
 
     daysPayable: {
+      type: Number,
+      default: 30,
+    },
+
+    payableDays: {
       type: Number,
       default: 30,
     },

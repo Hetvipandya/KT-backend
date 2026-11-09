@@ -218,7 +218,9 @@ const generateMonthlySalary = async (req, res) => {
 
       const snapshot = {
         structureType: calcResult.structureType,
+        calculationDivisor: calcResult.calculationDivisor,
         monthlySalary: calcResult.baseEarnings.monthlySalary,
+        earnedBaseSalary: calcResult.earnedBaseSalary,
         basicSalary: calcResult.baseEarnings.basicSalary,
         hra: calcResult.baseEarnings.hra,
         conveyanceAllowance: calcResult.baseEarnings.conveyanceAllowance,
@@ -283,8 +285,14 @@ const generateMonthlySalary = async (req, res) => {
           calculationMode,
           totalDays: calcResult.days.totalDays,
           workingDays: calcResult.days.workingDays,
+          calculationDivisor: calcResult.calculationDivisor,
           presentDays: calcResult.days.presentDays,
           daysPayable: calcResult.days.daysPayable,
+          payableDays: calcResult.days.daysPayable,
+          sundaysCount: calcResult.days.sundaysCount,
+          saturdayHolidaysCount: calcResult.days.saturdayHolidaysCount,
+          configuredHolidaysCount: calcResult.days.configuredHolidaysCount,
+          penaltyEligibleIncidentCount: calcResult.leaveDeductions.penaltyEligibleIncidentCount,
           approvedLeaveDays: calcResult.leaveDeductions.approvedLeaveDays,
           approvedLeaveDeduction: calcResult.leaveDeductions.approvedLeaveDeduction,
           unauthorizedAbsenceDeduction: calcResult.leaveDeductions.unauthorizedAbsenceDeduction,
@@ -309,6 +317,7 @@ const generateMonthlySalary = async (req, res) => {
           legallyApprovedPenalties: calcResult.leaveDeductions.appliedPenalty,
           fixedSalary: calcResult.structureType === "SIMPLE_FIXED" ? calcResult.baseEarnings.monthlySalary : undefined,
           monthlySalary: calcResult.baseEarnings.monthlySalary,
+          earnedBaseSalary: calcResult.earnedBaseSalary,
           basicSalary: calcResult.baseEarnings.basicSalary,
           hra: calcResult.baseEarnings.hra,
           conveyanceAllowance: calcResult.baseEarnings.conveyanceAllowance,
@@ -342,6 +351,7 @@ const generateMonthlySalary = async (req, res) => {
           extraDeduction: calcResult.customDeductions.extraDeduction,
           otherDeductions: calcResult.customDeductions.otherDeductions,
           approvedOtherDeductions: calcResult.customDeductions.totalOtherDeductions,
+          totalAppliedDeductions: calcResult.totalAppliedDeductions,
           totalDeduction: calcResult.totalDeductions,
           netSalary: calcResult.netSalary,
           employerContributions: calcResult.employerContributions,
@@ -897,6 +907,7 @@ const updateMonthlySalary = async (req, res) => {
       "basicSalary",
       "fixedSalary",
       "monthlySalary",
+      "earnedBaseSalary",
       "hra",
       "conveyanceAllowance",
       "medicalAllowance",
@@ -935,6 +946,9 @@ const updateMonthlySalary = async (req, res) => {
       "proposedPenalty",
       "appliedPenalty",
       "legallyApprovedPenalties",
+      "penaltyEligibleIncidentCount",
+      "totalAppliedDeductions",
+      "calculationDivisor",
       "workingDays",
       "totalDays",
       "leaveDeduction",
@@ -1096,7 +1110,7 @@ const updateMonthlySalary = async (req, res) => {
       month: salary.month || 1,
       year: salary.year || 2026,
       calculationMode: salary.calculationMode || "CALENDAR_DAYS",
-      manualWorkingDays: salary.workingDays,
+      manualWorkingDays: updates.workingDays !== undefined ? Number(updates.workingDays) : (salary.workingDays || (salary.totalDays && !salary.workingDays ? salary.totalDays : undefined)),
       manualLopDays: manualLop,
       unauthorizedFullDays: fullDayCount,
       unauthorizedHalfDays: halfDayCount,
@@ -1121,7 +1135,7 @@ const updateMonthlySalary = async (req, res) => {
         otherAllowances: salary.otherAllowances,
         fixedBonus: salary.fixedBonus,
         totalDays: salary.totalDays,
-        workingDays: salary.workingDays,
+        workingDays: updates.workingDays !== undefined ? Number(updates.workingDays) : (salary.workingDays || (salary.totalDays && !salary.workingDays ? salary.totalDays : undefined)),
         pfDeduction: salary.pfDeduction,
         esicDeduction: salary.esicDeduction,
         professionalTax: salary.professionalTax,
@@ -1133,12 +1147,17 @@ const updateMonthlySalary = async (req, res) => {
 
     // Sync recalculated values into salary record
     salary.monthlySalary = calcResult.baseEarnings.monthlySalary;
+    salary.earnedBaseSalary = calcResult.earnedBaseSalary;
     salary.grossSalary = calcResult.grossSalary;
     salary.perDaySalary = calcResult.perDaySalary;
+    salary.calculationDivisor = calcResult.calculationDivisor;
     salary.totalDays = calcResult.days.totalDays;
     salary.workingDays = calcResult.days.workingDays;
     salary.presentDays = calcResult.days.presentDays;
     salary.daysPayable = calcResult.days.daysPayable;
+    salary.sundaysCount = calcResult.days.sundaysCount;
+    salary.saturdayHolidaysCount = calcResult.days.saturdayHolidaysCount;
+    salary.configuredHolidaysCount = calcResult.days.configuredHolidaysCount;
 
     // Leave & Absence Breakdown
     salary.approvedLeaveDays = calcResult.leaveDeductions.approvedLeaveDays;
@@ -1149,6 +1168,7 @@ const updateMonthlySalary = async (req, res) => {
     salary.unauthorizedHalfDays = calcResult.leaveDeductions.unauthorizedHalfDays;
     salary.unapprovedFullDays = calcResult.leaveDeductions.unauthorizedFullDays;
     salary.unapprovedHalfDays = calcResult.leaveDeductions.unauthorizedHalfDays;
+    salary.penaltyEligibleIncidentCount = calcResult.leaveDeductions.penaltyEligibleIncidentCount;
     salary.actualAbsenceDays = calcResult.leaveDeductions.actualAbsenceDays;
     salary.unpaidLeaveDays = calcResult.leaveDeductions.actualAbsenceDays;
     salary.lopDays = calcResult.days.unapprovedLeaveDays;
@@ -1169,7 +1189,10 @@ const updateMonthlySalary = async (req, res) => {
     salary.legallyApprovedPenalties = calcResult.leaveDeductions.appliedPenalty;
     salary.isPenaltyApproved = calcResult.leaveDeductions.isPenaltyApproved;
 
-    salary.totalDeduction = calcResult.totalDeductions;
+    salary.statutoryDeductions = calcResult.statutoryDeductions.totalStatutoryDeductions;
+    salary.approvedOtherDeductions = calcResult.customDeductions.totalOtherDeductions;
+    salary.totalAppliedDeductions = calcResult.totalAppliedDeductions;
+    salary.totalDeduction = calcResult.totalAppliedDeductions;
     salary.netSalary = calcResult.netSalary;
 
     await salary.save();
@@ -1182,15 +1205,41 @@ const updateMonthlySalary = async (req, res) => {
 
     const responseData = {
       ...(typeof updatedSalary.toObject === "function" ? updatedSalary.toObject() : updatedSalary),
+      calendarDays: calcResult.days.totalCalendarDays,
+      totalCalendarDays: calcResult.days.totalCalendarDays,
+      sundays: calcResult.days.sundaysCount,
+      sundaysCount: calcResult.days.sundaysCount,
+      saturdayHolidays: calcResult.days.saturdayHolidaysCount,
+      saturdayHolidaysCount: calcResult.days.saturdayHolidaysCount,
+      configuredHolidays: calcResult.days.configuredHolidaysCount,
+      configuredHolidaysCount: calcResult.days.configuredHolidaysCount,
+      workingDays: salary.workingDays,
+      calculationDivisor: calcResult.calculationDivisor,
+      perDaySalary: salary.perDaySalary,
       approvedLeaveDays: salary.approvedLeaveDays,
       unauthorizedFullDayCount: salary.unauthorizedFullDayCount,
       unauthorizedHalfDayCount: salary.unauthorizedHalfDayCount,
+      penaltyEligibleIncidentCount: salary.penaltyEligibleIncidentCount,
+      incidentCount: salary.penaltyEligibleIncidentCount,
       actualAbsenceDays: salary.actualAbsenceDays,
-      perDaySalary: salary.perDaySalary,
+      payableDays: salary.daysPayable,
+      daysPayable: salary.daysPayable,
+      presentDays: salary.presentDays,
+      monthlySalary: salary.monthlySalary,
+      earnedBaseSalary: calcResult.earnedBaseSalary,
+      gross: salary.grossSalary,
+      grossSalary: salary.grossSalary,
+      lop: salary.leaveDeduction,
+      lopDeduction: salary.leaveDeduction,
       leaveDeduction: salary.leaveDeduction,
+      unpaidLeaveDeduction: salary.leaveDeduction,
       proposedPenalty: salary.proposedPenalty,
       appliedPenalty: salary.appliedPenalty,
+      statutoryDeductions: salary.statutoryDeductions,
+      otherDeductions: salary.approvedOtherDeductions,
+      totalAppliedDeductions: calcResult.totalAppliedDeductions,
       totalDeduction: salary.totalDeduction,
+      totalDeductions: salary.totalDeduction,
       netSalary: salary.netSalary,
     };
 
