@@ -1,13 +1,13 @@
-const mongoose = require('mongoose'); 
+const mongoose = require('mongoose');
 
 const branchSchema = new mongoose.Schema(
   {
     companyId: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: 'Company', 
+      ref: 'Company',
       default: null,
       index: true
-    }, 
+    },
     branchName: {
       type: String,
       required: [true, 'Branch name is required'],
@@ -72,6 +72,16 @@ const branchSchema = new mongoose.Schema(
   },
   {
     timestamps: true
+  }
+);
+
+branchSchema.index(
+  { companyId: 1, branchCode: 1 },
+  {
+    unique: true,
+    partialFilterExpression: {
+      branchCode: { $type: 'string', $gt: '' }
+    }
   }
 );
 

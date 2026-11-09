@@ -78,9 +78,10 @@ const createBranchSchema = z.object({
   manager: z.string().optional().or(z.literal('')),
   isHeadOffice: z.boolean().optional(),
   status: z.enum(['active', 'inactive']).optional()
-}).strict();
+}).passthrough();
 
 const updateBranchSchema = z.object({
+  companyId: z.string().optional(),
   branchName: z.string().min(1, 'Branch name cannot be empty').optional(),
   branchCode: z.string().trim().optional().or(z.literal('')),
   address: z.string().optional().or(z.literal('')),
@@ -93,7 +94,7 @@ const updateBranchSchema = z.object({
   manager: z.string().optional().or(z.literal('')),
   isHeadOffice: z.boolean().optional(),
   status: z.enum(['active', 'inactive']).optional()
-}).strict();
+}).passthrough();
 
 const createFYSchema = z.object({
   companyId: z.string({ required_error: 'Company ID is required' }).min(1, 'Company ID cannot be empty'),

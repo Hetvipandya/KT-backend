@@ -25,6 +25,12 @@ const checkCompanyAccess = async (req, res, next) => {
           });
         }
         companyId = branch.companyId;
+        if (!companyId) {
+          const defaultCompany = await Company.findOne();
+          if (defaultCompany) {
+            companyId = defaultCompany._id;
+          }
+        }
         req.branch = branch; // cache branch document
       } else if (baseUrl.includes('financial-year')) {
         const fy = await FinancialYear.findById(req.params.id);
@@ -217,10 +223,10 @@ const checkCompanyAccess = async (req, res, next) => {
           }
         }
 
-        // Fallback 3: check if admin or hr user and default company exists
+        // Fallback 3: check if admin or hr user (or listing branches) and default company exists
         if (!companyId || companyId === '') {
           const role = (req.user?.role || '').toLowerCase().trim();
-          if (['admin', 'hr'].includes(role)) {
+          if (['admin', 'hr'].includes(role) || baseUrl.includes('branch')) {
             const defaultCompany = await Company.findOne();
             if (defaultCompany) {
               companyId = defaultCompany._id;
@@ -233,7 +239,13 @@ const checkCompanyAccess = async (req, res, next) => {
       }
     }
 
+    const isBranchRoute = baseUrl.includes('branch');
+    const isBranchList = isBranchRoute && req.method === 'GET' && !req.params.id;
+
     if (!companyId) {
+      if (isBranchRoute) {
+        return next();
+      }
       return res.status(400).json({
         success: false,
         message: 'Company ID is required for access validation',
@@ -249,6 +261,9 @@ const checkCompanyAccess = async (req, res, next) => {
     }
 
     if (!company) {
+      if (isBranchRoute) {
+        return next();
+      }
       return res.status(404).json({
         success: false,
         message: 'Company not found',
@@ -266,7 +281,7 @@ const checkCompanyAccess = async (req, res, next) => {
     const isDefaultCompany = !company.createdBy;
     const isMember = isLegacyMember || isCompanyAccessMember || (isAdminOrHr && isDefaultCompany);
 
-    if (!isOwner && !isMember && !isAdminOrHr) {
+    if (!isOwner && !isMember && !isAdminOrHr && !isBranchList) {
       return res.status(403).json({
         success: false,
         message: 'Access denied: You do not have access to this company\'s data',

@@ -8,9 +8,9 @@ const Branch = require('../models/Branch');
 const checkBranchAccess = async (req, res, next) => {
   try {
     const requestPath = String(req.originalUrl || req.baseUrl || req.path || '').split('?')[0];
-    const isBranchCreate = req.method === 'POST' && /^\/api\/branch\/?$/.test(requestPath);
+    const isBranchRoute = /^\/api\/branch\/?$/.test(requestPath);
 
-    if (isBranchCreate) {
+    if (isBranchRoute && (req.method === 'POST' || req.method === 'GET')) {
       req.branchId = null;
       return next();
     }

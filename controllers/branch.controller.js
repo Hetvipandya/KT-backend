@@ -3,9 +3,8 @@ const Branch = require('../models/Branch');
 const Company = require('../models/Company');
 const User = require('../models/User');
 const { determineNextStep } = require('../utils/onboarding');
-
 const { invalidateUserCache } = require('../middleware/authenticate');
- 
+
 /**
  * POST /api/branch
  * Create a new branch for a company
@@ -13,8 +12,8 @@ const { invalidateUserCache } = require('../middleware/authenticate');
 const createBranch = async (req, res, next) => {
   try {
     // Resolve user's company (checking middleware attachment, user document, active access, or DB lookup)
-    const userCompany = req.company || await Company.findOne({ createdBy: req.user._id });
-    const hasCompany = req.user.companyCreated || !!req.user.companyId || !!userCompany || (req.user.companyAccess && req.user.companyAccess.some(a => a.isActive));
+    const userCompany = req.company || (req.user && await Company.findOne({ createdBy: req.user._id })) || await Company.findOne();
+    const hasCompany = req.user?.companyCreated || !!req.user?.companyId || !!userCompany || (req.user?.companyAccess && req.user.companyAccess.some(a => a.isActive));
 
     if (!hasCompany) {
       return res.status(403).json({
@@ -25,14 +24,18 @@ const createBranch = async (req, res, next) => {
     }
 
     const { companyId: bodyCompanyId, branchName, branchCode, address, city, state, pincode, country, phone, email, manager, isHeadOffice, status } = req.body;
-    let companyId = bodyCompanyId || req.query.companyId || (req.company && req.company._id) || req.user.companyId;
+    let companyId = bodyCompanyId || req.query?.companyId || (req.company && req.company._id) || req.user?.companyId;
 
     if (!companyId && userCompany) {
       companyId = userCompany._id;
     }
-    if (!companyId && req.user.companyAccess && req.user.companyAccess.length > 0) {
+    if (!companyId && req.user?.companyAccess && req.user.companyAccess.length > 0) {
       const activeAccess = req.user.companyAccess.find(a => a.isActive);
       if (activeAccess) companyId = activeAccess.companyId;
+    }
+    if (!companyId) {
+      const defaultCompany = await Company.findOne();
+      if (defaultCompany) companyId = defaultCompany._id;
     }
 
     if (!companyId) {
@@ -43,11 +46,40 @@ const createBranch = async (req, res, next) => {
       });
     }
 
+    // Duplicate Branch Code Validation (Case-insensitive)
+    const cleanBranchCode = typeof branchCode === 'string' ? branchCode.trim() : '';
+    if (cleanBranchCode) {
+      const codeRegex = new RegExp(`^${cleanBranchCode.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
+      const duplicateQuery = {
+        branchCode: codeRegex
+      };
+      if (companyId) {
+        duplicateQuery.$or = [
+          { companyId: companyId },
+          { companyId: null },
+          { companyId: { $exists: false } }
+        ];
+      }
+      const existingBranch = await Branch.findOne(duplicateQuery);
+      if (existingBranch) {
+        return res.status(400).json({
+          success: false,
+          message: `Branch with code "${cleanBranchCode}" already exists`,
+          errorCode: 'DUPLICATE_BRANCH_CODE'
+        });
+      }
+    }
+
     // Count existing branches for the company
-    const count = await Branch.countDocuments({ companyId });
-    
+    const count = await Branch.countDocuments({
+      $or: [
+        { companyId },
+        { companyId: null }
+      ]
+    });
+
     let shouldBeHeadOffice = isHeadOffice || false;
-    
+
     // First branch must be the head office
     if (count === 0) {
       shouldBeHeadOffice = true;
@@ -55,13 +87,21 @@ const createBranch = async (req, res, next) => {
 
     // If this branch is to be the Head Office, unset any existing Head Office for this company
     if (shouldBeHeadOffice) {
-      await Branch.updateMany({ companyId }, { $set: { isHeadOffice: false } });
+      await Branch.updateMany(
+        {
+          $or: [
+            { companyId },
+            { companyId: null }
+          ]
+        },
+        { $set: { isHeadOffice: false } }
+      );
     }
 
     const branch = await Branch.create({
       companyId,
       branchName,
-      branchCode,
+      branchCode: cleanBranchCode,
       address,
       city,
       state,
@@ -81,35 +121,37 @@ const createBranch = async (req, res, next) => {
       branchId: branch._id
     };
 
-    await User.findByIdAndUpdate(req.user._id, updateFields);
+    if (req.user?._id) {
+      await User.findByIdAndUpdate(req.user._id, updateFields);
 
-    const FinanceUser = require('../models/FinanceUser');
-    await FinanceUser.findOneAndUpdate(
-      { userId: req.user._id },
-      {
-        $set: {
-          companyId: companyId,
-          branchId: branch._id,
-          branchCreated: true,
-          companyCreated: true,
-          role: req.user.role || 'admin'
-        },
-        $addToSet: {
-          companyAccess: {
-            companyId,
+      const FinanceUser = require('../models/FinanceUser');
+      await FinanceUser.findOneAndUpdate(
+        { userId: req.user._id },
+        {
+          $set: {
+            companyId: companyId,
             branchId: branch._id,
-            role: req.user.role || 'admin',
-            isActive: true,
-            invitedAt: new Date(),
-            inviteSent: true,
-            joinedAt: new Date()
+            branchCreated: true,
+            companyCreated: true,
+            role: req.user.role || 'admin'
+          },
+          $addToSet: {
+            companyAccess: {
+              companyId,
+              branchId: branch._id,
+              role: req.user.role || 'admin',
+              isActive: true,
+              invitedAt: new Date(),
+              inviteSent: true,
+              joinedAt: new Date()
+            }
           }
-        }
-      },
-      { upsert: true, new: true }
-    );
+        },
+        { upsert: true, new: true }
+      );
 
-    invalidateUserCache(req.user._id);
+      invalidateUserCache(req.user._id);
+    }
 
     return res.status(201).json({
       success: true,
@@ -119,6 +161,13 @@ const createBranch = async (req, res, next) => {
       }
     });
   } catch (error) {
+    if (error.code === 11000 || (error.name === 'MongoServerError' && error.code === 11000)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Branch with this code already exists',
+        errorCode: 'DUPLICATE_BRANCH_CODE'
+      });
+    }
     next(error);
   }
 };
@@ -136,15 +185,73 @@ const listBranches = async (req, res, next) => {
       if (activeAccess) companyId = activeAccess.companyId;
     }
 
-    if (!companyId && req.user) {
+    if (!companyId && req.user?._id) {
       const createdCompany = await Company.findOne({ createdBy: req.user._id });
       if (createdCompany) companyId = createdCompany._id;
     }
 
-    const branches = await Branch.find({ companyId });
+    if (!companyId) {
+      const defaultCompany = await Company.findOne();
+      if (defaultCompany) companyId = defaultCompany._id;
+    }
+
+    const baseFilter = {};
+    if (req.query.status) {
+      baseFilter.status = req.query.status;
+    }
+    if (req.query.search) {
+      const searchRegex = new RegExp(req.query.search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+      baseFilter.$or = [
+        { branchName: searchRegex },
+        { branchCode: searchRegex },
+        { city: searchRegex }
+      ];
+    }
+
+    let branches = [];
+
+    if (req.query.companyId) {
+      // Caller explicitly requested a specific company's branches
+      const filter = { ...baseFilter, companyId: req.query.companyId };
+      branches = await Branch.find(filter).sort({ isHeadOffice: -1, createdAt: 1 });
+    } else if (companyId) {
+      // Match resolved companyId OR unassigned company branches (legacy / initial branches)
+      const companyScope = [
+        { companyId: companyId },
+        { companyId: null },
+        { companyId: { $exists: false } }
+      ];
+
+      let query = {};
+      if (baseFilter.$or) {
+        query = {
+          $and: [
+            { $or: companyScope },
+            { $or: baseFilter.$or }
+          ]
+        };
+        if (baseFilter.status) query.status = baseFilter.status;
+      } else {
+        query = {
+          ...baseFilter,
+          $or: companyScope
+        };
+      }
+
+      branches = await Branch.find(query).sort({ isHeadOffice: -1, createdAt: 1 });
+
+      // Fallback: If no branches match this company filter, but branches exist in database, return all branches
+      if (branches.length === 0) {
+        branches = await Branch.find(baseFilter).sort({ isHeadOffice: -1, createdAt: 1 });
+      }
+    } else {
+      // No companyId could be resolved; return all available branches matching filters
+      branches = await Branch.find(baseFilter).sort({ isHeadOffice: -1, createdAt: 1 });
+    }
 
     return res.status(200).json({
       success: true,
+      count: branches.length,
       data: branches
     });
   } catch (error) {
@@ -160,6 +267,33 @@ const updateBranch = async (req, res, next) => {
   try {
     const updates = req.body;
     const branch = req.branch; // loaded by checkCompanyAccess middleware
+
+    // Duplicate Branch Code Validation (Case-insensitive)
+    if (updates.branchCode !== undefined) {
+      const cleanBranchCode = typeof updates.branchCode === 'string' ? updates.branchCode.trim() : '';
+      if (cleanBranchCode) {
+        const codeRegex = new RegExp(`^${cleanBranchCode.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
+        const duplicateQuery = {
+          _id: { $ne: branch._id },
+          branchCode: codeRegex
+        };
+        if (branch.companyId) {
+          duplicateQuery.$or = [
+            { companyId: branch.companyId },
+            { companyId: null },
+            { companyId: { $exists: false } }
+          ];
+        }
+        const existingBranch = await Branch.findOne(duplicateQuery);
+        if (existingBranch) {
+          return res.status(400).json({
+            success: false,
+            message: `Branch with code "${cleanBranchCode}" already exists`,
+            errorCode: 'DUPLICATE_BRANCH_CODE'
+          });
+        }
+      }
+    }
 
     // Business Rule Check: Cannot manually unset Head Office directly
     if (updates.isHeadOffice === false && branch.isHeadOffice) {
@@ -185,7 +319,11 @@ const updateBranch = async (req, res, next) => {
     const allowedFields = ['branchName', 'branchCode', 'address', 'city', 'state', 'pincode', 'country', 'phone', 'email', 'manager', 'isHeadOffice', 'status'];
     allowedFields.forEach((field) => {
       if (updates[field] !== undefined) {
-        branch[field] = updates[field];
+        if (field === 'branchCode') {
+          branch[field] = typeof updates[field] === 'string' ? updates[field].trim() : updates[field];
+        } else {
+          branch[field] = updates[field];
+        }
       }
     });
 
@@ -196,6 +334,13 @@ const updateBranch = async (req, res, next) => {
       data: branch
     });
   } catch (error) {
+    if (error.code === 11000 || (error.name === 'MongoServerError' && error.code === 11000)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Branch with this code already exists',
+        errorCode: 'DUPLICATE_BRANCH_CODE'
+      });
+    }
     next(error);
   }
 };
