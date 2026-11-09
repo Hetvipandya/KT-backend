@@ -177,13 +177,36 @@ const enrichLeavesWithEmployeeDetails = async (leaves) => {
 };
 
 const normalizeRoleString = (r) => {
-  const compact = String(r || "")
+  const compact = String(r?.roleName || r?.name || r?.slug || r || "")
     .trim()
     .toLowerCase()
     .replace(/[_s-]+/g, "");
   if (compact === "teamlead" || compact === "teamleader" || compact === "tl") return "teamlead";
-  if (compact === "superadmin") return "admin";
+  if (compact === "superadmin" || compact === "administrator" || compact.includes("admin")) return "admin";
+  if (compact === "hr" || compact === "hrmanager" || compact === "hradmin" || compact.startsWith("hr")) return "hr";
   return compact;
+};
+
+const isUserAdminOrHr = (user) => {
+  if (!user) return false;
+  const rolesToCheck = [];
+  if (user.role) rolesToCheck.push(user.role);
+  if (user.userRole) rolesToCheck.push(user.userRole);
+  if (user.roleName) rolesToCheck.push(user.roleName);
+  if (user.designation) rolesToCheck.push(user.designation);
+  if (Array.isArray(user.roles)) {
+    user.roles.forEach((r) => rolesToCheck.push(r));
+  }
+  if (Array.isArray(user.companyAccess)) {
+    user.companyAccess.forEach((a) => {
+      if (a && a.isActive !== false && a.role) rolesToCheck.push(a.role);
+    });
+  }
+
+  return rolesToCheck.some((r) => {
+    const roleNorm = normalizeRoleString(r);
+    return roleNorm === "admin" || roleNorm === "hr";
+  });
 };
 
 const isUserTeamLead = async (user, userId) => {
@@ -576,7 +599,24 @@ exports.applyLeave = async (req, res) => {
     } = req.body;
 
     const authenticatedUserId = req.user?._id || req.user?.id;
-    const suppliedIdentity = bodyUserId || employeeId || req.body.userID || null;
+    const suppliedIdentity =
+      bodyUserId ||
+      employeeId ||
+      req.body.userID ||
+      req.body.employeeID ||
+      req.body.empId ||
+      req.body.empID ||
+      req.body.user_id ||
+      req.body.employee_id ||
+      req.body.targetUserId ||
+      req.body.targetEmployeeId ||
+      req.body.selectedEmployee ||
+      req.body.selectedEmployeeId ||
+      (typeof req.body.employee === "object" ? (req.body.employee?._id || req.body.employee?.id || req.body.employee?.employeeID) : req.body.employee) ||
+      (typeof req.body.user === "object" ? (req.body.user?._id || req.body.user?.id) : req.body.user) ||
+      req.query?.userId ||
+      req.query?.employeeId ||
+      null;
 
     if (!authenticatedUserId) {
       return res.status(401).json({
@@ -585,78 +625,169 @@ exports.applyLeave = async (req, res) => {
       });
     }
 
-    const targetUserId = authenticatedUserId;
+    let isAdminOrHr = isUserAdminOrHr(req.user);
 
-    if (!targetUserId) {
-      return res.status(400).json({
-        success: false,
-        message: "userId is required",
-      });
+    // Database lookup fallback if req.user role was not loaded as Admin or HR
+    if (!isAdminOrHr && authenticatedUserId) {
+      try {
+        const userDoc = await User.findById(authenticatedUserId).select("role designation roles").lean();
+        if (userDoc && isUserAdminOrHr(userDoc)) {
+          isAdminOrHr = true;
+          if (userDoc.role && req.user) req.user.role = userDoc.role;
+        }
+        if (!isAdminOrHr) {
+          const FinanceUser = require("../models/FinanceUser");
+          const finUser = await FinanceUser.findOne({ userId: authenticatedUserId }).lean();
+          if (finUser && isUserAdminOrHr(finUser)) {
+            isAdminOrHr = true;
+          }
+        }
+      } catch (_) {}
     }
 
-    let user = await User.findById(targetUserId);
+    const cleanApplier = normalizeRoleString(req.user?.role);
+    const applierRole = isAdminOrHr
+      ? (cleanApplier === "hr" ? "hr" : "admin")
+      : cleanApplier;
 
-    if (!user) {
-      const Employee = require("../models/Employee");
-      const emp = await Employee.findOne({
-        $or: [
-          { _id: targetUserId },
-          { userID: targetUserId },
-          { userId: targetUserId },
-        ],
-      });
+    let targetUserId = authenticatedUserId;
+    let user = null;
 
-      if (emp) {
-        const actualUserId = emp.userID || emp.userId || emp._id;
-        user = await User.findById(actualUserId);
+    if (isAdminOrHr && suppliedIdentity && String(suppliedIdentity) !== String(authenticatedUserId)) {
+      // Admin or HR is creating leave on behalf of an employee
+      const cleanIdentity = String(suppliedIdentity).trim();
+
+      if (mongoose.Types.ObjectId.isValid(cleanIdentity)) {
+        user = await User.findById(cleanIdentity);
         if (!user) {
-          user = {
-            _id: emp._id,
-            role: (emp.role || emp.designation || "employee").toLowerCase(),
-            name: [emp.firstName, emp.middleName, emp.lastName].filter(Boolean).join(" ") || "Employee"
-          };
+          const emp = await Employee.findOne({
+            $or: [
+              { _id: cleanIdentity },
+              { userID: cleanIdentity },
+              { userId: cleanIdentity },
+            ],
+          });
+          if (emp) {
+            const actualUserId = emp.userID || emp.userId || emp._id;
+            user = await User.findById(actualUserId);
+            if (!user) {
+              user = {
+                _id: emp.userID || emp.userId || emp._id,
+                role: (emp.role || emp.designation || "employee").toLowerCase(),
+                name: [emp.firstName, emp.middleName, emp.lastName].filter(Boolean).join(" ") || "Employee",
+                email: emp.email,
+                isApproved: true,
+                isActive: true,
+                companyId: emp.companyId || req.user?.companyId,
+                branchId: emp.branchId || req.user?.branchId,
+              };
+            }
+          }
         }
       }
-    }
 
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: "User not found",
-      });
-    }
+      if (!user) {
+        const emp = await Employee.findOne({
+          $or: [
+            { employeeID: cleanIdentity },
+            { employeeCode: cleanIdentity },
+            { email: cleanIdentity.toLowerCase() },
+          ],
+        });
+        if (emp) {
+          const actualUserId = emp.userID || emp.userId || emp._id;
+          user = await User.findById(actualUserId);
+          if (!user) {
+            user = {
+              _id: emp.userID || emp.userId || emp._id,
+              role: (emp.role || emp.designation || "employee").toLowerCase(),
+              name: [emp.firstName, emp.middleName, emp.lastName].filter(Boolean).join(" ") || "Employee",
+              email: emp.email,
+              isApproved: true,
+              isActive: true,
+              companyId: emp.companyId || req.user?.companyId,
+              branchId: emp.branchId || req.user?.branchId,
+            };
+          }
+        } else {
+          user = await User.findOne({
+            $or: [
+              { uniqueID: cleanIdentity },
+              { email: cleanIdentity.toLowerCase() },
+            ],
+          });
+        }
+      }
 
-    if (user.isApproved === false || user.isActive === false) {
-      return res.status(403).json({
-        success: false,
-        message: "Approved active account required to apply for leave",
-      });
-    }
+      if (!user) {
+        return res.status(404).json({
+          success: false,
+          message: "Selected employee not found",
+        });
+      }
 
-    if (suppliedIdentity) {
-      const validObjectId = mongoose.Types.ObjectId.isValid(String(suppliedIdentity));
-      const employee = await Employee.findOne({
-        $or: [
-          ...(validObjectId ? [{ _id: suppliedIdentity }] : []),
-          { userID: authenticatedUserId },
-          { userId: authenticatedUserId },
-          { employeeID: suppliedIdentity },
-          { employeeCode: suppliedIdentity },
-        ],
-      });
-      const suppliedMatchesUser =
-        String(suppliedIdentity) === String(authenticatedUserId) ||
-        Boolean(employee && (
-          String(employee.userID || employee.userId || "") === String(authenticatedUserId) ||
-          String(employee._id) === String(suppliedIdentity) ||
-          String(employee.employeeID || "") === String(suppliedIdentity) ||
-          String(employee.employeeCode || "") === String(suppliedIdentity)
-        ));
-      if (!suppliedMatchesUser) {
+      targetUserId = user._id;
+    } else {
+      user = await User.findById(targetUserId);
+
+      if (!user) {
+        const emp = await Employee.findOne({
+          $or: [
+            { _id: targetUserId },
+            { userID: targetUserId },
+            { userId: targetUserId },
+          ],
+        });
+
+        if (emp) {
+          const actualUserId = emp.userID || emp.userId || emp._id;
+          user = await User.findById(actualUserId);
+          if (!user) {
+            user = {
+              _id: emp._id,
+              role: (emp.role || emp.designation || "employee").toLowerCase(),
+              name: [emp.firstName, emp.middleName, emp.lastName].filter(Boolean).join(" ") || "Employee",
+            };
+          }
+        }
+      }
+
+      if (!user) {
+        return res.status(404).json({
+          success: false,
+          message: "User not found",
+        });
+      }
+
+      if (user.isApproved === false || user.isActive === false) {
         return res.status(403).json({
           success: false,
-          message: "You cannot apply for leave for another employee",
+          message: "Approved active account required to apply for leave",
         });
+      }
+
+      if (suppliedIdentity && !isAdminOrHr) {
+        const cleanIdentity = String(suppliedIdentity).trim();
+        const validObjectId = mongoose.Types.ObjectId.isValid(cleanIdentity);
+        const targetEmployee = await Employee.findOne({
+          $or: [
+            ...(validObjectId ? [{ _id: cleanIdentity }, { userID: cleanIdentity }, { userId: cleanIdentity }] : []),
+            { employeeID: cleanIdentity },
+            { employeeCode: cleanIdentity },
+          ],
+        });
+        const isSelf =
+          cleanIdentity === String(authenticatedUserId) ||
+          Boolean(
+            targetEmployee &&
+            String(targetEmployee.userID || targetEmployee.userId || "") === String(authenticatedUserId)
+          );
+        if (!isSelf) {
+          return res.status(403).json({
+            success: false,
+            message: "You cannot apply for leave for another employee",
+          });
+        }
       }
     }
 
@@ -669,7 +800,8 @@ exports.applyLeave = async (req, res) => {
     const todayStr = toDateString(new Date());
     const startStr = toDateString(actualStartDate);
 
-    if (startStr && startStr < todayStr) {
+    // Regular employees cannot apply for past dates
+    if (!isAdminOrHr && startStr && startStr < todayStr) {
       return res.status(400).json({
         success: false,
         message: "Cannot apply for leave on past dates. Leave start date must be today or a future date.",
@@ -701,10 +833,14 @@ exports.applyLeave = async (req, res) => {
       Boolean(req.body.halfDayType);
 
     let normalizedLeaveType = leaveType;
-    if (!normalizedLeaveType || normalizedLeaveType === "half_day") {
-      normalizedLeaveType = "casual";
+    if (!normalizedLeaveType || normalizedLeaveType === "half_day" || normalizedLeaveType === "casual") {
+      normalizedLeaveType = "full_day";
     } else {
       normalizedLeaveType = String(normalizedLeaveType).toLowerCase().trim();
+      const validTypes = ["full_day", "half_day_1", "half_day_2", "sick", "paid", "unpaid"];
+      if (!validTypes.includes(normalizedLeaveType)) {
+        normalizedLeaveType = "full_day";
+      }
     }
 
     let normalizedHalfDayType = null;
@@ -740,14 +876,13 @@ exports.applyLeave = async (req, res) => {
 
     // Check if leave balance is sufficient (only when totalDays > 0)
     const balance = await LeaveBalance.findOne({ employeeId: userId });
-    if (balance && totalDays > 0 && balance.remainingLeaves < totalDays) {
+    if (!isAdminOrHr && balance && totalDays > 0 && balance.remainingLeaves < totalDays) {
       return res.status(400).json({
         success: false,
         message: `Insufficient leave balance. Requested: ${totalDays} working days, Remaining: ${balance.remainingLeaves}`,
       });
     }
 
-    const applierRole = (req.user && req.user.role) ? req.user.role : user.role;
     const normalizedRole = String(user.role || applierRole || "")
       .trim()
       .toLowerCase()
@@ -756,35 +891,69 @@ exports.applyLeave = async (req, res) => {
     const hasAssignedTeamLead =
       !isEmployeeOrIntern || Boolean(await getTeamLeadForUser(userId));
 
-    const leaveStatus =
-      user.role === "team lead" || applierRole === "team lead"
-        ? "pending_hr"
-        : isEmployeeOrIntern && !hasAssignedTeamLead
+    const isDirectApproved = isAdminOrHr && (
+      req.body.status === "approved" ||
+      req.body.autoApprove === true ||
+      req.body.directApprove === true ||
+      req.body.approvalStatus === "approved" ||
+      (applierRole === "admin" && req.body.status !== "pending") ||
+      (applierRole === "hr" && req.body.status !== "pending" && req.body.status !== "pending_admin")
+    );
+
+    let leaveStatus;
+    let teamLeadStatus;
+    let hrStatus;
+
+    if (isDirectApproved) {
+      leaveStatus = "approved";
+      teamLeadStatus = "approved";
+      hrStatus = "approved";
+    } else {
+      leaveStatus =
+        user.role === "team lead" || applierRole === "team lead"
           ? "pending_hr"
-          : user.role === "hr" || applierRole === "hr"
-            ? "pending_admin"
-            : "pending";
+          : isEmployeeOrIntern && !hasAssignedTeamLead
+            ? "pending_hr"
+            : user.role === "hr" || applierRole === "hr"
+              ? "pending_admin"
+              : "pending";
+      teamLeadStatus =
+        isAdminOrHr ||
+        user.role === "team lead" ||
+        applierRole === "team lead" ||
+        user.role === "hr" ||
+        (isEmployeeOrIntern && !hasAssignedTeamLead)
+          ? "skipped"
+          : "pending";
+      hrStatus = applierRole === "hr" ? "approved" : "pending";
+    }
+
+    const applicantRole = ["employee", "intern", "team lead", "hr", "admin"].includes(String(user.role).toLowerCase())
+      ? String(user.role).toLowerCase()
+      : "employee";
 
     const leave = await Leave.create({
       employeeId: userId,
-      applicantRole: user.role,
+      applicantRole,
       leaveType: normalizedLeaveType,
       startDate: actualStartDate,
       endDate: actualEndDate,
       totalDays,
       isHalfDay: isHalfDayBool,
       halfDayType: normalizedHalfDayType,
-      reason: reason || req.body.remark || "",
-      // Team Lead leave goes directly to HR and HR leave goes directly to Admin
+      reason: reason || req.body.remark || (isAdminOrHr ? `Leave granted by ${applierRole.toUpperCase()}` : ""),
       status: leaveStatus,
-      teamLeadStatus:
-        user.role === "team lead" ||
-        applierRole === "team lead" ||
-        user.role === "hr" ||
-        (isEmployeeOrIntern && !hasAssignedTeamLead)
-          ? "skipped"
-          : "pending",
-      hrStatus: "pending",
+      teamLeadStatus,
+      hrStatus,
+      attachment: req.body.attachment || "",
+      ...(isDirectApproved ? {
+        adminApprovedBy: req.user._id,
+        adminApprovedAt: new Date(),
+        hrApprovedBy: req.user._id,
+        hrApprovedAt: new Date(),
+        remark: req.body.remark || `Approved directly upon creation by ${applierRole.toUpperCase()}`,
+        description: req.body.description || req.body.remark || `Approved directly upon creation by ${applierRole.toUpperCase()}`,
+      } : {})
     });
 
     // Auto create leave balance if not exists
@@ -799,23 +968,50 @@ exports.applyLeave = async (req, res) => {
       });
     }
 
+    if (isDirectApproved) {
+      await updateLeaveBalance(leave);
+    }
+
     const enrichedLeave = await enrichLeavesWithEmployeeDetails(leave);
 
     await recordAuditEvent({
       req,
       module: "LEAVE",
       action: "CREATE",
-      actionType: "LEAVE_APPLIED",
+      actionType: isDirectApproved ? "LEAVE_CREATED_APPROVED" : "LEAVE_APPLIED",
       entityType: "Leave",
       entityId: leave._id,
-      description: `Leave applied by ${user.name || 'User'} (${leaveType}: ${startDate} to ${endDate})`,
+      description: isAdminOrHr && String(userId) !== String(authenticatedUserId)
+        ? `Leave created by ${applierRole.toUpperCase()} for ${user.name || 'Employee'} (${normalizedLeaveType}: ${actualStartDate} to ${actualEndDate})`
+        : `Leave applied by ${user.name || 'User'} (${normalizedLeaveType}: ${actualStartDate} to ${actualEndDate})`,
       newValues: leave,
       companyId: user?.companyId || req.user?.companyId,
     });
 
+    if (isDirectApproved && String(userId) !== String(authenticatedUserId)) {
+      try {
+        await notify({
+          userId,
+          type: "LEAVE_ADMIN_APPROVED",
+          title: "Leave Granted by Admin/HR",
+          message: `Leave has been granted for you by ${applierRole.toUpperCase()} from ${actualStartDate} to ${actualEndDate}.`,
+          meta: {
+            leaveId: leave._id.toString(),
+            status: "approved",
+            stage: applierRole.toLowerCase(),
+            reason: leave.reason,
+          },
+        });
+      } catch (_) {}
+    }
+
     res.status(201).json({
       success: true,
-      message: "Leave request sent successfully",
+      message: isDirectApproved
+        ? "Leave request created and approved successfully"
+        : (isAdminOrHr && String(userId) !== String(authenticatedUserId))
+          ? "Leave request created successfully for employee"
+          : "Leave request sent successfully",
       data: enrichedLeave,
       calculation: {
         workingDays,

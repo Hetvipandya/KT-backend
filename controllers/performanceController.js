@@ -64,6 +64,216 @@ const inferLegacyPerformancePeriods = (performances) => {
 };
 
 // =============================
+// Helper to safely execute model queries whether in real DB connection or mocked in tests
+// =============================
+const safeFindOne = async (model, condition, selectFields) => {
+  if (!model) return null;
+  const isMocked = Boolean(
+    model.findOne && (
+      model.findOne._isMockFunction ||
+      typeof model.findOne.mockReturnValue === "function" ||
+      typeof model.findOne.mockResolvedValue === "function"
+    )
+  );
+  const isConnected = Boolean(mongoose.connection && mongoose.connection.readyState === 1);
+
+  if (!isMocked && !isConnected) {
+    return null;
+  }
+
+  try {
+    const q = model.findOne(condition);
+    if (!q) return null;
+    if (typeof q.select === "function" && selectFields) {
+      return await q.select(selectFields);
+    }
+    return await q;
+  } catch (err) {
+    return null;
+  }
+};
+
+const safeFind = async (model, condition = {}, selectFields = null) => {
+  if (!model) return [];
+  const isMocked = Boolean(
+    model.find && (
+      model.find._isMockFunction ||
+      typeof model.find.mockReturnValue === "function" ||
+      typeof model.find.mockResolvedValue === "function"
+    )
+  );
+  const isConnected = Boolean(mongoose.connection && mongoose.connection.readyState === 1);
+
+  if (!isMocked && !isConnected) {
+    return [];
+  }
+
+  try {
+    let q = model.find(condition);
+    if (!q) return [];
+    if (typeof q.select === "function" && selectFields) {
+      q = q.select(selectFields);
+    }
+    if (typeof q.lean === "function") {
+      return await q.lean();
+    }
+    return await q;
+  } catch (err) {
+    return [];
+  }
+};
+
+const normalizeRole = (role) => {
+  return String(role || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[_\s-]+/g, "");
+};
+
+const isTeamLeadUser = async (user) => {
+  if (!user) return false;
+  const role = normalizeRole(user.role);
+  if (["admin", "hr", "superadmin"].includes(role)) {
+    return false;
+  }
+  if (role === "teamlead" || role === "teamleader" || role === "tl") {
+    return true;
+  }
+  if (Array.isArray(user.roles)) {
+    const hasAdminOrHr = user.roles.some((r) => {
+      const nr = normalizeRole(r);
+      return ["admin", "hr", "superadmin"].includes(nr);
+    });
+    if (hasAdminOrHr) return false;
+
+    const hasTlRole = user.roles.some((r) => {
+      const nr = normalizeRole(r);
+      return nr === "teamlead" || nr === "teamleader" || nr === "tl";
+    });
+    if (hasTlRole) return true;
+  }
+  if (user.isTeamLead === true) {
+    return true;
+  }
+  if (Array.isArray(user.companyAccess)) {
+    const hasAdminOrHr = user.companyAccess.some((a) => {
+      if (a && a.isActive !== false) {
+        const nr = normalizeRole(a.role);
+        return ["admin", "hr", "superadmin"].includes(nr);
+      }
+      return false;
+    });
+    if (hasAdminOrHr) return false;
+
+    const hasAccessRole = user.companyAccess.some((a) => {
+      if (a && a.isActive !== false) {
+        const nr = normalizeRole(a.role);
+        return nr === "teamlead" || nr === "teamleader" || nr === "tl";
+      }
+      return false;
+    });
+    if (hasAccessRole) return true;
+  }
+
+  const userId = user._id || user.id || user.userId;
+  if (userId) {
+    const rawId = String(userId).trim();
+    const emp = await safeFindOne(
+      Employee,
+      {
+        $or: [
+          ...(mongoose.Types.ObjectId.isValid(rawId) ? [{ _id: rawId }] : []),
+          { userID: rawId },
+          { userId: rawId },
+          ...(user.email ? [{ email: user.email.toLowerCase().trim() }] : []),
+        ],
+        isTeamLead: true,
+      },
+      "_id"
+    );
+    if (emp) return true;
+
+    if (mongoose.Types.ObjectId.isValid(rawId)) {
+      const isLead = await safeFindOne(
+        TeamLead,
+        {
+          $or: [{ teamLead: rawId }, { user: rawId }],
+        },
+        "_id"
+      );
+      if (isLead) return true;
+    }
+  }
+
+  return false;
+};
+
+const getTeamLeadOwnIdentifiers = async (user) => {
+  const ids = new Set();
+  const emails = new Set();
+
+  if (!user) return { ids, emails };
+
+  [
+    user._id,
+    user.id,
+    user.userId,
+    user.userID,
+    user.uniqueID,
+    user.employeeID,
+    user.employeeId,
+  ]
+    .filter(Boolean)
+    .forEach((id) => ids.add(String(id).trim().toLowerCase()));
+
+  if (user.email) {
+    emails.add(String(user.email).trim().toLowerCase());
+  }
+
+  const employeeLookup = [];
+  const uid = user._id || user.id || user.userId || user.userID;
+  if (uid) {
+    employeeLookup.push({ userId: uid }, { userID: uid });
+    if (mongoose.Types.ObjectId.isValid(uid)) {
+      employeeLookup.push({ _id: uid });
+    }
+  }
+  if (user.email) {
+    employeeLookup.push({ email: String(user.email).trim().toLowerCase() });
+  }
+  const empCode = user.uniqueID || user.employeeID || user.employeeId;
+  if (empCode) {
+    employeeLookup.push({ employeeID: empCode }, { employeeCode: empCode });
+  }
+
+  if (employeeLookup.length > 0) {
+    const linkedEmployee = await safeFindOne(
+      Employee,
+      { $or: employeeLookup },
+      "_id employeeID employeeCode userId userID email"
+    );
+
+    if (linkedEmployee) {
+      [
+        linkedEmployee._id,
+        linkedEmployee.employeeID,
+        linkedEmployee.employeeCode,
+        linkedEmployee.userId,
+        linkedEmployee.userID,
+      ]
+        .filter(Boolean)
+        .forEach((id) => ids.add(String(id).trim().toLowerCase()));
+
+      if (linkedEmployee.email) {
+        emails.add(String(linkedEmployee.email).trim().toLowerCase());
+      }
+    }
+  }
+
+  return { ids, emails };
+};
+
+// =============================
 // Create Performance / Team Lead Feedback
 // =============================
 exports.createPerformance = async (req, res) => {
@@ -111,6 +321,18 @@ exports.createPerformance = async (req, res) => {
         success: false,
         message: "Employee ID is required",
       });
+    }
+
+    const isTL = await isTeamLeadUser(req.user);
+    const rawEmployeeIdStr = String(rawEmployeeID).trim().toLowerCase();
+    if (isTL) {
+      const { ids: ownIds, emails: ownEmails } = await getTeamLeadOwnIdentifiers(req.user);
+      if (ownIds.has(rawEmployeeIdStr) || ownEmails.has(rawEmployeeIdStr)) {
+        return res.status(403).json({
+          success: false,
+          message: "Team Leads cannot create their own performance.",
+        });
+      }
     }
 
     // ============================================================
@@ -254,6 +476,51 @@ exports.createPerformance = async (req, res) => {
         message:
           "Employee not found in any category (employee, intern, or teamlead)",
       });
+    }
+
+    // ============================================================
+    // 3.4 Prevent Team Leads from Creating/Editing Their Own Performance
+    // ============================================================
+    if (isTL) {
+      const { ids: ownIds, emails: ownEmails } = await getTeamLeadOwnIdentifiers(req.user);
+
+      const candidateIds = [
+        rawEmployeeID,
+        realEmployeeID,
+        empData?._id,
+        empData?.userId,
+        empData?.userID,
+        empData?.employeeID,
+        empData?.employeeCode,
+        userData?._id,
+        userData?.uniqueID,
+        teamLeadData?._id,
+        teamLeadData?.teamLead?._id || teamLeadData?.teamLead,
+        teamLeadData?.user?._id || teamLeadData?.user,
+      ]
+        .filter(Boolean)
+        .map((id) => String(id).trim().toLowerCase());
+
+      const candidateEmails = [
+        employeeEmail,
+        empData?.email,
+        userData?.email,
+        teamLeadData?.teamLead?.email,
+        teamLeadData?.user?.email,
+      ]
+        .filter(Boolean)
+        .map((email) => String(email).trim().toLowerCase());
+
+      const isSelf =
+        candidateIds.some((id) => ownIds.has(id)) ||
+        candidateEmails.some((email) => ownEmails.has(email));
+
+      if (isSelf) {
+        return res.status(403).json({
+          success: false,
+          message: "Team Leads cannot create their own performance.",
+        });
+      }
     }
 
     // ============================================================
@@ -434,35 +701,7 @@ exports.getAllPerformance = async (req, res) => {
   }
 };
 
-// =============================
-// Helper to safely execute model queries whether in real DB connection or mocked in tests
-// =============================
-const safeFindOne = async (model, condition, selectFields) => {
-  if (!model) return null;
-  const isMocked = Boolean(
-    model.findOne && (
-      model.findOne._isMockFunction ||
-      typeof model.findOne.mockReturnValue === "function" ||
-      typeof model.findOne.mockResolvedValue === "function"
-    )
-  );
-  const isConnected = Boolean(mongoose.connection && mongoose.connection.readyState === 1);
 
-  if (!isMocked && !isConnected) {
-    return null;
-  }
-
-  try {
-    const q = model.findOne(condition);
-    if (!q) return null;
-    if (typeof q.select === "function" && selectFields) {
-      return await q.select(selectFields);
-    }
-    return await q;
-  } catch (err) {
-    return null;
-  }
-};
 
 // =============================
 // Get Performance by Employee ID (HR, ADMIN & TEAM LEAD)
@@ -866,56 +1105,43 @@ exports.updatePerformance = async (req, res) => {
       });
     }
 
-    const userRole = (req.user?.role || "").toLowerCase().replace(/[_\s]+/g, "");
-    if (userRole === "teamlead" || userRole === "teamleader") {
-      const user = req.user;
-      const ownIdentifiers = [
-        user?._id,
-        user?.id,
-        user?.employeeID,
-        user?.employeeId,
-        user?.uniqueID,
-      ]
-        .filter(Boolean)
-        .map((identifier) => identifier.toString().toLowerCase());
-      const ownEmails = user?.email ? [user.email.toLowerCase()] : [];
-      const employeeLookup = [];
-
-      if (user?._id) {
-        employeeLookup.push({ userId: user._id }, { userID: user._id });
-      }
-      if (user?.email) employeeLookup.push({ email: user.email.toLowerCase() });
-      if (user?.uniqueID) {
-        employeeLookup.push(
-          { employeeID: user.uniqueID },
-          { employeeCode: user.uniqueID },
-        );
-      }
+    const isTL = await isTeamLeadUser(req.user);
+    if (isTL) {
+      const { ids: ownIds, emails: ownEmails } = await getTeamLeadOwnIdentifiers(req.user);
 
       const performanceEmployeeId = existingPerformance.employeeID?._id ||
         existingPerformance.employeeID;
       const performanceEmployeeIdValue = performanceEmployeeId
-        ? performanceEmployeeId.toString().toLowerCase()
+        ? String(performanceEmployeeId).trim().toLowerCase()
         : null;
-      let isOwnPerformance = ownIdentifiers.includes(performanceEmployeeIdValue) ||
-        ownEmails.includes((existingPerformance.employeeEmail || "").toLowerCase());
+      const performanceEmail = existingPerformance.employeeEmail
+        ? String(existingPerformance.employeeEmail).trim().toLowerCase()
+        : null;
 
-      if (!isOwnPerformance && employeeLookup.length > 0) {
-        const linkedEmployee = await Employee.findOne({
-          $or: employeeLookup,
-        }).select("_id employeeID employeeCode userId userID email");
+      let isOwnPerformance =
+        (performanceEmployeeIdValue && ownIds.has(performanceEmployeeIdValue)) ||
+        (performanceEmail && ownEmails.has(performanceEmail));
 
-        if (linkedEmployee) {
-          const linkedIdentifiers = [
-            linkedEmployee._id,
-            linkedEmployee.employeeID,
-            linkedEmployee.employeeCode,
-            linkedEmployee.userId,
-            linkedEmployee.userID,
-          ]
-            .filter(Boolean)
-            .map((identifier) => identifier.toString().toLowerCase());
-          isOwnPerformance = linkedIdentifiers.includes(performanceEmployeeIdValue);
+      const populatedUserId = existingPerformance.employeeID?.userId ||
+        existingPerformance.employeeID?.userID;
+      if (populatedUserId && ownIds.has(String(populatedUserId).trim().toLowerCase())) {
+        isOwnPerformance = true;
+      }
+
+      if (!isOwnPerformance && performanceEmployeeIdValue && mongoose.Types.ObjectId.isValid(performanceEmployeeIdValue)) {
+        const perfEmp = await safeFindOne(
+          Employee,
+          { _id: performanceEmployeeIdValue },
+          "userId userID email"
+        );
+        if (perfEmp) {
+          const perfEmpUserId = perfEmp.userId || perfEmp.userID;
+          if (perfEmpUserId && ownIds.has(String(perfEmpUserId).trim().toLowerCase())) {
+            isOwnPerformance = true;
+          }
+          if (perfEmp.email && ownEmails.has(String(perfEmp.email).trim().toLowerCase())) {
+            isOwnPerformance = true;
+          }
         }
       }
 
@@ -1074,7 +1300,7 @@ exports.getPerformanceDropdown = async (req, res) => {
     // ==========================================
     // Combine All Employees
     // ==========================================
-    const allEmployees = [
+    let allEmployees = [
       ...employees.map((emp) => ({
         _id: emp._id,
         name:
@@ -1101,11 +1327,24 @@ exports.getPerformanceDropdown = async (req, res) => {
       })),
     ];
 
+    // If caller is a Team Lead, exclude their own entries so they cannot evaluate themselves
+    const isTL = await isTeamLeadUser(req.user);
+    if (isTL) {
+      const { ids: ownIds, emails: ownEmails } = await getTeamLeadOwnIdentifiers(req.user);
+      allEmployees = allEmployees.filter((emp) => {
+        const empIdStr = emp._id ? String(emp._id).trim().toLowerCase() : "";
+        const empEmailStr = emp.email ? String(emp.email).trim().toLowerCase() : "";
+        if (empIdStr && ownIds.has(empIdStr)) return false;
+        if (empEmailStr && ownEmails.has(empEmailStr)) return false;
+        return true;
+      });
+    }
+
     // ==========================================
     // Sort by Name
     // ==========================================
     allEmployees.sort((a, b) =>
-      a.name.localeCompare(b.name)
+      (a.name || "").localeCompare(b.name || "")
     );
 
     res.json({

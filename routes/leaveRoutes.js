@@ -36,7 +36,7 @@ router.post(
   calculateLeaveDays
 );
 
-// ================= APPLY LEAVE =================
+// ================= APPLY / CREATE LEAVE =================
 router.post(
   "/apply",
   protect,
@@ -47,6 +47,47 @@ router.post(
     "admin",
     "team lead"
   ),
+  applyLeave
+);
+
+router.post(
+  "/create",
+  protect,
+  authorizeRoles(
+    "intern",
+    "employee",
+    "hr",
+    "admin",
+    "team lead"
+  ),
+  applyLeave
+);
+
+router.post(
+  "/admin/apply",
+  protect,
+  authorizeRoles("admin", "hr"),
+  applyLeave
+);
+
+router.post(
+  "/admin/create",
+  protect,
+  authorizeRoles("admin", "hr"),
+  applyLeave
+);
+
+router.post(
+  "/hr/apply",
+  protect,
+  authorizeRoles("hr", "admin"),
+  applyLeave
+);
+
+router.post(
+  "/hr/create",
+  protect,
+  authorizeRoles("hr", "admin"),
   applyLeave
 );
 

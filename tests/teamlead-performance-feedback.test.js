@@ -409,4 +409,305 @@ describe('Team Lead Employee Feedback & Restricted Performance Access', () => {
     expect(res.body.success).toBe(false);
     expect(res.body.message).toContain('not authorized');
   });
+
+  it('prevents Team Leads from creating their own performance feedback (HTTP 403)', async () => {
+    const createSpy = jest.spyOn(EmployeePerformance, 'create');
+
+    app = express();
+    app.use(express.json());
+    app.use((req, res, next) => {
+      req.user = teamLeadUser;
+      next();
+    });
+    app.use('/api/performance', performanceRoutes);
+
+    const res = await request(app)
+      .post('/api/performance/feedback')
+      .send({
+        employeeID: teamLeadUser._id.toString(),
+        month: 4,
+        year: 2026,
+        performancePercentage: 95,
+        rating: 10,
+        feedback: 'Self feedback attempt',
+      });
+
+    expect(res.status).toBe(403);
+    expect(res.body.success).toBe(false);
+    expect(res.body.message).toBe('Team Leads cannot create their own performance.');
+    expect(createSpy).not.toHaveBeenCalled();
+  });
+
+  it('prevents Team Leads from creating performance via /create route for themselves (HTTP 403)', async () => {
+    const createSpy = jest.spyOn(EmployeePerformance, 'create');
+
+    app = express();
+    app.use(express.json());
+    app.use((req, res, next) => {
+      req.user = teamLeadUser;
+      next();
+    });
+    app.use('/api/performance', performanceRoutes);
+
+    const res = await request(app)
+      .post('/api/performance/create')
+      .send({
+        employeeID: teamLeadUser._id.toString(),
+        month: 4,
+        year: 2026,
+        performancePercentage: 90,
+        feedback: 'Attempting /create for self',
+      });
+
+    expect(res.status).toBe(403);
+    expect(res.body.success).toBe(false);
+    expect(res.body.message).toBe('Team Leads cannot create their own performance.');
+    expect(createSpy).not.toHaveBeenCalled();
+  });
+
+  it('prevents Team Leads from creating performance for employee profile linked to their user account (HTTP 403)', async () => {
+    const linkedEmployeeId = new mongoose.Types.ObjectId();
+    const createSpy = jest.spyOn(EmployeePerformance, 'create');
+
+    jest.spyOn(Employee, 'findById').mockReturnValue({
+      select: jest.fn().mockResolvedValue({
+        _id: linkedEmployeeId,
+        userID: teamLeadUser._id,
+        email: teamLeadUser.email,
+        name: 'Team Lead Profile',
+      }),
+    });
+
+    app = express();
+    app.use(express.json());
+    app.use((req, res, next) => {
+      req.user = teamLeadUser;
+      next();
+    });
+    app.use('/api/performance', performanceRoutes);
+
+    const res = await request(app)
+      .post('/api/performance/feedback')
+      .send({
+        employeeID: linkedEmployeeId.toString(),
+        month: 4,
+        year: 2026,
+        performancePercentage: 90,
+        feedback: 'Attempting to evaluate linked profile',
+      });
+
+    expect(res.status).toBe(403);
+    expect(res.body.success).toBe(false);
+    expect(res.body.message).toBe('Team Leads cannot create their own performance.');
+    expect(createSpy).not.toHaveBeenCalled();
+  });
+
+  it('prevents Team Leads from creating performance using their own email (HTTP 403)', async () => {
+    const createSpy = jest.spyOn(EmployeePerformance, 'create');
+
+    app = express();
+    app.use(express.json());
+    app.use((req, res, next) => {
+      req.user = teamLeadUser;
+      next();
+    });
+    app.use('/api/performance', performanceRoutes);
+
+    const res = await request(app)
+      .post('/api/performance/feedback')
+      .send({
+        employeeID: teamLeadUser.email,
+        month: 4,
+        year: 2026,
+        performancePercentage: 88,
+        feedback: 'Attempting self-performance with email',
+      });
+
+    expect(res.status).toBe(403);
+    expect(res.body.success).toBe(false);
+    expect(res.body.message).toBe('Team Leads cannot create their own performance.');
+    expect(createSpy).not.toHaveBeenCalled();
+  });
+
+  it('allows HR and Admin to create performance for a Team Lead (HTTP 201)', async () => {
+    const TeamLead = require('../models/Team');
+    jest.spyOn(TeamLead, 'findOne').mockReturnValue({
+      populate: jest.fn().mockResolvedValue(null),
+    });
+    jest.spyOn(Employee, 'findById').mockReturnValue({
+      select: jest.fn().mockResolvedValue(null),
+    });
+    jest.spyOn(Employee, 'findOne').mockReturnValue({
+      select: jest.fn().mockResolvedValue(null),
+    });
+    jest.spyOn(User, 'findById').mockReturnValue({
+      select: jest.fn().mockResolvedValue(teamLeadUser),
+    });
+    jest.spyOn(EmployeePerformance, 'findOne').mockResolvedValue(null);
+    const createSpy = jest.spyOn(EmployeePerformance, 'create').mockImplementation(async (data) => ({
+      _id: new mongoose.Types.ObjectId(),
+      ...data,
+      createdAt: new Date(),
+    }));
+
+    app = express();
+    app.use(express.json());
+    app.use((req, res, next) => {
+      req.user = hrUser;
+      next();
+    });
+    app.use('/api/performance', performanceRoutes);
+
+    const res = await request(app)
+      .post('/api/performance/create')
+      .send({
+        employeeID: teamLeadUser._id.toString(),
+        month: 4,
+        year: 2026,
+        performancePercentage: 88,
+        rating: 9,
+        feedback: 'Excellent leadership this month.',
+      });
+
+    expect(res.status).toBe(201);
+    expect(res.body.success).toBe(true);
+    expect(createSpy).toHaveBeenCalledWith(expect.objectContaining({
+      employeeID: teamLeadUser._id,
+      evaluatorRole: 'hr',
+    }));
+  });
+
+  it('allows HR and Admin to edit performance for a Team Lead (HTTP 200)', async () => {
+    const performanceId = new mongoose.Types.ObjectId();
+    const updatedPerf = {
+      _id: performanceId,
+      employeeID: teamLeadUser._id,
+      feedback: 'Updated leadership review by HR',
+      remarks: 'Updated leadership review by HR',
+    };
+    jest.spyOn(EmployeePerformance, 'findById').mockResolvedValue({
+      _id: performanceId,
+      employeeID: teamLeadUser._id,
+      employeeEmail: teamLeadUser.email,
+    });
+    jest.spyOn(EmployeePerformance, 'findByIdAndUpdate').mockResolvedValue(updatedPerf);
+
+    app = express();
+    app.use(express.json());
+    app.use((req, res, next) => {
+      req.user = hrUser;
+      next();
+    });
+    app.use('/api/performance', performanceRoutes);
+
+    const res = await request(app)
+      .put(`/api/performance/update/${performanceId}`)
+      .send({ feedback: 'Updated leadership review by HR' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.feedback).toBe('Updated leadership review by HR');
+  });
+
+  it('filters out Team Lead from dropdown when called by a Team Lead', async () => {
+    const mockEmployees = [
+      { _id: new mongoose.Types.ObjectId(), name: 'Alice Smith', email: 'alice@kevalon.com', department: 'Engineering' },
+    ];
+    const mockInterns = [
+      { _id: new mongoose.Types.ObjectId(), name: 'Bob Intern', email: 'bob@kevalon.com' },
+    ];
+    const mockTeamLeads = [
+      { _id: teamLeadUser._id, name: 'Team Lead User', email: teamLeadUser.email, role: 'team lead', department: 'Engineering' },
+      { _id: new mongoose.Types.ObjectId(), name: 'Other Lead', email: 'otherlead@kevalon.com', role: 'team lead', department: 'Design' },
+    ];
+
+    jest.spyOn(Employee, 'find').mockReturnValue({
+      select: jest.fn().mockReturnValue({
+        lean: jest.fn().mockResolvedValue(mockEmployees),
+      }),
+    });
+
+    jest.spyOn(User, 'find').mockImplementation((query) => {
+      if (query && query.role === 'intern') {
+        return {
+          select: jest.fn().mockReturnValue({
+            lean: jest.fn().mockResolvedValue(mockInterns),
+          }),
+        };
+      }
+      return {
+        select: jest.fn().mockReturnValue({
+          lean: jest.fn().mockResolvedValue(mockTeamLeads),
+        }),
+      };
+    });
+
+    app = express();
+    app.use(express.json());
+    app.use((req, res, next) => {
+      req.user = teamLeadUser;
+      next();
+    });
+    app.use('/api/performance', performanceRoutes);
+
+    const res = await request(app).get('/api/performance/dropdown');
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    const resultIds = res.body.data.map((item) => item._id.toString());
+    const resultEmails = res.body.data.map((item) => item.email.toLowerCase());
+    expect(resultIds).not.toContain(teamLeadUser._id.toString());
+    expect(resultEmails).not.toContain(teamLeadUser.email.toLowerCase());
+    expect(resultEmails).toContain('alice@kevalon.com');
+    expect(resultEmails).toContain('bob@kevalon.com');
+    expect(resultEmails).toContain('otherlead@kevalon.com');
+  });
+
+  it('includes Team Lead in dropdown when called by HR or Admin', async () => {
+    const mockEmployees = [
+      { _id: new mongoose.Types.ObjectId(), name: 'Alice Smith', email: 'alice@kevalon.com', department: 'Engineering' },
+    ];
+    const mockInterns = [
+      { _id: new mongoose.Types.ObjectId(), name: 'Bob Intern', email: 'bob@kevalon.com' },
+    ];
+    const mockTeamLeads = [
+      { _id: teamLeadUser._id, name: 'Team Lead User', email: teamLeadUser.email, role: 'team lead', department: 'Engineering' },
+    ];
+
+    jest.spyOn(Employee, 'find').mockReturnValue({
+      select: jest.fn().mockReturnValue({
+        lean: jest.fn().mockResolvedValue(mockEmployees),
+      }),
+    });
+
+    jest.spyOn(User, 'find').mockImplementation((query) => {
+      if (query && query.role === 'intern') {
+        return {
+          select: jest.fn().mockReturnValue({
+            lean: jest.fn().mockResolvedValue(mockInterns),
+          }),
+        };
+      }
+      return {
+        select: jest.fn().mockReturnValue({
+          lean: jest.fn().mockResolvedValue(mockTeamLeads),
+        }),
+      };
+    });
+
+    app = express();
+    app.use(express.json());
+    app.use((req, res, next) => {
+      req.user = hrUser;
+      next();
+    });
+    app.use('/api/performance', performanceRoutes);
+
+    const res = await request(app).get('/api/performance/dropdown');
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    const resultIds = res.body.data.map((item) => item._id.toString());
+    expect(resultIds).toContain(teamLeadUser._id.toString());
+  });
+
 });

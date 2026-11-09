@@ -636,4 +636,242 @@ describe("Salary, Leave & Holiday Integration Test Suite", () => {
       expect(pdfRes.headers["content-type"]).toBe("application/pdf");
     });
   });
+
+  // =========================================================================
+  // 5. UNIFIED LEAVE DEDUCTION & PENALTY CALCULATION (₹500/DAY BASIS)
+  // =========================================================================
+  describe("5. Unified Leave Deduction & Penalty (₹500/day basis) in Preview, Generate & Update", () => {
+    let emp500;
+
+    beforeAll(async () => {
+      emp500 = await User.create({
+        name: "Test 500 Worker",
+        email: "worker500@kevalon.com",
+        phoneNumber: "9876543299",
+        password: "password123",
+        role: "employee",
+        uniqueID: "EMP-500-001",
+        companyId,
+        branchId,
+        isApproved: true,
+        status: "Active",
+      });
+
+      await SalaryStructure.create({
+        userId: emp500._id,
+        structureType: "SIMPLE_FIXED",
+        fixedSalary: 15000, // 15000 / 30 = ₹500/day
+        calculationMode: "THIRTY_DAYS",
+        isPfApplicable: false,
+        isEsicApplicable: false,
+        isPtApplicable: false,
+        isTdsApplicable: false,
+        effectiveFrom: new Date("2026-01-01"),
+      });
+    });
+
+    afterEach(async () => {
+      await Attendance.deleteMany({ userId: emp500._id });
+      await Leave.deleteMany({ employeeId: emp500._id });
+      await MonthlySalary.deleteMany({ employeeId: emp500._id });
+    });
+
+    test("5.1 Approved Full Day: Actual Cut ₹500, Penalty ₹0, Total Cut ₹500", async () => {
+      const payroll = await calculateMonthlyPayroll({
+        user: emp500,
+        month: 10,
+        year: 2026,
+        calculationMode: "THIRTY_DAYS",
+        approvedLeaveDays: 1,
+        unauthorizedFullDays: 0,
+        unauthorizedHalfDays: 0,
+        isPenaltyApproved: true,
+      });
+
+      expect(payroll.perDaySalary).toBe(500);
+      expect(payroll.approvedLeaveDays).toBe(1);
+      expect(payroll.unauthorizedFullDayCount).toBe(0);
+      expect(payroll.unauthorizedHalfDayCount).toBe(0);
+      expect(payroll.actualAbsenceDays).toBe(1);
+      expect(payroll.leaveDeduction).toBe(500);
+      expect(payroll.proposedPenalty).toBe(0);
+      expect(payroll.appliedPenalty).toBe(0);
+      expect(payroll.totalDeduction).toBe(500);
+      expect(payroll.netSalary).toBe(14500);
+    });
+
+    test("5.2 Approved Half Day: Actual Cut ₹250, Penalty ₹0, Total Cut ₹250", async () => {
+      const payroll = await calculateMonthlyPayroll({
+        user: emp500,
+        month: 10,
+        year: 2026,
+        calculationMode: "THIRTY_DAYS",
+        approvedLeaveDays: 0.5,
+        unauthorizedFullDays: 0,
+        unauthorizedHalfDays: 0,
+        isPenaltyApproved: true,
+      });
+
+      expect(payroll.perDaySalary).toBe(500);
+      expect(payroll.approvedLeaveDays).toBe(0.5);
+      expect(payroll.unauthorizedFullDayCount).toBe(0);
+      expect(payroll.unauthorizedHalfDayCount).toBe(0);
+      expect(payroll.actualAbsenceDays).toBe(0.5);
+      expect(payroll.leaveDeduction).toBe(250);
+      expect(payroll.proposedPenalty).toBe(0);
+      expect(payroll.appliedPenalty).toBe(0);
+      expect(payroll.totalDeduction).toBe(250);
+      expect(payroll.netSalary).toBe(14750);
+    });
+
+    test("5.3 Unauthorized Full Day: Actual Cut ₹500, Penalty ₹250, Total Cut ₹750", async () => {
+      const payroll = await calculateMonthlyPayroll({
+        user: emp500,
+        month: 10,
+        year: 2026,
+        calculationMode: "THIRTY_DAYS",
+        approvedLeaveDays: 0,
+        unauthorizedFullDays: 1,
+        unauthorizedHalfDays: 0,
+        isPenaltyApproved: true,
+      });
+
+      expect(payroll.perDaySalary).toBe(500);
+      expect(payroll.approvedLeaveDays).toBe(0);
+      expect(payroll.unauthorizedFullDayCount).toBe(1);
+      expect(payroll.unauthorizedHalfDayCount).toBe(0);
+      expect(payroll.actualAbsenceDays).toBe(1);
+      expect(payroll.leaveDeduction).toBe(500);
+      expect(payroll.proposedPenalty).toBe(250);
+      expect(payroll.appliedPenalty).toBe(250);
+      expect(payroll.totalDeduction).toBe(750);
+      expect(payroll.netSalary).toBe(14250);
+    });
+
+    test("5.4 Unauthorized Half Day: Actual Cut ₹250, Penalty ₹250, Total Cut ₹500 (NOT ₹375)", async () => {
+      const payroll = await calculateMonthlyPayroll({
+        user: emp500,
+        month: 10,
+        year: 2026,
+        calculationMode: "THIRTY_DAYS",
+        approvedLeaveDays: 0,
+        unauthorizedFullDays: 0,
+        unauthorizedHalfDays: 1,
+        isPenaltyApproved: true,
+      });
+
+      expect(payroll.perDaySalary).toBe(500);
+      expect(payroll.approvedLeaveDays).toBe(0);
+      expect(payroll.unauthorizedFullDayCount).toBe(0);
+      expect(payroll.unauthorizedHalfDayCount).toBe(1);
+      expect(payroll.actualAbsenceDays).toBe(0.5);
+      expect(payroll.leaveDeduction).toBe(250);
+      expect(payroll.proposedPenalty).toBe(250);
+      expect(payroll.appliedPenalty).toBe(250);
+      expect(payroll.totalDeduction).toBe(500);
+      expect(payroll.netSalary).toBe(14500);
+    });
+
+    test("5.5 Two Unauthorized Half Days: Actual Cut ₹500, Penalty ₹500, Total Cut ₹1000", async () => {
+      const payroll = await calculateMonthlyPayroll({
+        user: emp500,
+        month: 10,
+        year: 2026,
+        calculationMode: "THIRTY_DAYS",
+        approvedLeaveDays: 0,
+        unauthorizedFullDays: 0,
+        unauthorizedHalfDays: 2,
+        isPenaltyApproved: true,
+      });
+
+      expect(payroll.perDaySalary).toBe(500);
+      expect(payroll.approvedLeaveDays).toBe(0);
+      expect(payroll.unauthorizedFullDayCount).toBe(0);
+      expect(payroll.unauthorizedHalfDayCount).toBe(2);
+      expect(payroll.actualAbsenceDays).toBe(1);
+      expect(payroll.leaveDeduction).toBe(500);
+      expect(payroll.proposedPenalty).toBe(500);
+      expect(payroll.appliedPenalty).toBe(500);
+      expect(payroll.totalDeduction).toBe(1000);
+      expect(payroll.netSalary).toBe(14000);
+    });
+
+    test("5.6 Preview, Generate and Update endpoints return all 10 unified fields", async () => {
+      // 1. Preview
+      const previewRes = await request(app)
+        .post("/api/deductions/preview")
+        .send({
+          employeeId: emp500._id,
+          month: 10,
+          year: 2026,
+          calculationMode: "THIRTY_DAYS",
+          unauthorizedHalfDays: 1,
+          isPenaltyApproved: true,
+        });
+
+      expect(previewRes.status).toBe(200);
+      expect(previewRes.body.success).toBe(true);
+      const previewData = previewRes.body.data;
+      expect(previewData.perDaySalary).toBe(500);
+      expect(previewData.approvedLeaveDays).toBe(0);
+      expect(previewData.unauthorizedFullDayCount).toBe(0);
+      expect(previewData.unauthorizedHalfDayCount).toBe(1);
+      expect(previewData.actualAbsenceDays).toBe(0.5);
+      expect(previewData.leaveDeduction).toBe(250);
+      expect(previewData.proposedPenalty).toBe(250);
+      expect(previewData.appliedPenalty).toBe(250);
+      expect(previewData.totalDeduction).toBe(500);
+      expect(previewData.netSalary).toBe(14500);
+
+      // 2. Generate
+      const genRes = await request(app)
+        .post("/api/salaries/generate")
+        .send({
+          companyId,
+          branchId,
+          month: 10,
+          year: 2026,
+          employeeId: emp500._id,
+          calculationMode: "THIRTY_DAYS",
+          unauthorizedHalfDays: 1,
+          isPenaltyApproved: true,
+        });
+
+      expect(genRes.status).toBe(201);
+      expect(genRes.body.success).toBe(true);
+      const genData = genRes.body.data[0];
+      expect(genData.perDaySalary).toBe(500);
+      expect(genData.approvedLeaveDays).toBe(0);
+      expect(genData.unauthorizedFullDayCount).toBe(0);
+      expect(genData.unauthorizedHalfDayCount).toBe(1);
+      expect(genData.actualAbsenceDays).toBe(0.5);
+      expect(genData.leaveDeduction).toBe(250);
+      expect(genData.proposedPenalty).toBe(250);
+      expect(genData.appliedPenalty).toBe(250);
+      expect(genData.totalDeduction).toBe(500);
+      expect(genData.netSalary).toBe(14500);
+
+      // 3. Update
+      const updateRes = await request(app)
+        .put(`/api/salaries/${genData._id}`)
+        .send({
+          unauthorizedHalfDays: 0,
+          unauthorizedFullDays: 1,
+          isPenaltyApproved: true,
+        });
+
+      expect(updateRes.status).toBe(200);
+      expect(updateRes.body.success).toBe(true);
+      const updateData = updateRes.body.data;
+      expect(updateData.perDaySalary).toBe(500);
+      expect(updateData.unauthorizedFullDayCount).toBe(1);
+      expect(updateData.unauthorizedHalfDayCount).toBe(0);
+      expect(updateData.actualAbsenceDays).toBe(1);
+      expect(updateData.leaveDeduction).toBe(500);
+      expect(updateData.proposedPenalty).toBe(250);
+      expect(updateData.appliedPenalty).toBe(250);
+      expect(updateData.totalDeduction).toBe(750);
+      expect(updateData.netSalary).toBe(14250);
+    });
+  });
 });

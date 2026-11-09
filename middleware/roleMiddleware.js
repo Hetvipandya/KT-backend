@@ -27,10 +27,28 @@ exports.authorizeRoles = (...roles) => {
         return next();
       }
 
+      // Check user.roles array
+      if (Array.isArray(req.user.roles)) {
+        const hasArrayRole = req.user.roles.some((r) => allowedRoles.includes(normalizeRole(r)));
+        if (hasArrayRole) {
+          return next();
+        }
+      }
+
+      // Check active companyAccess roles
+      if (Array.isArray(req.user.companyAccess)) {
+        const hasAccessRole = req.user.companyAccess.some(
+          (a) => a && a.isActive !== false && allowedRoles.includes(normalizeRole(a.role))
+        );
+        if (hasAccessRole) {
+          return next();
+        }
+      }
+
       // If teamlead is an allowed role, check if the authenticated user is a designated Team Lead
       if (allowedRoles.includes("teamlead")) {
         const userId = req.user._id || req.user.id || req.user.userId;
-        if (userId) {
+        if (userId && mongoose.connection && mongoose.connection.readyState === 1) {
           try {
             const Employee = require("../models/Employee");
             const Team = require("../models/Team");

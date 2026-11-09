@@ -220,6 +220,81 @@ const payslipSchema = new mongoose.Schema(
       default: 30,
     },
 
+    leaveDays: {
+      type: Number,
+      default: 0,
+    },
+
+    approvedLeaveDays: {
+      type: Number,
+      default: 0,
+    },
+
+    unauthorizedFullDays: {
+      type: Number,
+      default: 0,
+    },
+
+    unauthorizedHalfDays: {
+      type: Number,
+      default: 0,
+    },
+
+    unapprovedLeaveDays: {
+      type: Number,
+      default: 0,
+    },
+
+    lopDays: {
+      type: Number,
+      default: 0,
+    },
+
+    unpaidLeaveDays: {
+      type: Number,
+      default: 0,
+    },
+
+    perDaySalary: {
+      type: Number,
+      default: 0,
+    },
+
+    approvedLeaveDeduction: {
+      type: Number,
+      default: 0,
+    },
+
+    unauthorizedAbsenceDeduction: {
+      type: Number,
+      default: 0,
+    },
+
+    unapprovedLeavePenalty: {
+      type: Number,
+      default: 0,
+    },
+
+    proposedPenalty: {
+      type: Number,
+      default: 0,
+    },
+
+    isPenaltyApproved: {
+      type: Boolean,
+      default: false,
+    },
+
+    legallyApprovedPenalties: {
+      type: Number,
+      default: 0,
+    },
+
+    penaltyDate: {
+      type: String,
+      default: null,
+    },
+
     generatedDate: {
       type: Date,
       default: Date.now,
@@ -285,6 +360,21 @@ const syncPayslipFromMonthlySalary = async (salaryDoc) => {
     daysPayable: Number(
       raw.presentDays != null ? raw.presentDays : (raw.daysPayable != null ? raw.daysPayable : 30)
     ),
+    leaveDays: Number(raw.leaveDays || raw.approvedLeaveDays || 0),
+    approvedLeaveDays: Number(raw.approvedLeaveDays || raw.leaveDays || 0),
+    unauthorizedFullDays: Number(raw.unauthorizedFullDays || 0),
+    unauthorizedHalfDays: Number(raw.unauthorizedHalfDays || 0),
+    unapprovedLeaveDays: Number(raw.unapprovedLeaveDays != null ? raw.unapprovedLeaveDays : (raw.lopDays || 0)),
+    lopDays: Number(raw.lopDays != null ? raw.lopDays : (raw.unapprovedLeaveDays || 0)),
+    unpaidLeaveDays: Number(raw.unpaidLeaveDays != null ? raw.unpaidLeaveDays : ((Number(raw.leaveDays || 0)) + (Number(raw.lopDays || 0)))),
+    perDaySalary: Number(raw.perDaySalary || 0),
+    approvedLeaveDeduction: Number(raw.approvedLeaveDeduction || 0),
+    unauthorizedAbsenceDeduction: Number(raw.unauthorizedAbsenceDeduction || 0),
+    unapprovedLeavePenalty: Number(raw.unapprovedLeavePenalty || raw.proposedPenalty || 0),
+    proposedPenalty: Number(raw.proposedPenalty || raw.unapprovedLeavePenalty || 0),
+    isPenaltyApproved: Boolean(raw.isPenaltyApproved),
+    legallyApprovedPenalties: Number(raw.legallyApprovedPenalties || 0),
+    penaltyDate: raw.penaltyDate || null,
     generatedDate: raw.createdAt || new Date(),
   };
 

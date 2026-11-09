@@ -108,6 +108,71 @@ const monthlySalarySchema = new mongoose.Schema(
       default: 0,
     },
 
+    approvedLeaveDays: {
+      type: Number,
+      default: 0,
+    },
+
+    unauthorizedFullDayCount: {
+      type: Number,
+      default: 0,
+    },
+
+    unauthorizedHalfDayCount: {
+      type: Number,
+      default: 0,
+    },
+
+    unauthorizedFullDays: {
+      type: Number,
+      default: 0,
+    },
+
+    unauthorizedHalfDays: {
+      type: Number,
+      default: 0,
+    },
+
+    actualAbsenceDays: {
+      type: Number,
+      default: 0,
+    },
+
+    approvedLeaveDays: {
+      type: Number,
+      default: 0,
+    },
+
+    approvedLeaveDeduction: {
+      type: Number,
+      default: 0,
+    },
+
+    unauthorizedAbsenceDeduction: {
+      type: Number,
+      default: 0,
+    },
+
+    penaltyDate: {
+      type: String,
+      default: null,
+    },
+
+    leaveDeduction: {
+      type: Number,
+      default: 0,
+    },
+
+    proposedPenalty: {
+      type: Number,
+      default: 0,
+    },
+
+    appliedPenalty: {
+      type: Number,
+      default: 0,
+    },
+
     unpaidLeaveDeduction: {
       type: Number,
       default: 0,
