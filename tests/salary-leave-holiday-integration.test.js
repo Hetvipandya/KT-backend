@@ -447,6 +447,33 @@ describe("Salary, Leave & Holiday Integration Test Suite", () => {
       await Leave.deleteMany({});
     });
 
+    test("legacy second-half markers are counted as 0.5 leave day in payroll", async () => {
+      await Leave.create({
+        employeeId: simpleFixedEmployee._id,
+        applicantRole: "employee",
+        startDate: new Date("2026-11-04T00:00:00.000Z"),
+        endDate: new Date("2026-11-04T00:00:00.000Z"),
+        leaveType: "half_day_2",
+        reason: "Legacy second-half leave",
+        isHalfDay: false,
+        halfDayType: "second-half",
+        totalDays: 0.5,
+        status: "approved",
+      });
+
+      const payroll = await calculateMonthlyPayroll({
+        user: simpleFixedEmployee,
+        month: 11,
+        year: 2026,
+        calculationMode: "THIRTY_DAYS",
+      });
+
+      expect(payroll.leaveDeductions.approvedLeaveDays).toBe(0.5);
+      expect(payroll.leaveDeductions.unpaidLeaveDays).toBe(0.5);
+
+      await Leave.deleteMany({});
+    });
+
     test("3.3 Unapproved Full-Day Leave = 1 Day LOP + proposed 0.5 Day penalty (₹200 LOP + proposed ₹100 penalty)", async () => {
       // Unapproved absence recorded in Attendance on 2026-11-04
       await Attendance.create({

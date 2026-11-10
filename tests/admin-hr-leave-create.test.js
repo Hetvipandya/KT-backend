@@ -180,7 +180,54 @@ describe("Admin & HR Leave Creation on Behalf of Employee Test Suite", () => {
       const leaveEmpId = (res.body.data.employeeId?._id || res.body.data.employeeId).toString();
       expect(leaveEmpId).toBe(employeeUser1._id.toString());
       expect(res.body.data.status).toBe("approved");
+      expect(res.body.data.leaveType).toBe("full_day");
+      expect(res.body.data.isHalfDay).toBe(false);
+      expect(res.body.data.halfDayType).toBeNull();
     });
+
+    test.each([
+      {
+        actor: "admin",
+        halfDayType: "first-half",
+        leaveType: "half_day_1",
+        status: "pending",
+        expectedStatus: "pending_hr",
+      },
+      {
+        actor: "hr",
+        halfDayType: "second_half",
+        leaveType: "half_day_2",
+        status: "approved",
+        expectedStatus: "approved",
+      },
+    ])(
+      "$actor creates a normalized $halfDayType request with $expectedStatus status",
+      async ({ actor, halfDayType, leaveType, status, expectedStatus }) => {
+        currentAuthUser = actor === "admin" ? adminUser : hrUser;
+
+        const res = await request(app)
+          .post("/api/leave/apply")
+          .send({
+            employeeId: employeeDoc1._id.toString(),
+            leaveType: "full_day",
+            isHalfDay: true,
+            halfDayType,
+            startDate: "2026-11-23",
+            endDate: "2026-11-23",
+            status,
+            reason: "Half-day normalization regression",
+          });
+
+        expect(res.status).toBe(201);
+        expect(res.body.data).toMatchObject({
+          leaveType,
+          isHalfDay: true,
+          halfDayType: leaveType === "half_day_1" ? "first-half" : "second-half",
+          totalDays: 0.5,
+          status: expectedStatus,
+        });
+      },
+    );
 
     test("Admin can apply leave for employee using string employeeID (e.g. EMP-002)", async () => {
       currentAuthUser = adminUser;

@@ -9,7 +9,12 @@ let Project = null;
 try { Project = require("../models/projectModel"); } catch (_) {}
 let TeamMember = null;
 try { TeamMember = require("../models/TeamMember"); } catch (_) {}
-const { calculateWorkingLeaveDays, toDateString } = require("../utils/leaveUtils");
+const {
+  calculateWorkingLeaveDays,
+  normalizeLeaveDuration,
+  toDateString,
+  validateLeaveDateRange,
+} = require("../utils/leaveUtils");
 const { getTeamLeadForUser } = require("../utils/teamLeadLookup");
 const { notify } = require("../utils/sendNotification");
 const { recordAuditEvent } = require("../services/auditLog.service");
@@ -590,12 +595,9 @@ exports.applyLeave = async (req, res) => {
     const {
       userId: bodyUserId,
       employeeId,
-      leaveType,
       startDate,
       endDate,
       reason, 
-      isHalfDay,
-      halfDayType,
     } = req.body;
 
     const authenticatedUserId = req.user?._id || req.user?.id;
@@ -796,6 +798,15 @@ exports.applyLeave = async (req, res) => {
     const actualStartDate =
       startDate || req.body.startDate || req.body.leaveDate || req.body.date || req.body.fromDate;
     const actualEndDate = endDate || req.body.endDate || req.body.toDate || actualStartDate;
+    const leaveDuration = normalizeLeaveDuration(req.body);
+    const dateValidation = validateLeaveDateRange(
+      actualStartDate,
+      actualEndDate,
+      leaveDuration.isHalfDay,
+    );
+    if (dateValidation.error) {
+      return res.status(400).json({ success: false, message: dateValidation.error });
+    }
 
     const todayStr = toDateString(new Date());
     const startStr = toDateString(actualStartDate);
@@ -808,55 +819,13 @@ exports.applyLeave = async (req, res) => {
       });
     }
 
-    const isHalfDayBool =
-      isHalfDay === true ||
-      isHalfDay === "true" ||
-      req.body.halfDay === true ||
-      req.body.halfDay === "true" ||
-      req.body.is_half_day === true ||
-      req.body.is_half_day === "true" ||
-      leaveType === "half_day" ||
-      String(req.body.duration || "")
-        .toLowerCase()
-        .includes("half") ||
-      String(req.body.durationType || "")
-        .toLowerCase()
-        .includes("half") ||
-      String(req.body.selectedDuration || "")
-        .toLowerCase()
-        .includes("half") ||
-      String(req.body.dayType || "")
-        .toLowerCase()
-        .includes("half") ||
-      Number(req.body.totalDays) === 0.5 ||
-      Number(req.body.duration) === 0.5 ||
-      Boolean(req.body.halfDayType);
-
-    let normalizedLeaveType = leaveType;
-    if (!normalizedLeaveType || normalizedLeaveType === "half_day" || normalizedLeaveType === "casual") {
-      normalizedLeaveType = "full_day";
-    } else {
-      normalizedLeaveType = String(normalizedLeaveType).toLowerCase().trim();
-      const validTypes = ["full_day", "half_day_1", "half_day_2", "sick", "paid", "unpaid"];
-      if (!validTypes.includes(normalizedLeaveType)) {
+    const isHalfDayBool = leaveDuration.isHalfDay;
+    const normalizedHalfDayType = leaveDuration.halfDayType;
+    let normalizedLeaveType = leaveDuration.leaveType;
+    if (!isHalfDayBool) {
+      const validTypes = ["full_day", "sick", "paid", "unpaid"];
+      if (normalizedLeaveType === "casual" || !validTypes.includes(normalizedLeaveType)) {
         normalizedLeaveType = "full_day";
-      }
-    }
-
-    let normalizedHalfDayType = null;
-    if (isHalfDayBool) {
-      const rawHalfType = String(
-        halfDayType ||
-          req.body.half_day_type ||
-          req.body.durationType ||
-          req.body.selectedDuration ||
-          "",
-      ).toLowerCase();
-
-      if (rawHalfType.includes("second") || rawHalfType.includes("2nd")) {
-        normalizedHalfDayType = "second-half";
-      } else {
-        normalizedHalfDayType = "first-half";
       }
     }
 
@@ -871,6 +840,12 @@ exports.applyLeave = async (req, res) => {
       actualEndDate,
       isHalfDayBool,
     );
+    if (isHalfDayBool && workingDays !== 0.5) {
+      return res.status(400).json({
+        success: false,
+        message: "Half-Day Leave can only be requested on a working day.",
+      });
+    }
 
     const totalDays = workingDays;
 
@@ -1731,21 +1706,31 @@ exports.getAllHolidays = async (req, res) => {
 // ================= CALCULATE LEAVE DAYS PREVIEW =================
 exports.calculateLeaveDays = async (req, res) => {
   try {
-    const { startDate, endDate, isHalfDay, leaveType } = req.body;
+    const { startDate, endDate } = req.body;
     const actualStartDate = startDate || req.body.leaveDate || req.body.date || req.body.fromDate;
     const actualEndDate = endDate || req.body.toDate || actualStartDate;
-
-    const isHalfDayBool =
-      isHalfDay === true ||
-      isHalfDay === "true" ||
-      leaveType === "half_day" ||
-      Number(req.body.totalDays) === 0.5;
+    const leaveDuration = normalizeLeaveDuration(req.body);
+    const dateValidation = validateLeaveDateRange(
+      actualStartDate,
+      actualEndDate,
+      leaveDuration.isHalfDay,
+    );
+    if (dateValidation.error) {
+      return res.status(400).json({ success: false, message: dateValidation.error });
+    }
 
     const calculation = await calculateWorkingLeaveDays(
       actualStartDate,
       actualEndDate,
-      isHalfDayBool,
+      leaveDuration.isHalfDay,
     );
+    if (leaveDuration.isHalfDay && calculation.workingDays !== 0.5) {
+      return res.status(400).json({
+        success: false,
+        message: "Half-Day Leave can only be requested on a working day.",
+        data: calculation,
+      });
+    }
 
     return res.status(200).json({
       success: true,

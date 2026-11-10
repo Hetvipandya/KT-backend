@@ -20,6 +20,7 @@ const DEFAULT_OFFICE_END_TIME = "19:00";
 const DEFAULT_PRESENT_HOURS = 8;
 const DEFAULT_HALF_DAY_HOURS = 4;
 const DEFAULT_BREAK_LIMIT = 60;
+const { normalizeLeaveDuration } = require("../utils/leaveUtils");
 
 /**
  * Convert Date or date-string to IST Date object (UTC + 5:30)
@@ -185,15 +186,15 @@ const determineAttendanceStatus = (attendanceData = {}, rawSettings = {}, option
     totalBreakTime = 0,
   } = attendanceData;
 
-  const hasApprovedFullDayLeave = Boolean(
-    options.hasApprovedFullDayLeave ||
-    (options.approvedLeave && !options.approvedLeave.isHalfDay && options.approvedLeave.totalDays >= 1) ||
-    attendanceData.status === "leave"
+  const approvedLeaveIsHalfDay = Boolean(
+    options.approvedLeave && normalizeLeaveDuration(options.approvedLeave).isHalfDay,
   );
-
   const hasApprovedHalfDayLeave = Boolean(
-    options.hasApprovedHalfDayLeave ||
-    (options.approvedLeave && options.approvedLeave.isHalfDay)
+    options.hasApprovedHalfDayLeave || approvedLeaveIsHalfDay,
+  );
+  const hasApprovedFullDayLeave = Boolean(
+    !hasApprovedHalfDayLeave &&
+    (options.hasApprovedFullDayLeave || options.approvedLeave || attendanceData.status === "leave")
   );
 
   const hasPendingLeave = Boolean(options.hasPendingLeave);

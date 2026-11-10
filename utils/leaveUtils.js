@@ -33,6 +33,116 @@ const parseLocalDate = (dateStr) => {
   return new Date(year, month - 1, day, 0, 0, 0, 0);
 };
 
+const normalizeHalfDayType = (value) => {
+  const normalized = String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/_/g, "-")
+    .replace(/\s+/g, "-");
+
+  if (
+    ["second-half", "2nd-half", "half-2", "half-day-2", "pm", "afternoon"].includes(normalized) ||
+    normalized.includes("second") ||
+    normalized.includes("2nd")
+  ) {
+    return "second-half";
+  }
+  if (
+    ["first-half", "1st-half", "half-1", "half-day-1", "am", "morning"].includes(normalized) ||
+    normalized.includes("first") ||
+    normalized.includes("1st")
+  ) {
+    return "first-half";
+  }
+  return null;
+};
+
+const isTruthyLeaveFlag = (value) =>
+  value === true ||
+  value === 1 ||
+  (typeof value === "string" && ["true", "1", "yes"].includes(value.trim().toLowerCase()));
+
+const normalizeLeaveDuration = (input = {}) => {
+  const rawLeaveType = String(input.leaveType || input.leave_type || "")
+    .trim()
+    .toLowerCase()
+    .replace(/-/g, "_");
+  const shift = [
+    input.halfDayType,
+    input.half_day_type,
+    input.halfDayShift,
+    input.half_day_shift,
+    input.shift,
+    input.durationType,
+    input.duration_type,
+    input.selectedDuration,
+    input.dayType,
+  ]
+    .map(normalizeHalfDayType)
+    .find(Boolean);
+  const shiftFromLeaveType =
+    rawLeaveType === "half_day_2"
+      ? "second-half"
+      : rawLeaveType === "half_day_1"
+        ? "first-half"
+        : null;
+  const durationText = [
+    input.duration,
+    input.durationType,
+    input.duration_type,
+    input.selectedDuration,
+    input.dayType,
+  ]
+    .filter((value) => typeof value === "string")
+    .join(" ")
+    .toLowerCase();
+  const isHalfDay =
+    [
+      input.isHalfDay,
+      input.is_half_day,
+      input.halfDay,
+      input.half_day,
+    ].some(isTruthyLeaveFlag) ||
+    ["half_day", "half_day_1", "half_day_2"].includes(rawLeaveType) ||
+    Boolean(shift) ||
+    Number(input.totalDays) === 0.5 ||
+    Number(input.duration) === 0.5 ||
+    durationText.includes("half");
+
+  const halfDayType = isHalfDay ? shift || shiftFromLeaveType || "first-half" : null;
+  const leaveType = isHalfDay
+    ? halfDayType === "second-half"
+      ? "half_day_2"
+      : "half_day_1"
+    : rawLeaveType === "half_day" || !rawLeaveType
+      ? "full_day"
+      : rawLeaveType;
+
+  return { isHalfDay, halfDayType, leaveType };
+};
+
+const validateLeaveDateRange = (startDate, endDate, isHalfDay = false) => {
+  const startStr = toDateString(startDate);
+  const endStr = toDateString(endDate || startDate);
+  if (!startStr || !endStr) {
+    return { error: "A valid leave start date and end date are required." };
+  }
+
+  const start = parseLocalDate(startStr);
+  const end = parseLocalDate(endStr);
+  if (
+    toDateString(start) !== startStr ||
+    toDateString(end) !== endStr ||
+    start.getTime() > end.getTime()
+  ) {
+    return { error: "Leave end date must be the same as or after the start date." };
+  }
+  if (isHalfDay && startStr !== endStr) {
+    return { error: "Half-Day Leave must cover exactly one date." };
+  }
+  return { startStr, endStr };
+};
+
 /**
  * Centralized calculation of working leave days.
  * Dynamic Saturday & Holiday Rules:
@@ -174,5 +284,8 @@ const calculateWorkingLeaveDays = async (startDate, endDate, isHalfDay = false) 
 
 module.exports = {
   toDateString,
+  normalizeHalfDayType,
+  normalizeLeaveDuration,
+  validateLeaveDateRange,
   calculateWorkingLeaveDays,
 };

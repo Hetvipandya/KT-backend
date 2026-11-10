@@ -451,6 +451,35 @@ describe("Automatic Daily Attendance Finalization & Scheduler Test Suite", () =>
       expect(poojaAtt.adjustmentReason).toContain("Approved half-day leave");
     });
 
+    test("classifies a legacy full_day record with half-day markers as a half-day", async () => {
+      const targetDate = "2026-11-09";
+      await Leave.create({
+        employeeId: employeeUser2._id,
+        applicantRole: "employee",
+        leaveType: "full_day",
+        isHalfDay: true,
+        halfDayType: "second-half",
+        startDate: new Date("2026-11-09T00:00:00.000Z"),
+        endDate: new Date("2026-11-09T23:59:59.999Z"),
+        totalDays: 0.5,
+        reason: "Legacy mismatched leave",
+        status: "approved",
+      });
+
+      const result = await runDailyAttendanceFinalization({
+        targetDate,
+        executionType: "SCHEDULED",
+        dryRun: false,
+      });
+
+      expect(result.summary.preservedHalfDayLeaves).toBe(1);
+      expect(result.summary.preservedLeaves).toBe(0);
+      const attendance = await Attendance.findOne({ userId: employeeUser2._id, date: targetDate });
+      expect(attendance.status).toBe("absent");
+      expect(attendance.halfDayType).toBe("second-half");
+      expect(attendance.adjustmentReason).toContain("Approved half-day leave");
+    });
+
     test("2.6 Pending leave requests are tagged provisional absent without imposing extra penalty", async () => {
       const targetDate = "2026-11-09";
 

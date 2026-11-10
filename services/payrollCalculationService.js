@@ -5,7 +5,7 @@ const Attendance = require("../models/Attendance");
 const SalaryStructure = require("../models/SalaryStructure");
 const User = require("../models/User");
 const { getApprovedLegallyPermissibleDeductions } = require("./deduction.service");
-const { toDateString } = require("../utils/leaveUtils");
+const { normalizeLeaveDuration, toDateString } = require("../utils/leaveUtils");
 
 const getDaysInMonth = (month, year) => {
   return new Date(year, month, 0).getDate();
@@ -284,7 +284,7 @@ const calculateMonthlyPayroll = async ({
   for (const leave of approvedLeaves) {
     const lStart = new Date(leave.startDate);
     const lEnd = new Date(leave.endDate || leave.startDate);
-    const isHalfDay = Boolean(leave.isHalfDay);
+    const isHalfDay = normalizeLeaveDuration(leave).isHalfDay;
 
     const cur = new Date(Math.max(lStart.getTime(), monthStart.getTime()));
     const limit = new Date(Math.min(lEnd.getTime(), monthEnd.getTime()));

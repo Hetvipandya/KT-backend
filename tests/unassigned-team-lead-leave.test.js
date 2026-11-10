@@ -16,6 +16,8 @@ jest.mock("../utils/teamLeadLookup", () => ({
 
 jest.mock("../utils/leaveUtils", () => ({
   toDateString: jest.requireActual("../utils/leaveUtils").toDateString,
+  normalizeLeaveDuration: jest.requireActual("../utils/leaveUtils").normalizeLeaveDuration,
+  validateLeaveDateRange: jest.requireActual("../utils/leaveUtils").validateLeaveDateRange,
   calculateWorkingLeaveDays: jest.fn().mockResolvedValue({
     workingDays: 1,
     totalCalendarDays: 1,
@@ -53,6 +55,7 @@ describe("leave routing when an employee has no assigned Team Lead", () => {
       req.user = employee;
       next();
     }, employeePanelController.applyEmployeeLeaveRequest);
+      app.post("/leave/preview", leaveController.calculateLeaveDays);
     app.post("/leave/hr-approval", leaveController.hrApproval);
 
     jest.spyOn(User, "findById").mockResolvedValue(employee);
@@ -86,6 +89,84 @@ describe("leave routing when an employee has no assigned Team Lead", () => {
           hrStatus: "pending",
         }),
       );
+    },
+  );
+
+  test.each(["/leave/apply", "/employee-panel/leave"])(
+    "%s stores the canonical second-half fields for legacy request aliases",
+    async (path) => {
+      require("../utils/leaveUtils").calculateWorkingLeaveDays.mockResolvedValueOnce({
+        workingDays: 0.5,
+        totalCalendarDays: 1,
+        excludedSundays: 0,
+        excludedHolidays: 0,
+      });
+
+      const response = await request(app)
+        .post(path)
+        .send({
+          startDate: "2099-01-05",
+          endDate: "2099-01-05",
+          leaveType: "full_day",
+          is_half_day: "true",
+          half_day_type: "second_half",
+          reason: "Personal",
+        });
+
+      expect(response.status).toBe(201);
+      expect(Leave.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          leaveType: "half_day_2",
+          isHalfDay: true,
+          halfDayType: "second-half",
+          totalDays: 0.5,
+        }),
+      );
+    },
+  );
+
+  test("preview uses the same half-day normalization and working-day validation", async () => {
+    require("../utils/leaveUtils").calculateWorkingLeaveDays.mockResolvedValueOnce({
+      workingDays: 0.5,
+      totalCalendarDays: 1,
+      excludedSundays: 0,
+      excludedHolidays: 0,
+    });
+
+    const response = await request(app)
+      .post("/leave/preview")
+      .send({
+        startDate: "2099-01-05",
+        endDate: "2099-01-05",
+        leaveType: "half_day_2",
+      });
+
+    expect(response.status).toBe(200);
+    expect(response.body.data.workingDays).toBe(0.5);
+  });
+
+  test.each(["/leave/apply", "/employee-panel/leave"])(
+    "%s rejects a half-day date excluded by the holiday calendar",
+    async (path) => {
+      require("../utils/leaveUtils").calculateWorkingLeaveDays.mockResolvedValueOnce({
+        workingDays: 0,
+        totalCalendarDays: 1,
+        excludedSundays: 0,
+        excludedHolidays: 1,
+      });
+
+      const response = await request(app)
+        .post(path)
+        .send({
+          startDate: "2099-01-05",
+          endDate: "2099-01-05",
+          leaveType: "half_day_1",
+          reason: "Personal",
+        });
+
+      expect(response.status).toBe(400);
+      expect(response.body.message).toMatch(/working day/i);
+      expect(Leave.create).not.toHaveBeenCalled();
     },
   );
 

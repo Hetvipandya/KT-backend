@@ -5,7 +5,7 @@ const Attendance = require("../models/Attendance");
 const Leave = require("../models/Leave");
 const Holiday = require("../models/Holiday");
 const AttendanceJobLog = require("../models/AttendanceJobLog");
-const { toDateString } = require("../utils/leaveUtils");
+const { normalizeLeaveDuration, toDateString } = require("../utils/leaveUtils");
 const { toISTDate, getISTDateString } = require("./attendanceCalculationService");
 
 /**
@@ -272,11 +272,12 @@ const runDailyAttendanceFinalization = async ({
         continue;
       }
 
-      // C. Approved Full-Day Leave: Preserve leave, do not mark absent
-      const isApprovedFullDay =
-        approvedLeave &&
-        (!approvedLeave.isHalfDay || approvedLeave.totalDays >= 1 || approvedLeave.leaveType === "full_day");
+      const approvedLeaveDuration = approvedLeave
+        ? normalizeLeaveDuration(approvedLeave)
+        : null;
 
+      // C. Approved Full-Day Leave: Preserve leave, do not mark absent
+      const isApprovedFullDay = approvedLeave && !approvedLeaveDuration.isHalfDay;
       if (isApprovedFullDay) {
         summary.preservedLeaves++;
         summary.details.push({
@@ -311,9 +312,8 @@ const runDailyAttendanceFinalization = async ({
       }
 
       // D. Approved Half-Day Leave: Only remaining half is unworked
-      const isApprovedHalfDay =
-        approvedLeave &&
-        (approvedLeave.isHalfDay || approvedLeave.leaveType === "half_day_1" || approvedLeave.leaveType === "half_day_2");
+      const isApprovedHalfDay = approvedLeave && approvedLeaveDuration.isHalfDay;
+      const approvedHalfDayType = approvedLeaveDuration?.halfDayType || "first-half";
 
       if (isApprovedHalfDay) {
         summary.preservedHalfDayLeaves++;
@@ -323,7 +323,7 @@ const runDailyAttendanceFinalization = async ({
           userName: user.name,
           action: "APPROVED_HALF_DAY_LEAVE_REMAINING_ABSENT",
           leaveId: approvedLeave._id,
-          halfDayType: approvedLeave.halfDayType || "first-half",
+          halfDayType: approvedHalfDayType,
         });
 
         if (!dryRun) {
@@ -341,7 +341,7 @@ const runDailyAttendanceFinalization = async ({
               $set: {
                 status: "absent",
                 approvalStatus: "approved",
-                halfDayType: approvedLeave.halfDayType || "first-half",
+                halfDayType: approvedHalfDayType,
                 adjustmentReason: "Approved half-day leave; unworked half marked absent by 4:00 PM attendance finalization",
               },
             },
