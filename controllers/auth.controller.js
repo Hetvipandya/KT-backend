@@ -171,7 +171,11 @@ const ensureRegisteredEmployee = async (user, teamLead) => {
     lastName: "",
     email: user.email || "",
     phoneNumber: user.phoneNumber || "",
-    designation: role === "team lead" ? "Team Lead" : "Employee",
+    dob: user.dob || undefined,
+    bloodGroup: user.bloodGroup || "",
+    gender: user.gender || undefined,
+    address: user.address || "",
+    designation: user.designation || (role === "team lead" ? "Team Lead" : "Employee"),
     department: user.department || "",
     joiningDate: new Date(),
     isTeamLead: role === "team lead",
@@ -192,7 +196,20 @@ const ensureRegisteredEmployee = async (user, teamLead) => {
  */
 const register = async (req, res, next) => {
   try {
-    const { name, email, password, phone, phoneNumber, role } = req.body;
+    const {
+      name,
+      email,
+      password,
+      phone,
+      phoneNumber,
+      dob,
+      bloodGroup,
+      gender,
+      address,
+      department,
+      designation,
+      role,
+    } = req.body;
     const normalizedRole = normalizeRegistrationRole(role);
 
     // Check if email already exists
@@ -232,6 +249,12 @@ const register = async (req, res, next) => {
       email,
       passwordHash,
       phoneNumber: phoneNumber ?? phone,
+      dob,
+      bloodGroup,
+      gender,
+      address,
+      department,
+      designation,
       role: normalizedRole,
       isApproved: ["accountant", "ca"].includes(normalizedRole) ? true : undefined,
       isActive: ["accountant", "ca"].includes(normalizedRole) ? true : undefined,
