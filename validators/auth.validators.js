@@ -6,12 +6,36 @@ const phoneRegex = /^\+[1-9]\d{1,14}$/;
 // Password policy: min 8 chars, at least 1 letter and 1 number
 const passwordRegex = /^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d@$!%*#?&]{8,}$/;
 
-const registerSchema = z.object({
+const registerSchema = z.preprocess((input) => {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return input;
+
+  const data = { ...input };
+  if (data.name === undefined) data.name = data.fullName;
+  if (data.email === undefined) data.email = data.workEmail ?? data.emailAddress;
+  delete data.fullName;
+  delete data.workEmail;
+  delete data.emailAddress;
+
+  for (const field of ['name', 'email']) {
+    if (typeof data[field] === 'string') data[field] = data[field].trim();
+  }
+  for (const field of ['phone', 'phoneNumber']) {
+    if (typeof data[field] === 'string') {
+      data[field] = data[field].trim() || undefined;
+    }
+  }
+  if (typeof data.role === 'string') {
+    data.role = data.role.trim().toLowerCase().replace(/[_-]+/g, ' ');
+  }
+
+  return data;
+}, z.object({
   name: z.string({ required_error: 'name is required' }).min(1, 'name cannot be empty'),
   email: z.string({ required_error: 'email is required' }).email('invalid email address'),
   password: z.string({ required_error: 'password is required' })
     .min(8, 'password must be at least 8 characters')
     .regex(passwordRegex, 'password must contain at least one letter and one number'),
+  confirmPassword: z.string().min(1, 'confirmPassword cannot be empty').optional(),
   phone: z.string().regex(phoneRegex, 'phone must be in E.164 format (e.g., +1234567890)').optional(),
   phoneNumber: z.string().regex(phoneRegex, 'phoneNumber must be in E.164 format (e.g., +1234567890)').optional(),
   role: z.enum(['admin', 'hr', 'employee', 'intern', 'teamlead', 'team lead']).optional().default('admin'),
@@ -21,7 +45,15 @@ const registerSchema = z.object({
   teamLeadId: z.union([z.string(), z.object({}).passthrough()]).optional(),
   assignedTeamLead: z.union([z.string(), z.object({}).passthrough()]).optional(),
   reportingTo: z.union([z.string(), z.object({}).passthrough()]).optional()
-}).strict();
+}).strict().superRefine((data, context) => {
+  if (data.confirmPassword !== undefined && data.confirmPassword !== data.password) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['confirmPassword'],
+      message: 'passwords do not match',
+    });
+  }
+}));
 
 
 const loginSchema = z.object({
