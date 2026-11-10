@@ -1,7 +1,7 @@
 const { registerSchema } = require("../validators/auth.validators");
 
 describe("registration request validation", () => {
-  test("accepts registration form field names and normalizes common role casing", () => {
+  test("accepts registration form fields and normalizes common role casing", () => {
     const result = registerSchema.safeParse({
       fullName: "  Alex Employee ",
       workEmail: "  alex@example.com ",
@@ -16,11 +16,12 @@ describe("registration request validation", () => {
       name: "Alex Employee",
       email: "alex@example.com",
       role: "team lead",
+      confirmPassword: "Secure123",
     });
     expect(result.data.phoneNumber).toBeUndefined();
   });
 
-  test("retains canonical and mobile-compatible registration field names", () => {
+  test("accepts canonical and mobile-compatible registration field names", () => {
     const result = registerSchema.safeParse({
       name: "Alex",
       email: "alex@example.com",
