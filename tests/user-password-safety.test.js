@@ -6,6 +6,7 @@ const { getLoginSource } = require("../utils/loginSource");
 const {
   buildLoginLookupQuery,
   getLoginActivity,
+  adminResetUserPassword,
   __test__applyPasswordUpdate,
   __test__resolveApprovalPassword,
   __test__applySuccessfulLoginState,
@@ -113,6 +114,56 @@ describe("password safety for user updates", () => {
 
     expect(user.password).toBe("NewPass456");
     expect(user.plainPassword).toBeUndefined();
+  });
+
+  it("admin password reset forces a password change and revokes refresh sessions", async () => {
+    const user = {
+      _id: new mongoose.Types.ObjectId(),
+      refreshTokens: [{ tokenHash: "old-session" }],
+      save: jest.fn().mockResolvedValue(undefined),
+    };
+    const findById = jest.spyOn(User, "findById").mockResolvedValue(user);
+    const res = {
+      statusCode: null,
+      body: null,
+      status(code) { this.statusCode = code; return this; },
+      json(body) { this.body = body; return this; },
+    };
+
+    await adminResetUserPassword({
+      params: { id: user._id.toString() },
+      body: { newPassword: "TempPass123", confirmPassword: "TempPass123" },
+    }, res);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.password).toBeUndefined();
+    expect(user.password).toBe("TempPass123");
+    expect(user.mustChangePassword).toBe(true);
+    expect(user.isFirstLogin).toBe(false);
+    expect(user.refreshTokens).toEqual([]);
+    expect(user.refreshToken).toBeNull();
+    expect(user.save).toHaveBeenCalledTimes(1);
+    findById.mockRestore();
+  });
+
+  it("rejects invalid admin password resets without loading a user", async () => {
+    const findById = jest.spyOn(User, "findById");
+    const res = {
+      statusCode: null,
+      body: null,
+      status(code) { this.statusCode = code; return this; },
+      json(body) { this.body = body; return this; },
+    };
+
+    await adminResetUserPassword({
+      params: { id: "invalid-id" },
+      body: { newPassword: "TempPass123", confirmPassword: "TempPass123" },
+    }, res);
+
+    expect(res.statusCode).toBe(400);
+    expect(findById).not.toHaveBeenCalled();
+    findById.mockRestore();
   });
 
   it("uses plain approval passwords and never accepts a stored bcrypt hash as a login password", () => {

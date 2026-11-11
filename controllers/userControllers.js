@@ -1469,6 +1469,75 @@ const getLoginActivity = async (_req, res) => {
   }
 };
 
+const adminResetUserPassword = async (req, res) => {
+  try {
+    const { newPassword, confirmPassword } = req.body || {};
+    const userId = req.params?.id;
+
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return res.status(400).json({
+        success: false,
+        message: "A valid user ID is required",
+      });
+    }
+
+    if (typeof newPassword !== "string" || !newPassword.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: "New password is required",
+      });
+    }
+
+    if (newPassword.trim().length < 6) {
+      return res.status(400).json({
+        success: false,
+        message: "New password must be at least 6 characters long",
+      });
+    }
+
+    if (newPassword !== confirmPassword) {
+      return res.status(400).json({
+        success: false,
+        message: "New password and confirm password do not match",
+      });
+    }
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    applyPasswordUpdate(user, newPassword);
+    user.isFirstLogin = false;
+    user.mustChangePassword = true;
+    user.passwordResetTokenHash = null;
+    user.resetPasswordToken = null;
+    user.passwordResetExpires = null;
+    user.resetPasswordExpires = null;
+    user.forgotPasswordOTP = null;
+    user.otpExpireTime = null;
+    user.otpVerified = false;
+    user.refreshToken = null;
+    user.refreshTokens = [];
+
+    await user.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "Password reset successfully. The user must change it at next login.",
+    });
+  } catch (error) {
+    console.error("Admin password reset error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to reset user password",
+    });
+  }
+};
+
 // ============================================================
 // HRMS
 // APPROVE EMPLOYEE
@@ -2873,6 +2942,7 @@ module.exports = {
   registerUser,
   getAllUsers,
   getLoginActivity,
+  adminResetUserPassword,
   approveEmployee,
   rejectEmployee,
   deleteUser,

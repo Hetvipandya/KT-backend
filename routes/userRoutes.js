@@ -17,6 +17,7 @@ const {
   changePassword,
   getAllUsers,
   getLoginActivity,
+  adminResetUserPassword,
   sendOTP,
   verifyOTP,
   forgotPassword,
@@ -257,6 +258,13 @@ router.get(
   protect,
   authorizeRoles("admin", "hr"),
   getLoginActivity
+);
+
+router.put(
+  "/admin/:id/reset-password",
+  protect,
+  authorizeRoles("admin"),
+  adminResetUserPassword
 );
 
 router.get(
