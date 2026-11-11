@@ -1,10 +1,123 @@
+const mongoose = require("mongoose");
 const Notification = require("../models/notification");
 const Announcement = require("../models/announcement");
 const Leave = require("../models/Leave");
 const Attendance = require("../models/Attendance");
 const AdjustmentRequest = require("../models/AdjustmentRequest");
 const User = require("../models/User");
+const Employee = require("../models/Employee");
+const Department = require("../models/Department");
 const { sendPushNotification } = require("../services/fcm.service");
+
+const getCompanyScope = (user) => {
+  const companyIds = [
+    user?.companyId,
+    ...(Array.isArray(user?.companyAccess)
+      ? user.companyAccess.filter((access) => access?.isActive !== false).map((access) => access.companyId)
+      : []),
+  ].filter((companyId) => companyId && mongoose.isValidObjectId(companyId));
+  const uniqueCompanyIds = [...new Set(companyIds.map((companyId) => String(companyId)))];
+  return uniqueCompanyIds.length ? { companyId: { $in: uniqueCompanyIds } } : {};
+};
+
+const getActiveEmployeeQuery = (companyScope = {}) => ({
+  ...companyScope,
+  isDeactivated: { $ne: true },
+  employeeStatus: { $nin: ["Inactive", "INACTIVE", "Resigned", "Terminated", "TERMINATED"] },
+});
+
+const resolveAnnouncementRecipients = async ({ targetType, targetRole, targetUserIds, targetDepartmentIds, user }) => {
+  const normalizedType = String(targetType || "ALL").toUpperCase();
+  const companyScope = getCompanyScope(user);
+
+  if (normalizedType === "PERSON") {
+    if (!Array.isArray(targetUserIds) || targetUserIds.length === 0 ||
+      targetUserIds.some((id) => !mongoose.isValidObjectId(id))) {
+      throw Object.assign(new Error("Select at least one valid employee"), { statusCode: 400 });
+    }
+    const employees = await Employee.find({
+      ...getActiveEmployeeQuery(companyScope),
+      $or: [
+        { userID: { $in: targetUserIds } },
+        { userId: { $in: targetUserIds } },
+      ],
+    }).select("userID userId email").lean();
+    const recipients = await resolveUsersForEmployees(employees);
+    if (recipients.length !== new Set(targetUserIds.map(String)).size) {
+      throw Object.assign(new Error("One or more selected employees are unavailable"), { statusCode: 400 });
+    }
+    return recipients;
+  }
+
+  if (normalizedType === "DEPARTMENT") {
+    if (!Array.isArray(targetDepartmentIds) || targetDepartmentIds.length === 0 ||
+      targetDepartmentIds.some((id) => !mongoose.isValidObjectId(id))) {
+      throw Object.assign(new Error("Select at least one valid department"), { statusCode: 400 });
+    }
+
+    const departments = await Department.find({
+      _id: { $in: targetDepartmentIds },
+      isActive: { $ne: false },
+      status: { $ne: false },
+      ...companyScope,
+    }).select("_id departmentName name").lean();
+
+    if (departments.length !== new Set(targetDepartmentIds.map(String)).size) {
+      throw Object.assign(new Error("One or more selected departments are unavailable"), { statusCode: 400 });
+    }
+
+    const departmentNames = departments
+      .flatMap((department) => [department.departmentName, department.name])
+      .filter(Boolean);
+    const employees = await Employee.find({
+      ...getActiveEmployeeQuery(companyScope),
+      $or: [
+        { departmentId: { $in: departments.map((department) => department._id) } },
+        { department: { $in: departmentNames } },
+      ],
+    }).select("userID userId email").lean();
+
+    return resolveUsersForEmployees(employees);
+  }
+
+  if (normalizedType === "ROLE") {
+    const role = String(targetRole || "").trim();
+    if (!role || role.toUpperCase() === "ALL") {
+      throw Object.assign(new Error("Select a valid role"), { statusCode: 400 });
+    }
+    const roleRegex = new RegExp(`^${role.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i");
+    return User.find({ role: roleRegex }).select("_id role deviceToken").lean();
+  }
+
+  if (normalizedType !== "ALL") {
+    throw Object.assign(new Error("Unsupported announcement audience"), { statusCode: 400 });
+  }
+
+  return User.find({}).select("_id role deviceToken").lean();
+};
+
+const resolveUsersForEmployees = async (employees) => {
+  const userIds = [...new Set(employees.flatMap((employee) => [employee.userID, employee.userId])
+    .filter((userId) => userId && mongoose.isValidObjectId(userId))
+    .map(String))];
+  const emails = [...new Set(employees.map((employee) => String(employee.email || "").trim().toLowerCase()).filter(Boolean))];
+  const query = [];
+  if (userIds.length) query.push({ _id: { $in: userIds } });
+  if (emails.length) query.push({ email: { $in: emails } });
+  if (!query.length) return [];
+
+  const users = await User.find({ $or: query }).select("_id role email deviceToken").lean();
+  const userById = new Map(users.map((user) => [String(user._id), user]));
+  const userByEmail = new Map(
+    users.filter((user) => user.email).map((user) => [String(user.email).trim().toLowerCase(), user])
+  );
+  return [...new Map(employees.map((employee) => {
+    const linkedId = employee.userID || employee.userId;
+    const user = (linkedId && userById.get(String(linkedId))) ||
+      userByEmail.get(String(employee.email || "").trim().toLowerCase());
+    return user ? [String(user._id), user] : null;
+  }).filter(Boolean)).values()];
+};
 
 // ===============================
 // CREATE NOTIFICATION
@@ -442,21 +555,94 @@ exports.getUserNotifications = async (req, res) => {
 // ===============================
 // CREATE ANNOUNCEMENT
 // ===============================
+exports.getAnnouncementRecipients = async (req, res) => {
+  try {
+    const companyScope = getCompanyScope(req.user);
+    const [employees, departments] = await Promise.all([
+      Employee.find(getActiveEmployeeQuery(companyScope))
+        .select("userID userId email name firstName middleName lastName department departmentId")
+        .lean(),
+      Department.find({
+        isActive: { $ne: false },
+        status: { $ne: false },
+        ...companyScope,
+      }).select("_id departmentName name").sort({ departmentName: 1 }).lean(),
+    ]);
+    const users = await resolveUsersForEmployees(employees);
+    const usersById = new Map(users.map((user) => [String(user._id), user]));
+    const departmentNames = new Set(
+      employees.map((employee) => String(employee.department || "").trim().toLowerCase()).filter(Boolean)
+    );
+    const availableDepartments = departments
+      .filter((department) =>
+        departmentNames.has(String(department.departmentName || department.name || "").trim().toLowerCase()) ||
+        employees.some((employee) => String(employee.departmentId) === String(department._id))
+      )
+      .map((department) => ({
+        id: String(department._id),
+        name: department.departmentName || department.name,
+      }));
+
+    const recipients = employees.flatMap((employee) => {
+      const linkedId = employee.userID || employee.userId;
+      const user = (linkedId && usersById.get(String(linkedId))) ||
+        users.find((item) => String(item.email || "").toLowerCase() === String(employee.email || "").toLowerCase());
+      if (!user) return [];
+      const name = employee.name ||
+        [employee.firstName, employee.middleName, employee.lastName].filter(Boolean).join(" ") ||
+        user.name ||
+        user.email;
+      return [{
+        id: String(user._id),
+        name,
+        email: user.email || employee.email,
+        department: employee.department || "",
+      }];
+    });
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        employees: [...new Map(recipients.map((recipient) => [recipient.id, recipient])).values()],
+        departments: availableDepartments,
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 exports.createAnnouncement = async (req, res) => {
   try {
-    const announcement = await Announcement.create(req.body);
-    const targetRole = String(announcement.targetRole || "ALL").trim();
-    const normalizedTarget = targetRole.toLowerCase().replace(/[\s_-]+/g, "");
-    const users = await User.find({}).select("_id role deviceToken");
-    const recipients = !normalizedTarget || normalizedTarget === "all"
-      ? users
-      : users.filter((user) =>
-          String(user.role || "").toLowerCase().replace(/[\s_-]+/g, "") === normalizedTarget
-        );
+    const targetRole = String(req.body.targetRole || "ALL").trim();
+    const targetType = String(
+      req.body.targetType || (targetRole.toUpperCase() === "ALL" ? "ALL" : "ROLE")
+    ).toUpperCase();
+    const recipients = await resolveAnnouncementRecipients({
+      targetType,
+      targetRole,
+      targetUserIds: req.body.targetUserIds,
+      targetDepartmentIds: req.body.targetDepartmentIds,
+      user: req.user,
+    });
+    if (!recipients.length) {
+      return res.status(400).json({ success: false, message: "No active recipients found for this audience" });
+    }
 
-    await Notification.create({
-      userId: null,
-      companyId: announcement.companyId || req.body.companyId || null,
+    const announcement = await Announcement.create({
+      title: req.body.title,
+      message: req.body.message,
+      type: req.body.type || "ANNOUNCEMENT",
+      targetType,
+      targetRole,
+      targetUserIds: targetType === "PERSON" ? req.body.targetUserIds : [],
+      targetDepartmentIds: targetType === "DEPARTMENT" ? req.body.targetDepartmentIds : [],
+      companyId: req.user.companyId || null,
+    });
+
+    await Promise.all(recipients.map((recipient) => Notification.create({
+      userId: recipient._id,
+      companyId: announcement.companyId,
       type: "ANNOUNCEMENT",
       channel: "IN_APP",
       title: announcement.title,
@@ -466,8 +652,9 @@ exports.createAnnouncement = async (req, res) => {
         announcementId: announcement._id.toString(),
         status: announcement.isActive === false ? "inactive" : "published",
         targetRole: announcement.targetRole || "ALL",
+        targetType,
       },
-    });
+    })));
 
     const pushResults = await Promise.allSettled(
       recipients
@@ -496,7 +683,7 @@ exports.createAnnouncement = async (req, res) => {
       data: announcement,
     });
   } catch (error) {
-    return res.status(500).json({
+    return res.status(error.statusCode || 500).json({
       success: false,
       message: error.message,
     });
@@ -512,7 +699,57 @@ exports.getAnnouncements = async (req, res) => {
       .sort({ createdAt: -1 })
       .lean();
 
-    const data = rawData.map((item) => {
+    const userId = String(req.user._id);
+    const normalizedRole = String(req.user.role || "").toLowerCase().replace(/[\s_-]+/g, "");
+    const employee = await Employee.findOne({
+      $or: [
+        { userID: req.user._id },
+        { userId: req.user._id },
+        { email: String(req.user.email || "").trim().toLowerCase() },
+      ],
+      ...getActiveEmployeeQuery(getCompanyScope(req.user)),
+    }).select("department departmentId").lean();
+    const departmentIds = new Set((employee?.departmentId ? [String(employee.departmentId)] : []));
+    const departmentNames = new Set(
+      employee?.department ? [String(employee.department).trim().toLowerCase()] : []
+    );
+    const targetDepartmentIds = [...new Set(rawData.flatMap((announcement) =>
+      (announcement.targetDepartmentIds || []).map(String)
+    ))];
+    const targetDepartments = targetDepartmentIds.length
+      ? await Department.find({ _id: { $in: targetDepartmentIds } })
+        .select("_id departmentName name").lean()
+      : [];
+    const departmentNameById = new Map(targetDepartments.map((department) => [
+      String(department._id),
+      String(department.departmentName || department.name || "").trim().toLowerCase(),
+    ]));
+
+    const visibleAnnouncements = rawData.filter((announcement) => {
+      const targetType = String(
+        announcement.targetType ||
+        (String(announcement.targetRole || "ALL").toUpperCase() === "ALL" ? "ALL" : "ROLE")
+      ).toUpperCase();
+
+      if (targetType === "PERSON") {
+        return (announcement.targetUserIds || []).some((id) => String(id) === userId);
+      }
+      if (targetType === "DEPARTMENT") {
+        return (announcement.targetDepartmentIds || []).some((id) =>
+          departmentIds.has(String(id)) || departmentNames.has(departmentNameById.get(String(id)))
+        );
+      }
+      if (targetType === "ROLE") {
+        return String(announcement.targetRole || "").toLowerCase().replace(/[\s_-]+/g, "") === normalizedRole;
+      }
+      if (announcement.targetType) return targetType === "ALL";
+
+      const legacyRole = String(announcement.targetRole || "ALL").toLowerCase().replace(/[\s_-]+/g, "");
+      return legacyRole === "all" || legacyRole === normalizedRole ||
+        (departmentNames.size > 0 && departmentNames.has(legacyRole));
+    });
+
+    const data = visibleAnnouncements.map((item) => {
       const createdDate = item.createdAt ? new Date(item.createdAt) : new Date();
       const istTime = createdDate.toLocaleTimeString("en-IN", {
         timeZone: "Asia/Kolkata",

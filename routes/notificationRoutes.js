@@ -29,10 +29,16 @@ router.delete("/:id", protect, notificationController.deleteNotification);
 // ===============================
 // ANNOUNCEMENT ROUTES
 // ===============================
-router.post("/announcement/create", notificationController.createAnnouncement);
-router.put("/announcement/:id", notificationController.updateAnnouncement);
-router.delete("/announcement/:id", notificationController.deleteAnnouncement);
+router.get(
+  "/announcement/recipients",
+  protect,
+  authorizeRoles("admin", "hr"),
+  notificationController.getAnnouncementRecipients
+);
+router.post("/announcement/create", protect, authorizeRoles("admin", "hr"), notificationController.createAnnouncement);
+router.put("/announcement/:id", protect, authorizeRoles("admin", "hr"), notificationController.updateAnnouncement);
+router.delete("/announcement/:id", protect, authorizeRoles("admin", "hr"), notificationController.deleteAnnouncement);
 
-router.get("/announcement/all", notificationController.getAnnouncements);
+router.get("/announcement/all", protect, notificationController.getAnnouncements);
 
 module.exports = router;

@@ -17,6 +17,28 @@ const announcementSchema = new mongoose.Schema(
       default: "ALL", // ADMIN, EMPLOYEE, CLIENT, ALL
     },
 
+    targetType: {
+      type: String,
+      enum: ["ALL", "ROLE", "PERSON", "DEPARTMENT"],
+      default: "ALL",
+    },
+
+    targetUserIds: [{
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+    }],
+
+    targetDepartmentIds: [{
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Department",
+    }],
+
+    companyId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Company",
+      default: null,
+    },
+
     isActive: {
       type: Boolean,
       default: true,

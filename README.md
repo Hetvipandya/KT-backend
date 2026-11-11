@@ -66,6 +66,12 @@ room; clients cannot choose rooms. After a user-owned notification is saved, the
 emits `notification:new` with `{ notificationId: '<saved Mongo _id>' }`. The existing
 FCM delivery remains independent.
 
+Admin and HR announcement creation supports all users, a role, selected employees, or
+selected departments. Targeted announcements create user-owned notification records so
+the existing notification list, unread count, Socket.IO delivery, and FCM delivery are
+restricted to the selected recipients. Announcement write and recipient-lookup endpoints
+require an authenticated admin or HR session.
+
 No Nginx configuration is included in this repository. For Nginx deployments, proxy the
 Socket.IO path to the same backend as the API and allow WebSocket upgrades:
 
