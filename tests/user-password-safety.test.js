@@ -2,8 +2,10 @@ const mongoose = require("mongoose");
 const sanitizeUserUpdatePayload = require("../utils/userPayloadSanitizer");
 const User = require("../models/User");
 const Attendance = require("../models/Attendance");
+const { getLoginSource } = require("../utils/loginSource");
 const {
   buildLoginLookupQuery,
+  getLoginActivity,
   __test__applyPasswordUpdate,
   __test__resolveApprovalPassword,
   __test__applySuccessfulLoginState,
@@ -41,6 +43,50 @@ describe("password safety for user updates", () => {
 
     expect(user.isFirstLogin).toBe(false);
     expect(user.mustChangePassword).toBe(false);
+  });
+
+  it("records the successful login source and returns login activity records", async () => {
+    const user = new User({
+      name: "Amit Patel",
+      email: "amit@example.com",
+      password: "Secret123",
+      role: "employee",
+    });
+
+    __test__applySuccessfulLoginState(user, {
+      loginSource: getLoginSource({ clientPlatform: "web" }),
+    });
+
+    expect(user.lastLogin).toBeInstanceOf(Date);
+    expect(user.lastLoginAt).toBeInstanceOf(Date);
+    expect(user.lastLoginSource).toBe("web");
+
+    jest.spyOn(User, "find").mockReturnValue({
+      select: () => ({ lean: async () => [user] }),
+    });
+    const res = {
+      statusCode: null,
+      body: null,
+      status(code) { this.statusCode = code; return this; },
+      json(body) { this.body = body; return this; },
+    };
+
+    await getLoginActivity({}, res);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.data).toEqual([{
+      userId: user._id.toString(),
+      lastLoginAt: user.lastLoginAt,
+      source: "web",
+    }]);
+  });
+
+  it.each([
+    ["Android App", { userAgent: "Dalvik/2.1.0 (Linux; U; Android 14)" }, "android_app"],
+    ["iOS App", { userAgent: "KTApp CFNetwork/1498.700.2 Darwin/23.6.0 (iPhone)" }, "ios_app"],
+    ["Web", { clientPlatform: "web", userAgent: "Mozilla/5.0" }, "web"],
+  ])("detects %s login source", (_label, requestInfo, expected) => {
+    expect(getLoginSource(requestInfo)).toBe(expected);
   });
 
   it("builds a precise user lookup for login without an empty matcher", () => {

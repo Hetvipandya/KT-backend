@@ -16,6 +16,7 @@ const {
   loginUser, 
   changePassword,
   getAllUsers,
+  getLoginActivity,
   sendOTP,
   verifyOTP,
   forgotPassword,
@@ -251,6 +252,13 @@ router.post(
 ); //done
 
 // ================= GET USERS =================
+router.get(
+  "/login-activity",
+  protect,
+  authorizeRoles("admin", "hr"),
+  getLoginActivity
+);
+
 router.get(
   "/",
   getAllUsers

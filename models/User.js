@@ -394,6 +394,12 @@ const userSchema =
         type: Date,
         default: null,
       },
+
+      lastLoginSource: {
+        type: String,
+        enum: ["web", "android_app", "ios_app", "unknown"],
+        default: "unknown",
+      },
     },
     {
       timestamps: true,

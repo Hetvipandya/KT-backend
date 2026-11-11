@@ -25,6 +25,7 @@ const {
 const sanitizeUserUpdatePayload = require("../utils/userPayloadSanitizer");
 const { isEmployeeLoginBlocked } = require("../utils/employeeLoginStatus");
 const { getTeamLeadForUser } = require("../utils/teamLeadLookup");
+const { getLoginSource } = require("../utils/loginSource");
 
 const buildLoginLookupQuery = (loginInput) => {
   const normalized = String(loginInput || "").trim();
@@ -101,7 +102,7 @@ const clearResetTokenFields = (user) => {
   return user;
 };
 
-const applySuccessfulLoginState = (user, { deviceId = null } = {}) => {
+const applySuccessfulLoginState = (user, { deviceId = null, loginSource = "unknown" } = {}) => {
   if (!user) {
     return user;
   }
@@ -114,6 +115,7 @@ const applySuccessfulLoginState = (user, { deviceId = null } = {}) => {
   user.deviceId = deviceId || user.deviceId || null;
   user.lastLogin = new Date();
   user.lastLoginAt = new Date();
+  user.lastLoginSource = loginSource;
 
   if (shouldForcePasswordChange) {
     user.isFirstLogin = true;
@@ -1436,6 +1438,37 @@ const getAllUsers = async (req, res) => {
   }
 };
 
+const getLoginActivity = async (_req, res) => {
+  try {
+    const users = await User.find({})
+      .select("_id lastLogin lastLoginAt lastLoginSource deviceId refreshTokens.userAgent refreshTokens.createdAt")
+      .lean();
+
+    return res.status(200).json({
+      success: true,
+      data: users.map((user) => {
+        const latestSession = (user.refreshTokens || [])
+          .slice()
+          .sort((left, right) => new Date(right.createdAt || 0) - new Date(left.createdAt || 0))[0];
+        const storedSource = user.lastLoginSource && user.lastLoginSource !== "unknown"
+          ? user.lastLoginSource
+          : null;
+
+        return {
+          userId: String(user._id),
+          lastLoginAt: user.lastLoginAt || user.lastLogin || null,
+          source: storedSource || getLoginSource({
+            deviceId: user.deviceId,
+            userAgent: latestSession?.userAgent,
+          }),
+        };
+      }),
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 // ============================================================
 // HRMS
 // APPROVE EMPLOYEE
@@ -1830,7 +1863,17 @@ const rejectEmployee = async (req, res) => {
 
 const loginUser = async (req, res) => {
   try {
-    const { login, email, username, identifier, employeeID, empId, password, deviceId } = req.body;
+    const {
+      login,
+      email,
+      username,
+      identifier,
+      employeeID,
+      empId,
+      password,
+      deviceId,
+      clientPlatform,
+    } = req.body;
     const loginInput = login || email || username || identifier || employeeID || empId;
 
     if (!loginInput || !password) {
@@ -1964,11 +2007,14 @@ const loginUser = async (req, res) => {
 
     user.deviceId = deviceId || null;
 
-    user.lastLogin = new Date();
-
-    user.lastLoginAt = new Date();
-
-    applySuccessfulLoginState(user, { deviceId: deviceId || user.deviceId || null });
+    applySuccessfulLoginState(user, {
+      deviceId: deviceId || user.deviceId || null,
+      loginSource: getLoginSource({
+        clientPlatform: clientPlatform || req.headers["x-client-platform"],
+        deviceId,
+        userAgent: req.headers["user-agent"],
+      }),
+    });
 
     await user.save();
 
@@ -2826,6 +2872,7 @@ module.exports = {
   uploadProfileImage,
   registerUser,
   getAllUsers,
+  getLoginActivity,
   approveEmployee,
   rejectEmployee,
   deleteUser,

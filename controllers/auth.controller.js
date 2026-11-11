@@ -21,6 +21,7 @@ const env = require("../config/env");
 const crypto = require("crypto");
 const pino = require("pino");
 const { isEmployeeLoginBlocked } = require("../utils/employeeLoginStatus");
+const { getLoginSource } = require("../utils/loginSource");
 const generateEmployeeID = require("../utils/employeeId");
 const { assignEmployeeToTeamLead } = require("../utils/teamLeadAssignment");
 
@@ -320,7 +321,7 @@ const register = async (req, res, next) => {
  */
 const login = async (req, res, next) => {
   try {
-    const { email, password, login: loginField, username } = req.body;
+    const { email, password, login: loginField, username, clientPlatform } = req.body;
     const loginIdentifier = String(email || loginField || username || "").trim();
     const escapedIdentifier = loginIdentifier.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
@@ -486,6 +487,10 @@ const login = async (req, res, next) => {
       reconciledUser,
       req.ip,
       req.headers["user-agent"],
+      getLoginSource({
+        clientPlatform: clientPlatform || req.headers["x-client-platform"],
+        userAgent: req.headers["user-agent"],
+      }),
     );
 
     logger.info({ userId: reconciledUser._id }, `User logged in successfully`);
@@ -958,6 +963,10 @@ const verifyOtpController = async (req, res, next) => {
         user,
         req.ip,
         req.headers["user-agent"],
+        getLoginSource({
+          clientPlatform: req.body.clientPlatform || req.headers["x-client-platform"],
+          userAgent: req.headers["user-agent"],
+        }),
       );
       const latestUser = await User.findById(user._id);
 

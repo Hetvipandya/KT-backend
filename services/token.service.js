@@ -1,5 +1,6 @@
 const { generateAccessToken, generateRefreshToken, verifyRefreshToken } = require('../utils/jwt');
 const { hashSha256 } = require('../utils/hash');
+const { getLoginSource } = require('../utils/loginSource');
 const User = require('../models/User');
 
 /**
@@ -19,7 +20,7 @@ const filterExpiredTokens = (refreshTokens) => {
  * @param {string} userAgent 
  * @returns {Promise<{ accessToken: string, refreshToken: string }>}
  */
-const createSession = async (user, ip, userAgent) => {
+const createSession = async (user, ip, userAgent, clientPlatform) => {
   // Re-fetch user with refreshTokens if not already selected
   if (!Array.isArray(user.refreshTokens)) {
     user = await User.findById(user._id).select('+refreshTokens');
@@ -51,7 +52,9 @@ const createSession = async (user, ip, userAgent) => {
   }
 
   user.refreshTokens = tokens;
+  user.lastLogin = new Date();
   user.lastLoginAt = new Date();
+  user.lastLoginSource = getLoginSource({ clientPlatform, userAgent });
   await user.save();
 
   return {
