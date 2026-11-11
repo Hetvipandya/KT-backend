@@ -1445,12 +1445,21 @@ exports.getEmployeeNotifications = async (req, res) => {
       $or: [{ userId }, { userId: null }],
     }).sort({ createdAt: -1 });
 
-    const unreadCount = notifications.filter((n) => !n.isRead).length;
+    const userRole = String(req.user.role || "").toLowerCase().replace(/[\s_-]+/g, "");
+    const visibleNotifications = notifications.filter((notification) => {
+      if (notification.userId) return true;
+      if (notification.type !== "ANNOUNCEMENT") return true;
+
+      const meta = notification.meta || notification.metaData || {};
+      const targetRole = String(meta.targetRole || "ALL").toLowerCase().replace(/[\s_-]+/g, "");
+      return targetRole === "all" || targetRole === userRole;
+    });
+    const unreadCount = visibleNotifications.filter((n) => !n.isRead).length;
 
     return res.status(200).json({
       success: true,
       unreadCount,
-      data: notifications,
+      data: visibleNotifications,
     });
   } catch (error) {
     return res.status(500).json({ success: false, message: error.message });
@@ -1463,11 +1472,14 @@ exports.markNotificationAsRead = async (req, res) => {
 
     if (id === "read-all") {
       await Notification.updateMany(
-        { $or: [{ userId: req.user._id }, { userId: null }] },
-        { isRead: true },
+        { userId: req.user._id },
+        { $set: { read: true, isRead: true, readAt: new Date() } },
       );
     } else {
-      await Notification.findByIdAndUpdate(id, { isRead: true });
+      await Notification.findOneAndUpdate(
+        { _id: id, userId: req.user._id },
+        { $set: { read: true, isRead: true, readAt: new Date() } },
+      );
     }
 
     return res

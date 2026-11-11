@@ -57,3 +57,25 @@ npm start
 - [MERGE_ANALYSIS.md](./MERGE_ANALYSIS.md): Comprehensive merge and architecture analysis.
 - [ROUTE_MAP.md](./ROUTE_MAP.md): Full listing of all available endpoints.
 - [API_COMPATIBILITY.md](./API_COMPATIBILITY.md): Compatibility details for KT and FIN frontends.
+
+## Real-time notifications
+Socket.IO is served on the same HTTP origin and default `/socket.io` path as the REST API.
+Connect with `auth: { token: '<JWT>' }`; the server validates the existing access token and
+resolves its canonical `User._id`. It joins only that user's private `employee:<User._id>`
+room; clients cannot choose rooms. After a user-owned notification is saved, the server
+emits `notification:new` with `{ notificationId: '<saved Mongo _id>' }`. The existing
+FCM delivery remains independent.
+
+No Nginx configuration is included in this repository. For Nginx deployments, proxy the
+Socket.IO path to the same backend as the API and allow WebSocket upgrades:
+
+```nginx
+location /socket.io/ {
+    proxy_pass http://127.0.0.1:5000/socket.io/;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+    proxy_set_header Host $host;
+    proxy_read_timeout 75s;
+}
+```

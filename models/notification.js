@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+const { emitNotificationOnce } = require("../utils/notificationSocket");
 
 const notificationSchema = new mongoose.Schema(
   {
@@ -68,6 +69,7 @@ const notificationSchema = new mongoose.Schema(
 
 // Synchronize read/isRead and meta/metaData before saving
 notificationSchema.pre("save", function (next) {
+  this.$locals.emitAfterSave = this.isNew;
   if (this.isModified("read") && !this.isModified("isRead")) {
     this.isRead = this.read;
   } else if (this.isModified("isRead") && !this.isModified("read")) {
@@ -82,6 +84,13 @@ notificationSchema.pre("save", function (next) {
     this.meta = this.metaData;
   }
   next();
+});
+
+notificationSchema.post("save", function (notification) {
+  if (notification.$locals.emitAfterSave) {
+    emitNotificationOnce(notification);
+    delete notification.$locals.emitAfterSave;
+  }
 });
 
 notificationSchema.index({ userId: 1, read: 1, createdAt: -1 });

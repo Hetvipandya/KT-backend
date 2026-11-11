@@ -3,6 +3,7 @@ const router = express.Router();
 
 const notificationController = require("../controllers/notificarionController");
 const { protect } = require("../middleware/authMiddleware");
+const { authorizeRoles } = require("../middleware/roleMiddleware");
 
 // ===============================
 // FCM DEVICE TOKEN ROUTES
@@ -13,17 +14,17 @@ router.post("/remove-token", protect, notificationController.removeDeviceToken);
 // ===============================
 // NOTIFICATION ROUTES 
 // ===============================
-router.post("/create", notificationController.createNotification);
+router.post("/create", protect, notificationController.createNotification);
 
 // Admin Unified Notifications
-router.get("/admin/all", notificationController.getAdminNotifications); 
-router.put("/read-all", notificationController.markAllAsRead);
+router.get("/admin/all", protect, authorizeRoles("admin", "hr"), notificationController.getAdminNotifications);
+router.put("/read-all", protect, notificationController.markAllAsRead);
 
-router.get("/user/:userId", notificationController.getUserNotifications);
-router.put("/read/:id", notificationController.markAsRead);
-router.delete("/delete-all", notificationController.deleteAllNotifications);
-router.delete("/user/:userId/delete-all", notificationController.deleteAllNotifications);
-router.delete("/:id", notificationController.deleteNotification);
+router.get("/user/:userId", protect, notificationController.getUserNotifications);
+router.put("/read/:id", protect, notificationController.markAsRead);
+router.delete("/delete-all", protect, notificationController.deleteAllNotifications);
+router.delete("/user/:userId/delete-all", protect, notificationController.deleteAllNotifications);
+router.delete("/:id", protect, notificationController.deleteNotification);
 
 // ===============================
 // ANNOUNCEMENT ROUTES

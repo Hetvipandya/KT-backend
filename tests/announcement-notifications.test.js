@@ -80,7 +80,7 @@ describe("Announcement notifications", () => {
     });
     const res = makeResponse();
 
-    await getUserNotifications({ params: { userId: employee._id.toString() } }, res);
+    await getUserNotifications({ user: employee, params: { userId: employee._id.toString() } }, res);
 
     expect(res.statusCode).toBe(200);
     expect(res.body.data).toEqual([announcements[0], announcements[2]]);
@@ -102,7 +102,7 @@ describe("Announcement notifications", () => {
     });
     const res = makeResponse();
 
-    await getUserNotifications({ params: { userId: user._id.toString() } }, res);
+    await getUserNotifications({ user, params: { userId: user._id.toString() } }, res);
 
     expect(res.body.data).toEqual([legacyNotification]);
   });

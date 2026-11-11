@@ -61,7 +61,7 @@ describe("admin notification feed announcement deduplication", () => {
 
   test("marks every recipient copy of a broadcast announcement as read together", async () => {
     const announcementId = "64f000000000000000000002";
-    jest.spyOn(Notification, "findById").mockReturnValue({
+    jest.spyOn(Notification, "findOne").mockReturnValue({
       select: jest.fn().mockResolvedValue({
         type: "ANNOUNCEMENT",
         meta: { announcementId },
@@ -70,10 +70,12 @@ describe("admin notification feed announcement deduplication", () => {
     const updateMany = jest.spyOn(Notification, "updateMany").mockResolvedValue({ modifiedCount: 11 });
 
     const res = makeResponse();
-    await notificationController.markAsRead({ params: { id: "notification-0" } }, res);
+    const userId = "64f000000000000000000003";
+    await notificationController.markAsRead({ user: { _id: userId }, params: { id: "notification-0" } }, res);
 
     expect(updateMany).toHaveBeenCalledWith(
       {
+        userId,
         type: "ANNOUNCEMENT",
         $or: [
           { "meta.announcementId": announcementId },

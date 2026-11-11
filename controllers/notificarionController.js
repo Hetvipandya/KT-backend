@@ -11,7 +11,10 @@ const { sendPushNotification } = require("../services/fcm.service");
 // ===============================
 exports.createNotification = async (req, res) => {
   try {
-    const notification = await Notification.create(req.body);
+    const notification = await Notification.create({
+      ...req.body,
+      userId: req.user._id,
+    });
 
     return res.status(201).json({
       success: true,
@@ -225,7 +228,7 @@ exports.markAsRead = async (req, res) => {
     const { id } = req.params;
 
     if (id && !id.startsWith("leave_") && !id.startsWith("checkin_") && !id.startsWith("adj_")) {
-      const notification = await Notification.findById(id).select("type meta metaData");
+      const notification = await Notification.findOne({ _id: id, userId: req.user._id }).select("type meta metaData");
       const announcementId =
         notification?.type === "ANNOUNCEMENT" &&
         (notification.meta?.announcementId || notification.metaData?.announcementId);
@@ -233,6 +236,7 @@ exports.markAsRead = async (req, res) => {
       if (announcementId) {
         await Notification.updateMany(
           {
+            userId: req.user._id,
             type: "ANNOUNCEMENT",
             $or: [
               { "meta.announcementId": announcementId },
@@ -242,7 +246,7 @@ exports.markAsRead = async (req, res) => {
           { $set: { read: true, isRead: true, readAt: new Date() } }
         );
       } else {
-        await Notification.findByIdAndUpdate(id, {
+        await Notification.findOneAndUpdate({ _id: id, userId: req.user._id }, {
           $set: { read: true, isRead: true, readAt: new Date() },
         });
       }
@@ -265,7 +269,10 @@ exports.markAsRead = async (req, res) => {
 // ===============================
 exports.markAllAsRead = async (req, res) => {
   try {
-    await Notification.updateMany({ isRead: false }, { isRead: true });
+    await Notification.updateMany(
+      { userId: req.user._id, isRead: false },
+      { $set: { isRead: true, read: true, readAt: new Date() } }
+    );
 
     return res.status(200).json({
       success: true,
@@ -287,7 +294,7 @@ exports.deleteNotification = async (req, res) => {
     const { id } = req.params;
 
     if (id && !id.startsWith("leave_") && !id.startsWith("checkin_") && !id.startsWith("adj_")) {
-      await Notification.findByIdAndDelete(id);
+      await Notification.findOneAndDelete({ _id: id, userId: req.user._id });
     }
 
     return res.status(200).json({
@@ -307,19 +314,11 @@ exports.deleteNotification = async (req, res) => {
 // ===============================
 exports.deleteAllNotifications = async (req, res) => {
   try {
-    const userId =
-      req.params.userId ||
-      req.query.userId ||
-      req.body?.userId;
-
-    const filter = userId ? { userId } : {};
-    const result = await Notification.deleteMany(filter);
+    const result = await Notification.deleteMany({ userId: req.user._id });
 
     return res.status(200).json({
       success: true,
-      message: userId
-        ? "All notifications deleted for user"
-        : "All notifications deleted",
+      message: "All notifications deleted for user",
       deletedCount: result.deletedCount || 0,
     });
   } catch (error) {
@@ -399,7 +398,10 @@ exports.deleteAnnouncement = async (req, res) => {
 // ===============================
 exports.getUserNotifications = async (req, res) => {
   try {
-    const { userId } = req.params;
+    const userId = req.user._id.toString();
+    if (req.params.userId !== userId) {
+      return res.status(403).json({ success: false, message: "You can only view your own notifications" });
+    }
     const user = await User.findById(userId).select("role");
 
     const notifications = await Notification.find({

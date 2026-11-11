@@ -3,7 +3,7 @@ const User = require('../models/User');
 const Notification = require('../models/notification');
 const ReminderConfig = require('../models/ReminderConfig');
 const Alert = require('../models/Alert');
-const { sendPushNotification } = require('./fcm.service');
+const fcmService = require('./fcm.service');
 
 const serviceError = (message, statusCode, errorCode) => Object.assign(new Error(message), { statusCode, errorCode });
 const id = (value) => value?.toString();
@@ -207,7 +207,7 @@ const createNotification = async ({
   try {
     const user = await User.findById(userId).select('deviceToken').lean();
     if (user?.deviceToken) {
-      await sendPushNotification({
+      await fcmService.sendPushNotification({
         deviceToken: user.deviceToken,
         title,
         body: message,
