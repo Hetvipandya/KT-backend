@@ -12,5 +12,7 @@ exports.list = send(async (req, res) => {
   return res.json({ success: true, data: { companyId, ...(await service.listPurchaseOrders(companyId, query)) } });
 });
 exports.get = send(async (req, res) => res.json({ success: true, data: await service.getPurchaseOrderDetails(req.params.id) }));
+exports.update = send(async (req, res) => res.json({ success: true, data: await service.updatePurchaseOrder(req.purchaseOrder, req.body, req.user._id) }));
+exports.remove = send(async (req, res) => res.json({ success: true, data: await service.deletePurchaseOrder(req.purchaseOrder, req.user._id) }));
 exports.approve = send(async (req, res) => res.json({ success: true, data: await service.approvePurchaseOrder(await service.getPurchaseOrderDocument(req.params.id), req.user._id, req.body.reason) }));
 exports.reject = send(async (req, res) => res.json({ success: true, data: await service.rejectPurchaseOrder(await service.getPurchaseOrderDocument(req.params.id), req.user._id, req.body.reason) }));

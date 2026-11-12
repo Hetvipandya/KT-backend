@@ -31,6 +31,9 @@ const schema = new mongoose.Schema({
   rejectedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
   rejectedAt: { type: Date, default: null },
   rejectionReason: { type: String, default: null },
+  isDeleted: { type: Boolean, default: false, index: true },
+  deletedAt: { type: Date, default: null },
+  deletedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true }
 }, { timestamps: true });

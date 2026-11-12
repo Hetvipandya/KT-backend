@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const PurchaseOrder = require('../models/PurchaseOrder');
+const Purchase = require('../models/Purchase');
 const Supplier = require('../models/Supplier');
 const FinancialYear = require('../models/FinancialYear');
 const Tax = require('../models/Tax');
@@ -17,7 +18,7 @@ const validateRefs = async (data) => {
   // TODO: validate productIds once Module 7 Product/Service model is available.
   return fy;
 };
-const shape = (po, detail = false) => {
+const shape = (po, detail = false, isLinkedToPurchaseBill = false) => {
   const supp = po.supplierId && typeof po.supplierId === 'object' ? po.supplierId : null;
   const sName = supp?.name || null;
   const sGstin = supp?.gstin || null;
@@ -32,6 +33,8 @@ const shape = (po, detail = false) => {
     branch: bName ? { id: id(po.branchId?._id || po.branchId), branchName: bName, code: po.branchId?.code } : null,
     financialYearId: id(po.financialYearId?._id || po.financialYearId),
     financialYearLabel: fyLabel,
+    financialYearIsLocked: po.financialYearId?.isLocked === true,
+    isLinkedToPurchaseBill,
     financialYear: fyLabel ? { id: id(po.financialYearId?._id || po.financialYearId), yearLabel: fyLabel } : null,
     supplierId: id(po.supplierId?._id || po.supplierId),
     supplierName: sName,
@@ -145,8 +148,64 @@ const createPurchaseOrder = async (data, userId) => {
     }
   }
 };
+const assertNotLinkedToPurchaseBill = async (purchaseOrderId) => {
+  if (await Purchase.exists({ purchaseOrderId })) {
+    throw fail('This purchase order is linked to a purchase bill and can no longer be changed or deleted.', 409, 'PURCHASE_ORDER_LINKED_TO_PURCHASE_BILL');
+  }
+};
+const updatePurchaseOrder = async (purchaseOrder, changes, userId) => {
+  const purchaseOrderId = id(purchaseOrder?._id || purchaseOrder?.id);
+  if (!purchaseOrderId || purchaseOrder.isDeleted) {
+    throw fail('Purchase order not found', 404, 'PURCHASE_ORDER_NOT_FOUND');
+  }
+  await assertNotLinkedToPurchaseBill(purchaseOrderId);
+  const data = {
+    ...changes,
+    companyId: id(purchaseOrder.companyId),
+    branchId: purchaseOrder.branchId ? id(purchaseOrder.branchId) : null,
+  };
+  validateTotals(data);
+  await validateRefs(data);
+  const requiresApproval = Number(data.totalAmount) > PURCHASE_ORDER_APPROVAL_THRESHOLD;
+  const updatedAt = new Date();
+  const document = typeof purchaseOrder.save === 'function'
+    ? purchaseOrder
+    : await PurchaseOrder.findById(purchaseOrderId);
+  if (!document || document.isDeleted) {
+    throw fail('Purchase order not found', 404, 'PURCHASE_ORDER_NOT_FOUND');
+  }
+  Object.assign(document, {
+    ...changes,
+    poDate: new Date(data.poDate),
+    expectedDeliveryDate: data.expectedDeliveryDate ? new Date(data.expectedDeliveryDate) : null,
+    status: requiresApproval ? 'PENDING_APPROVAL' : 'APPROVED',
+    approvalRequired: requiresApproval,
+    autoApproved: !requiresApproval,
+    approvedBy: requiresApproval ? null : userId,
+    approvedAt: requiresApproval ? null : updatedAt,
+    rejectedBy: null,
+    rejectedAt: null,
+    rejectionReason: null,
+    updatedBy: userId,
+  });
+  await document.save();
+  return getPurchaseOrderDocument(purchaseOrderId);
+};
+const deletePurchaseOrder = async (purchaseOrder, userId) => {
+  const purchaseOrderId = id(purchaseOrder?._id || purchaseOrder?.id);
+  if (!purchaseOrderId || purchaseOrder.isDeleted) {
+    throw fail('Purchase order not found', 404, 'PURCHASE_ORDER_NOT_FOUND');
+  }
+  await assertNotLinkedToPurchaseBill(purchaseOrderId);
+  purchaseOrder.isDeleted = true;
+  purchaseOrder.deletedAt = new Date();
+  purchaseOrder.deletedBy = userId;
+  purchaseOrder.updatedBy = userId;
+  await purchaseOrder.save();
+  return { id: purchaseOrderId, isDeleted: true, message: 'Purchase order deleted successfully.' };
+};
 const listPurchaseOrders = async (companyId, query) => {
-  const filter = { companyId };
+  const filter = { companyId, isDeleted: { $ne: true } };
   if (query.branchId) filter.branchId = query.branchId;
   for (const key of ['supplierId', 'financialYearId', 'status']) {
     if (query[key]) filter[key] = query[key];
@@ -160,22 +219,28 @@ const listPurchaseOrders = async (companyId, query) => {
     if (query.to) filter.poDate.$lte = new Date(query.to);
   }
   const [items, total] = await Promise.all([
-    PurchaseOrder.find(filter).populate('supplierId', 'name').populate('branchId', 'branchName').populate('financialYearId', 'yearLabel').sort({ poDate: -1, createdAt: -1 }).skip((query.page - 1) * query.limit).limit(query.limit).lean(),
+    PurchaseOrder.find(filter).populate('supplierId', 'name').populate('branchId', 'branchName').populate('financialYearId', 'yearLabel isLocked').sort({ poDate: -1, createdAt: -1 }).skip((query.page - 1) * query.limit).limit(query.limit).lean(),
     PurchaseOrder.countDocuments(filter)
   ]);
-  return { items: items.map((item) => shape(item)), pagination: { page: query.page, limit: query.limit, total } };
+  const linkedOrders = items.length
+    ? await Purchase.find({ purchaseOrderId: { $in: items.map((item) => item._id) } }).select('purchaseOrderId').lean()
+    : [];
+  const linkedOrderIds = new Set(linkedOrders.map((bill) => id(bill.purchaseOrderId)));
+  return { items: items.map((item) => shape(item, false, linkedOrderIds.has(id(item._id)))), pagination: { page: query.page, limit: query.limit, total } };
 };
 const getPurchaseOrderDocument = async (poId) => {
   if (!mongoose.isValidObjectId(poId)) throw fail('Purchase order not found', 404, 'PURCHASE_ORDER_NOT_FOUND');
   const po = await PurchaseOrder.findById(poId)
     .populate('supplierId', 'name email phone gstin pan billingAddress shippingAddress contactPerson')
     .populate('branchId', 'branchName code address')
-    .populate('financialYearId', 'yearLabel startDate endDate')
+    .populate('financialYearId', 'yearLabel startDate endDate isLocked')
     .populate('lineItems.productId', 'name code hsn sac unit')
     .populate('lineItems.taxRateId', 'name rate type')
     .lean();
   if (!po) throw fail('Purchase order not found', 404, 'PURCHASE_ORDER_NOT_FOUND');
-  return shape(po, true);
+  if (po.isDeleted) throw fail('Purchase order not found', 404, 'PURCHASE_ORDER_NOT_FOUND');
+  const isLinkedToPurchaseBill = Boolean(await Purchase.exists({ purchaseOrderId: po._id }));
+  return shape(po, true, isLinkedToPurchaseBill);
 };
 const getPurchaseOrderDetails = async (poId) => getPurchaseOrderDocument(poId);
 const approvePurchaseOrder = async (po, userId, reason = null) => {
@@ -308,4 +373,4 @@ const rejectPurchaseOrder = async (po, userId, reason) => {
   };
 };
 
-module.exports = { createPurchaseOrder, listPurchaseOrders, getPurchaseOrderDocument, approvePurchaseOrder, rejectPurchaseOrder, shape };
+module.exports = { createPurchaseOrder, updatePurchaseOrder, deletePurchaseOrder, listPurchaseOrders, getPurchaseOrderDocument, approvePurchaseOrder, rejectPurchaseOrder, shape };
