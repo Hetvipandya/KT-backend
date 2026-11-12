@@ -757,7 +757,32 @@ describe("Centralized Employee Deduction Management Module Test Suite", () => {
       )).toBe(true);
     });
 
-    test("7.4 Authorized Accounting Entry helper creates journal entry with deduction lines", async () => {
+    test("7.4 Team Lead's own deductions return populated employee and team lead names", async () => {
+      currentAuthUser = teamLeadUser;
+      const recordId = `DED-TL-SELF-${Date.now()}`;
+      await EmployeeDeduction.create({
+        deductionRecordId: recordId,
+        employeeId: teamLeadUser._id,
+        userId: teamLeadUser._id,
+        teamLeadId: teamLeadUser.uniqueID,
+        teamLeadUser: teamLeadUser._id,
+        deductionMasterId: new mongoose.Types.ObjectId(),
+        month: 11,
+        year: 2026,
+        amount: 2500,
+      });
+
+      const res = await request(app).get("/api/employee-deductions/my-deductions");
+
+      expect(res.status).toBe(200);
+      const ownDeduction = res.body.data.find((deduction) => deduction.deductionRecordId === recordId);
+      expect(ownDeduction).toBeDefined();
+      expect(ownDeduction.employeeId.name).toBe("Engineering Team Lead");
+      expect(ownDeduction.employeeId.uniqueID).toBe("TL0001");
+      expect(ownDeduction.teamLeadUser.name).toBe("Engineering Team Lead");
+    });
+
+    test("7.5 Authorized Accounting Entry helper creates journal entry with deduction lines", async () => {
       // Setup COA accounts
       const expenseCoa = await ChartOfAccount.create({
         companyId,

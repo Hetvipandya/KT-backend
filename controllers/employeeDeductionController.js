@@ -394,7 +394,9 @@ const getMyDeductions = async (req, res) => {
     if (status) query.status = status;
 
     const deductions = await EmployeeDeduction.find(query)
+      .populate("employeeId userId", "name email uniqueID role designation department employeeID employeeCode")
       .populate("deductionMasterId", "name code category isLegallyPermissible legalReference")
+      .populate("teamLeadUser", "name email uniqueID role")
       .populate("approvedBy", "name email")
       .sort({ year: -1, month: -1, createdAt: -1 });
 
