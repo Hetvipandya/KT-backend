@@ -390,7 +390,7 @@ const generateMonthlySalary = async (req, res) => {
 
     const populatedRecords = await MonthlySalary.find({
       _id: { $in: generatedRecords.map((r) => r._id) },
-    }).populate("employeeId userId", "name email uniqueID role designation department");
+    }).populate("employeeId userId", "name email uniqueID role designation department profileImage profileImg");
 
     return res.status(201).json({
       success: true,
@@ -431,7 +431,7 @@ const getMonthlySalaries = async (req, res) => {
     }
 
     const salaries = await MonthlySalary.find(query)
-      .populate("employeeId userId", "name email uniqueID role designation department")
+      .populate("employeeId userId", "name email uniqueID role designation department profileImage profileImg")
       .populate("approvedBy", "name email")
       .populate("paidBy", "name email")
       .sort({ year: -1, month: -1, createdAt: -1 });
@@ -499,13 +499,13 @@ const resolveSalaryRecord = async (identifier, options = {}) => {
       let directSalary = queryOrDoc;
       if (queryOrDoc && typeof queryOrDoc.populate === "function" && typeof queryOrDoc.exec === "function") {
         try {
-          directSalary = await queryOrDoc.populate("employeeId userId", "name email uniqueID role designation department");
+          directSalary = await queryOrDoc.populate("employeeId userId", "name email uniqueID role designation department profileImage profileImg");
         } catch (_) {
           directSalary = await queryOrDoc;
         }
       } else if (queryOrDoc && typeof queryOrDoc.populate === "function" && !queryOrDoc._id && !queryOrDoc.employeeId) {
         try {
-          directSalary = await queryOrDoc.populate("employeeId userId", "name email uniqueID role designation department");
+          directSalary = await queryOrDoc.populate("employeeId userId", "name email uniqueID role designation department profileImage profileImg");
         } catch (_) {
           directSalary = await queryOrDoc;
         }
@@ -829,7 +829,7 @@ const getMonthlySalaryById = async (req, res) => {
     let salary = null;
     if (mongoose.Types.ObjectId.isValid(id)) {
       salary = await MonthlySalary.findById(id)
-        .populate("employeeId userId", "name email uniqueID role designation department panNumber joiningDate dateOfJoining bankAccountNumber ifscCode upiId bankDetails")
+        .populate("employeeId userId", "name email uniqueID role designation department profileImage profileImg panNumber joiningDate dateOfJoining bankAccountNumber ifscCode upiId bankDetails")
         .populate("approvedBy", "name email")
         .populate("paidBy", "name email");
     }
@@ -841,7 +841,7 @@ const getMonthlySalaryById = async (req, res) => {
       });
       if (resolved) {
         salary = await MonthlySalary.findById(resolved._id)
-          .populate("employeeId userId", "name email uniqueID role designation department panNumber joiningDate dateOfJoining bankAccountNumber ifscCode upiId bankDetails")
+          .populate("employeeId userId", "name email uniqueID role designation department profileImage profileImg panNumber joiningDate dateOfJoining bankAccountNumber ifscCode upiId bankDetails")
           .populate("approvedBy", "name email")
           .populate("paidBy", "name email");
       }
@@ -1283,7 +1283,7 @@ const approveMonthlySalary = async (req, res) => {
 
       await MonthlySalary.updateMany(filter, { $set: updateData });
       const approvedList = await MonthlySalary.find(filter)
-        .populate("employeeId userId", "name email uniqueID role designation department")
+        .populate("employeeId userId", "name email uniqueID role designation department profileImage profileImg")
         .populate("companyId", "name companyName")
         .populate("branchId", "branchName");
       await Promise.all(approvedList.map((record) => notifySalaryRecipient(record, "approved")));
@@ -1380,7 +1380,7 @@ const approveMonthlySalary = async (req, res) => {
     }
 
     const approvedSalary = await MonthlySalary.findById(salary._id)
-      .populate("employeeId userId", "name email uniqueID role designation department")
+      .populate("employeeId userId", "name email uniqueID role designation department profileImage profileImg")
       .populate("companyId", "name companyName")
       .populate("branchId", "branchName")
       .populate("approvedBy", "name email");
@@ -1482,7 +1482,7 @@ const payMonthlySalary = async (req, res) => {
     let paidSalary = null;
     try {
       paidSalary = await MonthlySalary.findById(salary._id)
-        .populate("employeeId userId", "name email uniqueID role designation department panNumber joiningDate dateOfJoining bankAccountNumber ifscCode upiId bankDetails")
+        .populate("employeeId userId", "name email uniqueID role designation department profileImage profileImg panNumber joiningDate dateOfJoining bankAccountNumber ifscCode upiId bankDetails")
         .populate("paidBy", "name email");
     } catch (_) {}
 

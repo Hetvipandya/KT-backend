@@ -137,6 +137,7 @@ describe("getAdminDailyReports", () => {
         password: "StrongPassword123",
         role: "employee",
         companyId,
+        profileImage: "https://example.com/company-employee.png",
       },
       {
         name: "Outside Employee",
@@ -171,5 +172,6 @@ describe("getAdminDailyReports", () => {
     expect(res.body.count).toBe(1);
     expect(res.body.data[0].todaysWork).toBe("Company report");
     expect(res.body.data[0].employeeId.name).toBe("Company Employee");
+    expect(res.body.data[0].employeeId.profileImage).toBe("https://example.com/company-employee.png");
   });
 });

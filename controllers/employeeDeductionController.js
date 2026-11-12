@@ -241,9 +241,9 @@ const createEmployeeDeduction = async (req, res) => {
     await employeeDeduction.save();
 
     const populatedDeduction = await EmployeeDeduction.findById(employeeDeduction._id)
-      .populate("employeeId userId", "name email uniqueID role designation department")
+      .populate("employeeId userId", "name email uniqueID role designation department profileImage profileImg")
       .populate("deductionMasterId", "name code category isLegallyPermissible legalReference calculationType")
-      .populate("teamLeadUser", "name email uniqueID role");
+      .populate("teamLeadUser", "name email uniqueID role profileImage profileImg");
 
     await logDeductionAudit(
       req,
@@ -344,9 +344,9 @@ const getEmployeeDeductions = async (req, res) => {
     }
 
     const deductions = await EmployeeDeduction.find(query)
-      .populate("employeeId userId", "name email uniqueID role designation department employeeID employeeCode")
+      .populate("employeeId userId", "name email uniqueID role designation department employeeID employeeCode profileImage profileImg")
       .populate("deductionMasterId", "name code category isLegallyPermissible legalReference calculationType defaultAmount")
-      .populate("teamLeadUser", "name email uniqueID role")
+      .populate("teamLeadUser", "name email uniqueID role profileImage profileImg")
       .populate("approvedBy", "name email")
       .populate("lockedBy", "name email")
       .sort({ year: -1, month: -1, createdAt: -1 });
@@ -394,9 +394,9 @@ const getMyDeductions = async (req, res) => {
     if (status) query.status = status;
 
     const deductions = await EmployeeDeduction.find(query)
-      .populate("employeeId userId", "name email uniqueID role designation department employeeID employeeCode")
+      .populate("employeeId userId", "name email uniqueID role designation department employeeID employeeCode profileImage profileImg")
       .populate("deductionMasterId", "name code category isLegallyPermissible legalReference")
-      .populate("teamLeadUser", "name email uniqueID role")
+      .populate("teamLeadUser", "name email uniqueID role profileImage profileImg")
       .populate("approvedBy", "name email")
       .sort({ year: -1, month: -1, createdAt: -1 });
 
@@ -426,18 +426,18 @@ const getEmployeeDeductionById = async (req, res) => {
     let deduction = null;
     if (mongoose.Types.ObjectId.isValid(id)) {
       deduction = await EmployeeDeduction.findById(id)
-        .populate("employeeId userId", "name email uniqueID role designation department")
+        .populate("employeeId userId", "name email uniqueID role designation department profileImage profileImg")
         .populate("deductionMasterId")
-        .populate("teamLeadUser", "name email uniqueID role")
+        .populate("teamLeadUser", "name email uniqueID role profileImage profileImg")
         .populate("approvedBy", "name email")
         .populate("approvalHistory.actionBy", "name email role");
     }
 
     if (!deduction) {
       deduction = await EmployeeDeduction.findOne({ deductionRecordId: id.toUpperCase() })
-        .populate("employeeId userId", "name email uniqueID role designation department")
+        .populate("employeeId userId", "name email uniqueID role designation department profileImage profileImg")
         .populate("deductionMasterId")
-        .populate("teamLeadUser", "name email uniqueID role")
+        .populate("teamLeadUser", "name email uniqueID role profileImage profileImg")
         .populate("approvedBy", "name email")
         .populate("approvalHistory.actionBy", "name email role");
     }
@@ -1052,7 +1052,7 @@ const getDeductionsReport = async (req, res) => {
     if (status) query.status = status;
 
     const deductions = await EmployeeDeduction.find(query)
-      .populate("employeeId userId", "name email uniqueID department designation")
+      .populate("employeeId userId", "name email uniqueID department designation profileImage profileImg")
       .populate("deductionMasterId", "name code category isLegallyPermissible")
       .populate("teamLeadUser", "name uniqueID");
 

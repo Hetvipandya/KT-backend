@@ -341,7 +341,7 @@ exports.getAllDailyReports = async (req, res) => {
     const reports = await DailyReport.find(filter)
       .populate({
         path: "employeeId",
-        select: "name role email firstName lastName customerName",
+        select: "name role email firstName lastName customerName profileImage profileImg",
       })
       .populate({
         path: "projectId",
@@ -402,7 +402,7 @@ exports.getAdminDailyReports = async (req, res) => {
     })
       .populate({
         path: "employeeId",
-        select: "name role email firstName lastName customerName",
+        select: "name role email firstName lastName customerName profileImage profileImg",
       })
       .populate({ path: "projectId", select: "projectName" })
       .populate({
@@ -563,7 +563,7 @@ exports.getTeamLeadDailyReports = async (req, res) => {
     })
       .populate({
         path: "employeeId",
-        select: "name role email firstName lastName",
+        select: "name role email firstName lastName profileImage profileImg",
       })
       .populate({
         path: "projectId",

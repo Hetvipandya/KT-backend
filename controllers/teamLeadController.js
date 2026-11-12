@@ -613,8 +613,8 @@ exports.createOrUpdateTeam = async (req, res) => {
       // Populate for response
       const populatedTeam = await Team.findById(team._id)
         .populate('teamLeadUser', 'name email role uniqueID')
-        .populate('teamLeadEmployee', 'firstName lastName email employeeID employeeCode')
-        .populate('employees', 'firstName lastName email employeeID designation')
+        .populate('teamLeadEmployee', 'firstName lastName email employeeID employeeCode profileImage profileImg')
+        .populate('employees', 'firstName lastName email employeeID designation profileImage profileImg')
         .populate('interns', 'name email role uniqueID');
 
       return res.status(200).json({
@@ -651,8 +651,8 @@ exports.createOrUpdateTeam = async (req, res) => {
     // Populate for response
     const populatedTeam = await Team.findById(newTeam._id)
       .populate('teamLeadUser', 'name email role uniqueID')
-      .populate('teamLeadEmployee', 'firstName lastName email employeeID employeeCode')
-      .populate('employees', 'firstName lastName email employeeID designation')
+      .populate('teamLeadEmployee', 'firstName lastName email employeeID employeeCode profileImage profileImg')
+      .populate('employees', 'firstName lastName email employeeID designation profileImage profileImg')
       .populate('interns', 'name email role uniqueID');
 
     return res.status(201).json({
@@ -1054,7 +1054,7 @@ exports.getTeamDeductions = async (req, res) => {
     if (status) query.status = status;
 
     const deductions = await EmployeeDeduction.find(query)
-      .populate("employeeId userId", "name email uniqueID department")
+      .populate("employeeId userId", "name email uniqueID department profileImage profileImg")
       .populate("deductionMasterId", "name code category isLegallyPermissible")
       .sort({ createdAt: -1 });
 

@@ -677,7 +677,7 @@ exports.getAllPerformance = async (req, res) => {
     const performances = await EmployeePerformance.find(query)
       .populate(
         "employeeID",
-        "name email department firstName lastName"
+        "name email department firstName lastName profileImage profileImg"
       )
       .populate(
         "submittedBy",
@@ -771,7 +771,7 @@ exports.getPerformanceById = async (req, res) => {
     })
       .populate(
         "employeeID",
-        "name email department designation firstName lastName employeeID employeeCode"
+        "name email department designation firstName lastName employeeID employeeCode profileImage profileImg"
       )
       .populate(
         "submittedBy",
@@ -788,7 +788,7 @@ exports.getPerformanceById = async (req, res) => {
           performance = await EmployeePerformance.findById(employeeId)
             .populate(
               "employeeID",
-              "name email department designation firstName lastName employeeID employeeCode"
+              "name email department designation firstName lastName employeeID employeeCode profileImage profileImg"
             )
             .populate(
               "submittedBy",
@@ -822,7 +822,7 @@ exports.getPerformanceById = async (req, res) => {
         })
           .populate(
             "employeeID",
-            "name email department designation firstName lastName employeeID employeeCode"
+            "name email department designation firstName lastName employeeID employeeCode profileImage profileImg"
           )
           .populate(
             "submittedBy",
@@ -1005,7 +1005,7 @@ exports.getPerformanceByEmployeeId = async (req, res) => {
     const performances = await EmployeePerformance.find(query)
       .populate(
         "employeeID",
-        "name email department designation firstName lastName employeeID employeeCode"
+        "name email department designation firstName lastName employeeID employeeCode profileImage profileImg"
       )
       .populate(
         "submittedBy",
@@ -1227,7 +1227,7 @@ exports.getPerformanceDropdown = async (req, res) => {
     // ==========================================
     const employees = await Employee.find()
       .select(
-        "_id name email department firstName lastName"
+        "_id name email department firstName lastName profileImage profileImg"
       )
       .lean();
 
@@ -1237,7 +1237,7 @@ exports.getPerformanceDropdown = async (req, res) => {
     const interns = await User.find({
       role: "intern",
     })
-      .select("_id name email")
+      .select("_id name email profileImage profileImg")
       .lean();
 
     // ==========================================
@@ -1248,7 +1248,7 @@ exports.getPerformanceDropdown = async (req, res) => {
         $in: ["teamlead", "team lead"],
       },
     })
-      .select("_id name email role department")
+      .select("_id name email role department profileImage profileImg")
       .lean();
 
     // ==========================================
@@ -1258,7 +1258,7 @@ exports.getPerformanceDropdown = async (req, res) => {
       isTeamLead: true,
     })
       .select(
-        "_id firstName lastName email department"
+        "_id firstName lastName email department profileImage profileImg"
       )
       .lean();
 

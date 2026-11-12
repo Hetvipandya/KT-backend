@@ -45,10 +45,10 @@ const isUserTeamLeadForProject = async (userId, projectId) => {
  */
 const getAllProjectTeamMembers = async (projectId) => { 
   const project = await Project.findById(projectId)
-    .populate('teamLeadUser', 'name email')
-    .populate('teamLeadEmployee', 'firstName lastName email')
-    .populate('employees', 'name firstName middleName lastName email employeeID userID')
-    .populate('interns', 'name email');
+    .populate('teamLeadUser', 'name email profileImage profileImg')
+    .populate('teamLeadEmployee', 'firstName lastName email profileImage profileImg')
+    .populate('employees', 'name firstName middleName lastName email employeeID userID profileImage profileImg')
+    .populate('interns', 'name email profileImage profileImg');
   
   if (!project) return { teamLead: null, employees: [], interns: [] };
   
@@ -478,10 +478,10 @@ exports.createProject = async (req, res) => {
     });
 
     const populatedProject = await Project.findById(project._id)
-      .populate("teamLeadUser", "name email")
-      .populate("teamLeadEmployee", "firstName lastName email")
-      .populate("employees", "name firstName middleName lastName email employeeID userID")
-      .populate("interns", "name email");
+      .populate("teamLeadUser", "name email profileImage profileImg")
+      .populate("teamLeadEmployee", "firstName lastName email profileImage profileImg")
+      .populate("employees", "name firstName middleName lastName email employeeID userID profileImage profileImg")
+      .populate("interns", "name email profileImage profileImg");
 
     res.status(201).json({
       success: true,
@@ -501,10 +501,10 @@ exports.createProject = async (req, res) => {
 exports.getAllProjects = async (req, res) => {
   try {
     const projects = await Project.find()
-      .populate("teamLeadUser", "name email employeeID")
-      .populate("teamLeadEmployee", "name email employeeID")
-      .populate("employees", "name firstName middleName lastName email employeeID userID")
-      .populate("interns", "name email");
+      .populate("teamLeadUser", "name email employeeID profileImage profileImg")
+      .populate("teamLeadEmployee", "name email employeeID profileImage profileImg")
+      .populate("employees", "name firstName middleName lastName email employeeID userID profileImage profileImg")
+      .populate("interns", "name email profileImage profileImg");
 
     // Process each project to resolve team lead name if not directly populated
     const processedProjects = await Promise.all(projects.map(async (project) => {
@@ -575,10 +575,10 @@ exports.getAllProjects = async (req, res) => {
 exports.getSingleProject = async (req, res) => {
   try {
     const project = await Project.findById(req.params.id)
-      .populate("teamLeadUser", "name email")
-      .populate("teamLeadEmployee", "firstName lastName email")
-      .populate("employees", "name firstName middleName lastName email employeeID userID")
-      .populate("interns", "name email");
+      .populate("teamLeadUser", "name email profileImage profileImg")
+      .populate("teamLeadEmployee", "firstName lastName email profileImage profileImg")
+      .populate("employees", "name firstName middleName lastName email employeeID userID profileImage profileImg")
+      .populate("interns", "name email profileImage profileImg");
 
     if (!project) {
       return res.status(404).json({
@@ -604,10 +604,10 @@ exports.getProjectMembers = async (req, res) => {
   try {
     const { projectId } = req.params;
     const project = await Project.findById(projectId)
-      .populate("teamLeadUser", "name email role")
-      .populate("teamLeadEmployee", "firstName lastName email employeeID")
-      .populate("employees", "name firstName middleName lastName email employeeID userID")
-      .populate("interns", "name email role");
+      .populate("teamLeadUser", "name email role profileImage profileImg")
+      .populate("teamLeadEmployee", "firstName lastName email employeeID profileImage profileImg")
+      .populate("employees", "name firstName middleName lastName email employeeID userID profileImage profileImg")
+      .populate("interns", "name email role profileImage profileImg");
 
     if (!project) {
       return res.status(404).json({
@@ -724,10 +724,10 @@ exports.assignTeamLead = async (req, res) => {
       updateFields,
       { new: true }
     )
-      .populate("teamLeadUser", "name email role")
-      .populate("teamLeadEmployee", "firstName lastName email employeeID")
-      .populate("employees", "name firstName middleName lastName email employeeID userID")
-      .populate("interns", "name email");
+      .populate("teamLeadUser", "name email role profileImage profileImg")
+      .populate("teamLeadEmployee", "firstName lastName email employeeID profileImage profileImg")
+      .populate("employees", "name firstName middleName lastName email employeeID userID profileImage profileImg")
+      .populate("interns", "name email profileImage profileImg");
 
     if (project) {
       await notifyNewAssignments({
@@ -783,10 +783,10 @@ exports.assignEmployees = async (req, res) => {
         runValidators: true,
       }
     )
-      .populate("employees", "name firstName middleName lastName email employeeID userID")
-      .populate("interns", "name email")
-      .populate("teamLeadUser", "name email")
-      .populate("teamLeadEmployee", "firstName lastName name email");
+      .populate("employees", "name firstName middleName lastName email employeeID userID profileImage profileImg")
+      .populate("interns", "name email profileImage profileImg")
+      .populate("teamLeadUser", "name email profileImage profileImg")
+      .populate("teamLeadEmployee", "firstName lastName name email profileImage profileImg");
 
     if (!project) {
       return res.status(404).json({
@@ -837,10 +837,10 @@ exports.assignInterns = async (req, res) => {
         runValidators: true,
       }
     )
-      .populate("employees", "name firstName middleName lastName email employeeID userID")
-      .populate("interns", "name email")
-      .populate("teamLeadUser", "name email")
-      .populate("teamLeadEmployee", "firstName lastName name email");
+      .populate("employees", "name firstName middleName lastName email employeeID userID profileImage profileImg")
+      .populate("interns", "name email profileImage profileImg")
+      .populate("teamLeadUser", "name email profileImage profileImg")
+      .populate("teamLeadEmployee", "firstName lastName name email profileImage profileImg");
 
     if (!project) {
       return res.status(404).json({
@@ -941,10 +941,10 @@ exports.updateProject = async (req, res) => {
         runValidators: true,
       }
     )
-      .populate("teamLeadUser", "name email")
-      .populate("teamLeadEmployee", "firstName lastName email employeeID")
-      .populate("employees", "name firstName middleName lastName email employeeID userID")
-      .populate("interns", "name email");
+      .populate("teamLeadUser", "name email profileImage profileImg")
+      .populate("teamLeadEmployee", "firstName lastName email employeeID profileImage profileImg")
+      .populate("employees", "name firstName middleName lastName email employeeID userID profileImage profileImg")
+      .populate("interns", "name email profileImage profileImg");
 
     if (!project) {
       return res.status(404).json({
