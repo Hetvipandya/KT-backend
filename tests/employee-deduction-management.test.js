@@ -333,6 +333,26 @@ describe("Centralized Employee Deduction Management Module Test Suite", () => {
       expect(res.body.data.defaultAmount).toBe(2500);
       expect(res.body.data.description).toContain("Updated Loan Repayment");
     });
+
+    test("1.6 Team Lead can read Deduction Masters but cannot create them", async () => {
+      await DeductionMaster.create({
+        name: "Team Lead Readable Type",
+        code: "TL_READ_ONLY",
+        category: "OTHER",
+        isLegallyPermissible: true,
+        companyId,
+      });
+      currentAuthUser = teamLeadUser;
+
+      const getRes = await request(app).get("/api/deduction-masters");
+      expect(getRes.status).toBe(200);
+      expect(getRes.body.count).toBeGreaterThan(0);
+
+      const postRes = await request(app)
+        .post("/api/deduction-masters")
+        .send({ name: "Team Lead Master", code: "TL_MASTER", isLegallyPermissible: true });
+      expect(postRes.status).toBe(403);
+    });
   });
 
   // =========================================================================

@@ -13,15 +13,15 @@ const {
 
 router.use(protect);
 
-// Read routes: Admin, HR, Super Admin, CA, Accountant
+// Read routes: Admin, HR, Super Admin, CA, Accountant, Team Lead
 router.get(
   "/",
-  authorizeRoles("admin", "hr", "super admin", "ca", "accountant"),
+  authorizeRoles("admin", "hr", "super admin", "ca", "accountant", "team lead"),
   getDeductionMasters
 );
 router.get(
   "/:id",
-  authorizeRoles("admin", "hr", "super admin", "ca", "accountant"),
+  authorizeRoles("admin", "hr", "super admin", "ca", "accountant", "team lead"),
   getDeductionMasterById
 );
 
