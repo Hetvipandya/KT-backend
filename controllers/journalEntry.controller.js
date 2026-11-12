@@ -15,7 +15,8 @@ const createJournalEntry = async (req, res, next) => {
   try {
     const payload = {
       ...req.body,
-      branchId: req.branchId || req.body.branchId || req.user?.branchId || null
+      branchId: req.branchId || req.body.branchId || req.user?.branchId || null,
+      entrySource: 'MANUAL'
     };
     const entry = await journalEntryService.createJournalEntry(payload, req.user._id);
     return res.status(201).json({ success: true, data: entry });
@@ -57,6 +58,13 @@ const reverseJournalEntry = async (req, res, next) => {
     if (!entry) return res.status(404).json({ success: false, message: 'Journal entry not found', errorCode: 'JOURNAL_ENTRY_NOT_FOUND' });
     if (!await canAccessCompany(req.user, entry.companyId)) {
       return res.status(403).json({ success: false, message: 'Access denied to this journal entry', errorCode: 'FORBIDDEN' });
+    }
+    if (entry.entrySource !== 'MANUAL') {
+      return res.status(409).json({
+        success: false,
+        message: 'Automatic journal entries must be reversed from their originating module.',
+        errorCode: 'AUTOMATIC_JOURNAL_IMMUTABLE'
+      });
     }
     const result = await journalEntryService.reverseJournalEntry(req.params.id, req.user._id);
     return res.status(200).json({ success: true, data: result });

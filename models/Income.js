@@ -15,6 +15,11 @@ const incomeSchema =
         default: null,
         index: true,
       },
+      financialYearId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "FinancialYear",
+        default: null,
+      },
       incomeType: {
         type: String,
         enum: [
@@ -50,6 +55,16 @@ const incomeSchema =
         ],
         required: true,
       },
+      bankAccountId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "BankAccount",
+        default: null,
+      },
+      journalEntryId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "JournalEntry",
+        default: null,
+      },
 
       description: {
         type: String,
@@ -61,6 +76,11 @@ const incomeSchema =
         required: true,
       },
       createdBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+        default: null,
+      },
+      updatedBy: {
         type: mongoose.Schema.Types.ObjectId,
         ref: "User",
         default: null,

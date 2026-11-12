@@ -106,6 +106,7 @@ const reverseJournalEntry = async (id, userId) => {
     entryDate: original.entryDate,
     reference: original.reference ? `REV-${original.reference}` : `REV-${original._id}`,
     narration: `Reversal of journal entry ${original._id}${original.narration ? `: ${original.narration}` : ''}`,
+    entrySource: original.entrySource || 'AUTOMATIC',
     lines: original.lines.map((line) => ({
       accountId: line.accountId,
       debit: line.credit,

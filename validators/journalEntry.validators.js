@@ -16,6 +16,7 @@ const journalLineSchema = z.object({
 
 const createJournalEntrySchema = z.object({
   companyId: z.string().min(1, 'companyId is required'),
+  branchId: z.string().min(1).optional(),
   financialYearId: z.string().min(1, 'financialYearId is required'),
   entryDate: z.string().refine((value) => !Number.isNaN(Date.parse(value)), 'entryDate must be a valid date'),
   reference: z.string().trim().max(255).optional(),

@@ -73,24 +73,44 @@ const validateReferences = async (data) => {
   if (paymentDate < financialYear.startDate || paymentDate > financialYear.endDate) throw fail('paymentDate must fall within the selected financial year', 400, 'PAYMENT_DATE_OUTSIDE_FINANCIAL_YEAR');
   const customer = await Customer.findOne({ _id: data.customerId, companyId: data.companyId, isActive: true });
   if (!customer) throw fail('Customer not found for this company', 404, 'CUSTOMER_NOT_FOUND');
+  const accountTypes = {
+    CASH: ['Cash', 'Wallet'],
+    BANK_TRANSFER: ['Savings', 'Current'],
+    CHEQUE: ['Savings', 'Current'],
+    UPI: ['UPI'],
+    OTHER: ['Cash', 'Wallet', 'Savings', 'Current', 'UPI']
+  }[data.mode];
+  if (!accountTypes) throw fail('Select a valid payment mode', 400, 'INVALID_PAYMENT_MODE');
+  const branchAccountScope = data.branchId
+    ? { $or: [{ branchId: data.branchId }, { branchId: null }] }
+    : {};
   if (data.bankAccountId) {
-    const account = await BankAccount.findOne({ _id: data.bankAccountId, companyId: data.companyId, isActive: true });
-    if (!account) throw fail('Bank account not found for this company', 404, 'BANK_ACCOUNT_NOT_FOUND');
-    return { financialYear, customer, bankAccount: account };
-  } else {
-    // Auto-resolve cash or active bank account
     const account = await BankAccount.findOne({
+      _id: data.bankAccountId,
       companyId: data.companyId,
-      ...(data.mode === 'CASH' ? { accountType: 'Cash' } : {}),
-      isActive: true
-    }) || await BankAccount.findOne({ companyId: data.companyId, isActive: true });
-
-    if (account) {
-      data.bankAccountId = account._id;
-      return { financialYear, customer, bankAccount: account };
-    }
+      isActive: true,
+      accountType: { $in: accountTypes },
+      ...branchAccountScope
+    });
+    if (!account) throw fail('Select an active payment account compatible with this payment mode', 400, 'INVALID_PAYMENT_ACCOUNT');
+    return { financialYear, customer, bankAccount: account };
   }
-  return { financialYear, customer, bankAccount: null };
+  const account = await BankAccount.findOne({
+    companyId: data.companyId,
+    isActive: true,
+    accountType: { $in: accountTypes },
+    ...branchAccountScope
+  }) || (data.branchId ? await BankAccount.findOne({
+    companyId: data.companyId,
+    branchId: null,
+    isActive: true,
+    accountType: { $in: accountTypes }
+  }) : null);
+  if (!account) {
+    throw fail('Create an active payment account before recording this receipt', 400, 'PAYMENT_ACCOUNT_REQUIRED');
+  }
+  data.bankAccountId = account._id;
+  return { financialYear, customer, bankAccount: account };
 };
 
 const validateInvoices = async (data) => {
@@ -113,8 +133,6 @@ const nextNumber = async (companyId, financialYearId) => {
 };
 
 const postPaymentJournalEntry = async (payment, customer, bankAccount, userId) => {
-  // TODO: CASH receipts without bankAccountId need a configured default cash account before they can be posted.
-  if (!bankAccount) return null;
   // Dr Bank/Cash account; Cr Customer Accounts Receivable. Strict mode has no advance surplus.
   return journalService.createJournalEntry({
     companyId: id(payment.companyId), financialYearId: id(payment.financialYearId), entryDate: payment.paymentDate,
@@ -159,7 +177,8 @@ const createPayment = async (data, userId) => {
         updatedBy: userId
       });
       const journalEntry = await postPaymentJournalEntry(payment, customer, bankAccount, userId);
-      if (journalEntry) { payment.journalEntryId = journalEntry._id; await payment.save(); }
+      payment.journalEntryId = journalEntry._id;
+      await payment.save();
       await applyAllocations(payment, data.allocations, invoices);
       createNotification({
         userId,

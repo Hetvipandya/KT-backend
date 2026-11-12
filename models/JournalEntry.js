@@ -33,6 +33,12 @@ const journalEntrySchema = new mongoose.Schema({
   entryDate: { type: Date, required: true, index: true },
   reference: { type: String, trim: true, default: '' },
   narration: { type: String, trim: true, default: '' },
+  entrySource: {
+    type: String,
+    enum: ['MANUAL', 'AUTOMATIC'],
+    default: 'AUTOMATIC',
+    index: true
+  },
   lines: {
     type: [journalLineSchema],
     validate: {
