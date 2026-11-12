@@ -100,6 +100,7 @@
 | `POST/GET/PUT` | `/api/gst/*` | FIN | GSTR-1, GSTR-3B tax computation (`/api/gst/returns-summary`, alias: `/api/returns-summary`) |
 | `POST/GET/PUT` | `/api/gst/return/*` | FIN | GST filing logs |
 | `POST/GET/PUT` | `/api/asset/*` | FIN | Fixed assets register & depreciation |
+| `POST/GET` | `/api/loan/*` | FIN | Loan register, lender details, disbursements, and principal/interest repayments with journal posting |
 | `POST/GET/PUT` | `/api/salary/*` | FIN | Accounting salary expense bookings |
 | `POST/GET/PUT` | `/api/approval/*` | FIN | Multi-tier approval rules and task actions |
 | `POST/GET/PUT` | `/api/ca-panel/*` | FIN | Chartered accountant auditor access portal |

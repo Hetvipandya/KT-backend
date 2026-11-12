@@ -181,6 +181,7 @@ const finAdminDashboardRoutes = require('./routes/adminDashboard.routes');
 const finNotificationRoutes = require('./routes/notification.routes');
 const finCreditNoteRoutes = require('./routes/creditNote.routes');
 const finDebitNoteRoutes = require('./routes/debitNote.routes');
+const finLoanRoutes = require('./routes/loan.routes');
 const finApprovalRoutes = require('./routes/approval.routes');
 const authenticate = require('./middleware/authenticate');
 const checkCompanyAccess = require('./middleware/companyAccess');
@@ -292,6 +293,7 @@ app.use('/api/asset', finAssetRoutes);
 app.use('/api/admin/dashboard', finAdminDashboardRoutes);
 app.use('/api/credit-note', authenticate, finCreditNoteRoutes);
 app.use('/api/debit-note', authenticate, finDebitNoteRoutes);
+app.use('/api/loan', finLoanRoutes);
 app.use('/api/approval', finApprovalRoutes);
 
 // Notifications (KT & FIN)
