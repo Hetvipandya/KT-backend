@@ -2,14 +2,17 @@ const express = require("express");
 const router = express.Router();
 const { protect } = require("../middleware/authMiddleware");
 const { authorizeRoles } = require("../middleware/roleMiddleware");
+const companyAccess = require("../middleware/companyAccess");
  
 const {
   generateMonthlySalary,
   getMonthlySalaries,
+  getFinancePayrollRegister,
   getMonthlySalaryById,
   updateMonthlySalary,
   approveMonthlySalary, 
   payMonthlySalary,
+  payFinanceMonthlySalary,
   cancelMonthlySalary,
   previewMonthlySalary,
 } = require("../controllers/monthlySalaryController");
@@ -20,6 +23,12 @@ router.use(protect);
 // View Monthly Salaries (CA, Accountant, Admin, HR, Super Admin, Employee)
 router.get("/", authorizeRoles("ca", "accountant", "admin", "hr", "super admin", "employee"), getMonthlySalaries);
 router.get("/all", authorizeRoles("ca", "accountant", "admin", "hr", "super admin", "employee"), getMonthlySalaries);
+router.get(
+  "/finance-register",
+  authorizeRoles("ca", "accountant", "admin", "hr", "super admin"),
+  companyAccess,
+  getFinancePayrollRegister
+);
 router.get("/:id", authorizeRoles("ca", "accountant", "admin", "hr", "super admin", "employee"), getMonthlySalaryById);
 
 router.get("/employee/:id", authorizeRoles("ca", "accountant", "admin", "hr", "super admin", "employee"), getMonthlySalaryById);
@@ -37,6 +46,12 @@ router.post("/employee/:id/approve", authorizeRoles("ca", "accountant", "admin",
 router.put("/employee/:id/approve", authorizeRoles("ca", "accountant", "admin", "hr", "super admin"), approveMonthlySalary);
 router.post("/approve", authorizeRoles("ca", "accountant", "admin", "hr", "super admin"), approveMonthlySalary);
 router.put("/approve", authorizeRoles("ca", "accountant", "admin", "hr", "super admin"), approveMonthlySalary);
+router.put(
+  "/finance-register/pay",
+  authorizeRoles("ca", "accountant", "admin", "hr", "super admin"),
+  companyAccess,
+  payFinanceMonthlySalary
+);
 router.post("/:id/pay", authorizeRoles("ca", "accountant", "admin", "hr", "super admin"), payMonthlySalary);
 router.put("/:id/pay", authorizeRoles("ca", "accountant", "admin", "hr", "super admin"), payMonthlySalary);
 router.post("/employee/:id/pay", authorizeRoles("ca", "accountant", "admin", "hr", "super admin"), payMonthlySalary);

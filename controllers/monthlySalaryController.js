@@ -472,6 +472,74 @@ const getMonthlySalaries = async (req, res) => {
   }
 };
 
+// Finance-only payroll register with employee bank details for manual payouts.
+const getFinancePayrollRegister = async (req, res) => {
+  try {
+    const { companyId, branchId, month, year } = req.query;
+    const monthNumber = Number(month);
+    const yearNumber = Number(year);
+
+    if (!companyId || !branchId || !month || !year) {
+      return res.status(400).json({
+        success: false,
+        message: "companyId, branchId, month, and year are required",
+      });
+    }
+    if (
+      !mongoose.Types.ObjectId.isValid(companyId) ||
+      !mongoose.Types.ObjectId.isValid(branchId) ||
+      !Number.isInteger(monthNumber) ||
+      monthNumber < 1 ||
+      monthNumber > 12 ||
+      !Number.isInteger(yearNumber) ||
+      yearNumber < 2000 ||
+      yearNumber > 9999
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "A valid company, branch, month, and year are required",
+      });
+    }
+
+    const employeeFields = [
+      "name",
+      "email",
+      "uniqueID",
+      "role",
+      "designation",
+      "department",
+      "bankName",
+      "bankBranch",
+      "accountHolderName",
+      "bankAccountNumber",
+      "ifscCode",
+      "upiId",
+    ].join(" ");
+    const salaries = await MonthlySalary.find({
+      companyId,
+      branchId,
+      month: monthNumber,
+      year: yearNumber,
+    })
+      .populate("employeeId", employeeFields)
+      .populate("userId", employeeFields)
+      .sort({ createdAt: -1 });
+
+    return res.status(200).json({
+      success: true,
+      count: salaries.length,
+      data: salaries,
+    });
+  } catch (error) {
+    console.error("Get Finance Payroll Register Error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch the Finance payroll register",
+      error: error.message,
+    });
+  }
+};
+
 // =====================================================
 // HELPER: RESOLVE SALARY RECORD BY SALARY ID OR EMPLOYEE ID
 // =====================================================
@@ -1501,6 +1569,75 @@ const payMonthlySalary = async (req, res) => {
   }
 };
 
+const payFinanceMonthlySalary = async (req, res) => {
+  try {
+    const { salaryId, companyId, branchId, transferConfirmed, paymentMode, remarks } = req.body || {};
+    if (
+      !salaryId ||
+      !mongoose.Types.ObjectId.isValid(salaryId) ||
+      !companyId ||
+      !branchId ||
+      transferConfirmed !== true ||
+      paymentMode !== "BANK_TRANSFER"
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Select a salary, confirm the bank transfer, and provide its company and branch",
+      });
+    }
+
+    const salary = await MonthlySalary.findOne({ _id: salaryId, companyId, branchId });
+    if (!salary) {
+      return res.status(404).json({
+        success: false,
+        message: "Monthly salary record not found in the selected company and branch",
+      });
+    }
+    if (salary.status === "Paid") {
+      return res.status(409).json({
+        success: false,
+        message: "This monthly salary has already been paid",
+      });
+    }
+    if (!["generated", "approved", "processed", "unpaid"].includes(String(salary.status || "").toLowerCase())) {
+      return res.status(409).json({
+        success: false,
+        message: `Salary in ${salary.status || "unknown"} status cannot be paid`,
+      });
+    }
+    const netSalary = Number(salary.netSalary ?? salary.netPayable);
+    if (!Number.isFinite(netSalary) || netSalary <= 0) {
+      return res.status(409).json({
+        success: false,
+        message: "A positive net salary is required before recording payment",
+      });
+    }
+
+    const recipient = await resolveSalaryRecipient(salary);
+    if (!recipient || !recipient.bankAccountNumber || !recipient.ifscCode) {
+      return res.status(400).json({
+        success: false,
+        message: "Complete the employee's bank account number and IFSC code before recording payment",
+      });
+    }
+
+    req.body = {
+      ...req.body,
+      paymentMode: "BANK_TRANSFER",
+      paidAt: req.body.paidAt || new Date().toISOString(),
+      remarks: String(remarks || "").trim(),
+    };
+    return payMonthlySalary(req, res);
+  } catch (error) {
+    console.error("Pay Finance Monthly Salary Error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to record the salary bank transfer",
+      error: error.message,
+    });
+  }
+};
+
 // =====================================================
 // CANCEL MONTHLY SALARY
 // POST /api/salaries/:id/cancel
@@ -1561,10 +1698,12 @@ const cancelMonthlySalary = async (req, res) => {
 module.exports = {
   generateMonthlySalary,
   getMonthlySalaries,
+  getFinancePayrollRegister,
   getMonthlySalaryById,
   updateMonthlySalary,
   approveMonthlySalary,
   payMonthlySalary,
+  payFinanceMonthlySalary,
   cancelMonthlySalary,
   resolveSalaryRecord,
   previewMonthlySalary: require("./employeeDeductionController").previewPayrollWithDeductions,
