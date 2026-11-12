@@ -28,33 +28,47 @@ const makeResponse = () => ({
 describe("admin notification feed announcement deduplication", () => {
   afterEach(() => jest.restoreAllMocks());
 
-  test("shows a broadcast announcement once when it has one record per recipient", async () => {
+  test("admin feed includes only notification records addressed to the signed-in admin", async () => {
     const announcementId = "64f000000000000000000001";
-    const notifications = Array.from({ length: 11 }, (_, index) => ({
-      _id: `notification-${index}`,
-      userId: { name: `Employee ${index}`, email: `employee${index}@example.com` },
+    const adminId = "64f000000000000000000099";
+    const notifications = [
+      {
+      _id: "admin-notification",
+      userId: { _id: adminId, name: "Admin", email: "admin@example.com" },
       title: "Company update",
       message: "Please review the announcement",
       type: "ANNOUNCEMENT",
-      isRead: index !== 10,
-      read: index !== 10,
+      isRead: false,
+      read: false,
       meta: { announcementId },
       createdAt: new Date("2026-10-26T09:40:47.280Z"),
-    }));
+      },
+      {
+        _id: "employee-notification",
+        userId: { _id: "64f000000000000000000010", name: "Employee", email: "employee@example.com" },
+        title: "Private update",
+        message: "For another user",
+        type: "SYSTEM",
+        isRead: false,
+        read: false,
+        createdAt: new Date("2026-10-26T09:39:47.280Z"),
+      },
+    ];
 
-    jest.spyOn(Notification, "find").mockReturnValue(queryResult(notifications));
+    const find = jest.spyOn(Notification, "find").mockReturnValue(queryResult(notifications));
     jest.spyOn(Leave, "find").mockReturnValue(queryResult([]));
     jest.spyOn(Attendance, "find").mockReturnValue(queryResult([]));
     jest.spyOn(AdjustmentRequest, "find").mockReturnValue(queryResult([]));
     jest.spyOn(Announcement, "find").mockReturnValue(queryResult([]));
 
     const res = makeResponse();
-    await notificationController.getAdminNotifications({}, res);
+    await notificationController.getAdminNotifications({ user: { _id: adminId } }, res);
 
+    expect(find).toHaveBeenCalledWith({ userId: adminId });
     const announcementItems = res.body.data.filter((item) => item.type === "ANNOUNCEMENT");
     expect(announcementItems).toHaveLength(1);
-    expect(announcementItems[0].recipientCount).toBe(11);
-    expect(announcementItems[0].notificationIds).toHaveLength(11);
+    expect(announcementItems[0].recipientCount).toBeUndefined();
+    expect(res.body.data.some((item) => item.title === "Private update")).toBe(false);
     expect(announcementItems[0].isRead).toBe(false);
     expect(res.body.unreadCount).toBe(1);
   });

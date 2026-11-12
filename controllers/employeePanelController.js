@@ -1441,18 +1441,10 @@ exports.getEmployeeNotifications = async (req, res) => {
   try {
     const userId = req.user._id;
 
-    const notifications = await Notification.find({
-      $or: [{ userId }, { userId: null }],
-    }).sort({ createdAt: -1 });
-
-    const userRole = String(req.user.role || "").toLowerCase().replace(/[\s_-]+/g, "");
+    const notifications = await Notification.find({ userId }).sort({ createdAt: -1 });
     const visibleNotifications = notifications.filter((notification) => {
-      if (notification.userId) return true;
-      if (notification.type !== "ANNOUNCEMENT") return true;
-
-      const meta = notification.meta || notification.metaData || {};
-      const targetRole = String(meta.targetRole || "ALL").toLowerCase().replace(/[\s_-]+/g, "");
-      return targetRole === "all" || targetRole === userRole;
+      const notificationUserId = notification.userId?._id || notification.userId;
+      return String(notificationUserId || "") === String(userId);
     });
     const unreadCount = visibleNotifications.filter((n) => !n.isRead).length;
 

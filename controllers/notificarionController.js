@@ -148,11 +148,14 @@ exports.createNotification = async (req, res) => {
 exports.getAdminNotifications = async (req, res) => {
   try {
     // 1. Fetch DB notifications
-    const dbNotifications = await Notification.find()
+    const dbNotifications = (await Notification.find({ userId: req.user._id })
       .populate("userId", "name email role")
       .sort({ createdAt: -1 })
       .limit(50)
-      .lean();
+      .lean()).filter((notification) => {
+        const notificationUserId = notification.userId?._id || notification.userId;
+        return String(notificationUserId || "") === String(req.user._id);
+      });
 
     // 2. Fetch pending leave requests
     const pendingLeaves = await Leave.find({
@@ -515,29 +518,10 @@ exports.getUserNotifications = async (req, res) => {
     if (req.params.userId !== userId) {
       return res.status(403).json({ success: false, message: "You can only view your own notifications" });
     }
-    const user = await User.findById(userId).select("role");
-
-    const notifications = await Notification.find({
-      $or: [
-        { userId },
-        { userId: null, type: "ANNOUNCEMENT" },
-      ],
-    }).sort({ createdAt: -1 });
-
-    const normalizedRole = String(user?.role || "").toLowerCase().replace(/[\s_-]+/g, "");
-    const seenAnnouncements = new Set();
+    const notifications = await Notification.find({ userId: req.user._id }).sort({ createdAt: -1 });
     const visibleNotifications = notifications.filter((notification) => {
-      if (notification.type !== "ANNOUNCEMENT") return true;
-      const meta = notification.meta || notification.metaData || {};
-      const announcementId = meta.announcementId || notification._id;
-      if (seenAnnouncements.has(String(announcementId))) return false;
-      seenAnnouncements.add(String(announcementId));
-
-      if (notification.userId) return true;
-
-      const targetRole = String(meta.targetRole || "ALL").toLowerCase().replace(/[\s_-]+/g, "");
-      if (targetRole !== "all" && targetRole !== normalizedRole) return false;
-      return true;
+      const notificationUserId = notification.userId?._id || notification.userId;
+      return String(notificationUserId || "") === userId;
     });
 
     return res.status(200).json({

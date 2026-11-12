@@ -132,9 +132,15 @@ test('user notification list rejects a client-selected different user ID', async
   expect(res.body.success).toBe(false);
 });
 
-test('employee notification list scopes records to the user and filters role-targeted broadcasts', async () => {
+test('employee notification list returns only records owned by the authenticated user', async () => {
   const user = { _id: new mongoose.Types.ObjectId(), role: 'employee' };
   const ownNotification = { _id: 'own', userId: user._id, type: 'LEAVE', isRead: false };
+  const anotherUsersNotification = {
+    _id: 'another-user',
+    userId: new mongoose.Types.ObjectId(),
+    type: 'LEAVE',
+    isRead: false,
+  };
   const employeeAnnouncement = {
     _id: 'employee-announcement',
     userId: null,
@@ -151,7 +157,13 @@ test('employee notification list scopes records to the user and filters role-tar
   };
   const systemNotification = { _id: 'system', userId: null, type: 'SYSTEM', isRead: false };
   const find = jest.spyOn(Notification, 'find').mockReturnValue({
-    sort: async () => [ownNotification, employeeAnnouncement, adminAnnouncement, systemNotification],
+    sort: async () => [
+      ownNotification,
+      anotherUsersNotification,
+      employeeAnnouncement,
+      adminAnnouncement,
+      systemNotification,
+    ],
   });
   const res = {
     statusCode: null,
@@ -161,13 +173,9 @@ test('employee notification list scopes records to the user and filters role-tar
 
   await getEmployeeNotifications({ user }, res);
 
-  expect(find).toHaveBeenCalledWith({ $or: [{ userId: user._id }, { userId: null }] });
-  expect(res.body.data.map((notification) => notification._id)).toEqual([
-    'own',
-    'employee-announcement',
-    'system',
-  ]);
-  expect(res.body.unreadCount).toBe(3);
+  expect(find).toHaveBeenCalledWith({ userId: user._id });
+  expect(res.body.data.map((notification) => notification._id)).toEqual(['own']);
+  expect(res.body.unreadCount).toBe(1);
 });
 
 test('employee mark-as-read updates only the authenticated user-owned record', async () => {

@@ -192,9 +192,15 @@ describe("Announcement notifications", () => {
     expect(res.body.data.map((announcement) => announcement._id)).toEqual(["all", "department"]);
   });
 
-  test("returns a role-targeted broadcast only to users in its target role", async () => {
+  test("does not include recipient-less legacy notifications in a user's feed", async () => {
     const employee = { _id: new mongoose.Types.ObjectId(), role: "employee" };
     const announcements = [
+      {
+        _id: new mongoose.Types.ObjectId(),
+        userId: new mongoose.Types.ObjectId(),
+        type: "ANNOUNCEMENT",
+        meta: { announcementId: "another-users-announcement", targetRole: "EMPLOYEE" },
+      },
       {
         _id: new mongoose.Types.ObjectId(),
         userId: null,
@@ -213,10 +219,7 @@ describe("Announcement notifications", () => {
         type: "SYSTEM",
       },
     ];
-    jest.spyOn(User, "findById").mockReturnValue({
-      select: jest.fn().mockResolvedValue(employee),
-    });
-    jest.spyOn(Notification, "find").mockReturnValue({
+    const find = jest.spyOn(Notification, "find").mockReturnValue({
       sort: jest.fn().mockResolvedValue(announcements),
     });
     const res = makeResponse();
@@ -224,7 +227,8 @@ describe("Announcement notifications", () => {
     await getUserNotifications({ user: employee, params: { userId: employee._id.toString() } }, res);
 
     expect(res.statusCode).toBe(200);
-    expect(res.body.data).toEqual([announcements[0], announcements[2]]);
+    expect(find).toHaveBeenCalledWith({ userId: employee._id });
+    expect(res.body.data).toEqual([]);
   });
 
   test("includes legacy per-user announcement rows without creating additional records", async () => {
