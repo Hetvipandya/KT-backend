@@ -191,6 +191,66 @@ const listFinancialYears = async (req, res, next) => {
 };
 
 /**
+ * PUT /api/financial-year/:id
+ * Update an unlocked financial year without changing its company or branch.
+ */
+const updateFinancialYear = async (req, res, next) => {
+  try {
+    const fy = req.financialYear;
+    if (fy.isLocked) {
+      return res.status(400).json({
+        success: false,
+        message: 'This financial year is locked and cannot be updated',
+        errorCode: 'FINANCIAL_YEAR_LOCKED'
+      });
+    }
+
+    const startDate = req.body.startDate === undefined ? fy.startDate : new Date(req.body.startDate);
+    const endDate = req.body.endDate === undefined ? fy.endDate : new Date(req.body.endDate);
+    if (
+      Number.isNaN(startDate.getTime()) ||
+      Number.isNaN(endDate.getTime()) ||
+      startDate >= endDate
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: 'End date must be later than the start date',
+        errorCode: 'INVALID_DATE_RANGE'
+      });
+    }
+
+    const overlap = await FinancialYear.findOne({
+      _id: { $ne: fy._id },
+      companyId: fy.companyId,
+      branchId: fy.branchId,
+      startDate: { $lte: endDate },
+      endDate: { $gte: startDate }
+    });
+    if (overlap) {
+      return res.status(409).json({
+        success: false,
+        message: 'This date range overlaps with an existing Financial Year for this branch.',
+        errorCode: 'FINANCIAL_YEAR_OVERLAP'
+      });
+    }
+
+    fy.startDate = startDate;
+    fy.endDate = endDate;
+    if (req.body.yearLabel !== undefined) fy.yearLabel = req.body.yearLabel;
+    if (req.body.status !== undefined) fy.status = req.body.status;
+    await fy.save();
+
+    return res.status(200).json({
+      success: true,
+      message: 'Financial Year updated successfully',
+      data: fy
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
  * PUT /api/financial-year/:id/lock
  * Lock a financial year to prevent transaction postings
  */
@@ -287,6 +347,7 @@ const deleteFinancialYear = async (req, res, next) => {
 module.exports = {
   createFinancialYear,
   listFinancialYears,
+  updateFinancialYear,
   lockFinancialYear,
   deleteFinancialYear
 };

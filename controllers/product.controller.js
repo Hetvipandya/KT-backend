@@ -74,11 +74,9 @@ const createProduct = async (req, res, next) => {
     const finalType = type || 'PRODUCT';
     const finalIsStockItem = finalType === 'SERVICE' ? false : (isStockItem !== undefined ? isStockItem : true);
 
-    const branchId = req.branchId || (req.body && req.body.branchId) || (req.user && req.user.branchId) || null;
-
     const product = await Product.create({
       companyId,
-      branchId,
+      branchId: null,
       name,
       code: code || null,
       description: description || '',
@@ -131,7 +129,6 @@ const listProducts = async (req, res, next) => {
     }
 
     const filter = { companyId };
-    if (req.branchId) filter.branchId = req.branchId;
 
     if (type) {
       filter.type = type;

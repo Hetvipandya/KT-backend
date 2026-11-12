@@ -1,9 +1,15 @@
 const express = require('express');
-const { createFinancialYear, listFinancialYears, lockFinancialYear, deleteFinancialYear } = require('../controllers/financialYear.controller');
+const {
+  createFinancialYear,
+  listFinancialYears,
+  updateFinancialYear,
+  lockFinancialYear,
+  deleteFinancialYear
+} = require('../controllers/financialYear.controller');
 const authenticate = require('../middleware/authenticate');
 const checkCompanyAccess = require('../middleware/companyAccess');
 const validateRequest = require('../middleware/validateRequest');
-const { createFYSchema } = require('../validators/company.validators');
+const { createFYSchema, updateFYSchema } = require('../validators/company.validators');
 
 const router = express.Router();
 
@@ -84,6 +90,8 @@ router.post('/', validateRequest(createFYSchema), checkCompanyAccess, createFina
  *         description: Access denied (Data isolation violation)
  */
 router.get('/', checkCompanyAccess, listFinancialYears); 
+
+router.put('/:id', validateRequest(updateFYSchema), checkCompanyAccess, updateFinancialYear);
 
 /**
  * @openapi

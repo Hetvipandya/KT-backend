@@ -388,41 +388,70 @@ const updateCompany = async (req, res, next) => {
   try {
     const updates = req.body;
     const company = req.company; // loaded by middleware
+    const oldCompanyData = company.toObject ? company.toObject() : { ...company };
 
     // Validate GSTIN/PAN uniqueness if they are being updated
-    if (updates.gstin && updates.gstin.toUpperCase() !== company.gstin) {
-      const gstinConflict = await Company.findOne({ gstin: updates.gstin.toUpperCase() });
-      if (gstinConflict) {
-        return res.status(409).json({
-          success: false,
-          message: 'A company with this GSTIN is already registered',
-          errorCode: 'GSTIN_ALREADY_EXISTS'
-        });
+    if (updates.gstin !== undefined) {
+      const gstin = String(updates.gstin).trim().toUpperCase();
+      if (gstin && gstin !== company.gstin) {
+        const gstinConflict = await Company.findOne({ gstin });
+        if (gstinConflict) {
+          return res.status(409).json({
+            success: false,
+            message: 'A company with this GSTIN is already registered',
+            errorCode: 'GSTIN_ALREADY_EXISTS'
+          });
+        }
       }
-      company.gstin = updates.gstin.toUpperCase();
+      company.gstin = gstin;
+      company.gstNumber = gstin;
     }
 
-    if (updates.pan && updates.pan.toUpperCase() !== company.pan) {
-      const panConflict = await Company.findOne({ pan: updates.pan.toUpperCase() });
-      if (panConflict) {
-        return res.status(409).json({
-          success: false,
-          message: 'A company with this PAN is already registered',
-          errorCode: 'PAN_ALREADY_EXISTS'
-        });
+    if (updates.pan !== undefined) {
+      const pan = String(updates.pan).trim().toUpperCase();
+      if (pan && pan !== company.pan) {
+        const panConflict = await Company.findOne({ pan });
+        if (panConflict) {
+          return res.status(409).json({
+            success: false,
+            message: 'A company with this PAN is already registered',
+            errorCode: 'PAN_ALREADY_EXISTS'
+          });
+        }
       }
-      company.pan = updates.pan.toUpperCase();
+      company.pan = pan;
+      company.panNumber = pan;
     }
 
     // Update other allowed fields
-    const allowedFields = ['name', 'address', 'city', 'state', 'pincode', 'country', 'email', 'phone', 'logoUrl'];
+    const allowedFields = ['address', 'city', 'state', 'pincode', 'country', 'email', 'phone'];
     allowedFields.forEach((field) => {
       if (updates[field] !== undefined) {
         company[field] = updates[field];
       }
     });
+    if (updates.name !== undefined) {
+      company.name = updates.name;
+      company.companyName = updates.name;
+    }
+    if (updates.logoUrl !== undefined) {
+      company.logoUrl = updates.logoUrl;
+      company.companyLogo = updates.logoUrl;
+    }
+    if (updates.workingHours !== undefined) {
+      company.workingHours = {
+        startTime: updates.workingHours.startTime !== undefined
+          ? updates.workingHours.startTime
+          : company.workingHours.startTime,
+        endTime: updates.workingHours.endTime !== undefined
+          ? updates.workingHours.endTime
+          : company.workingHours.endTime
+      };
+    }
+    if (updates.weeklyOff !== undefined) {
+      company.weeklyOff = updates.weeklyOff;
+    }
 
-    const oldCompanyData = company.toObject ? company.toObject() : { ...company };
     await company.save();
     await recordAuditEvent({
       req,
@@ -461,13 +490,15 @@ const uploadLogo = async (req, res, next) => {
     const uploadRes = await cloudinaryService.uploadCompanyLogo(company._id.toString(), req.file.buffer);
 
     company.logoUrl = uploadRes.secure_url;
+    company.companyLogo = uploadRes.secure_url;
     await company.save();
 
     return res.status(200).json({
       success: true,
       message: 'Company logo uploaded successfully',
       data: {
-        logoUrl: company.logoUrl
+        logoUrl: company.logoUrl,
+        companyLogo: company.companyLogo
       }
     });
   } catch (error) {

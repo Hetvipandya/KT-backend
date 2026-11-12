@@ -51,8 +51,8 @@ const updateCompanySchema = z.preprocess(
   preprocessCompanyInput,
   z.object({
     name: z.string().min(1, 'Company name cannot be empty').optional(),
-    gstin: z.string().toUpperCase().regex(gstinRegex, 'Invalid Indian GSTIN format').optional(),
-    pan: z.string().toUpperCase().regex(panRegex, 'Invalid Indian PAN format').optional(),
+    gstin: z.string().toUpperCase().regex(gstinRegex, 'Invalid Indian GSTIN format').optional().or(z.literal('')),
+    pan: z.string().toUpperCase().regex(panRegex, 'Invalid Indian PAN format').optional().or(z.literal('')),
     address: z.string().optional().or(z.literal('')),
     city: z.string().optional().or(z.literal('')),
     state: z.string().optional().or(z.literal('')),
@@ -60,7 +60,12 @@ const updateCompanySchema = z.preprocess(
     country: z.string().optional().or(z.literal('')),
     email: z.string().email('Invalid email address').optional().or(z.literal('')),
     phone: z.string().optional().or(z.literal('')),
-    logoUrl: z.string().url('Invalid logo URL').optional().or(z.literal(''))
+    logoUrl: z.string().url('Invalid logo URL').optional().or(z.literal('')),
+    workingHours: z.object({
+      startTime: z.string().optional(),
+      endTime: z.string().optional()
+    }).optional(),
+    weeklyOff: z.array(z.string()).optional()
   }).passthrough()
 );
 
@@ -101,15 +106,25 @@ const createFYSchema = z.object({
   branchId: z.string({ required_error: 'Branch ID is required' }).min(1, 'Branch ID cannot be empty'),
   startDate: z.string({ required_error: 'Start date is required' }).datetime({ message: 'Invalid start date datetime string' }).or(z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Invalid start date format (YYYY-MM-DD)')),
   endDate: z.string({ required_error: 'End date is required' }).datetime({ message: 'Invalid end date datetime string' }).or(z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Invalid end date format (YYYY-MM-DD)')),
-  yearLabel: z.string({ required_error: 'Year label is required' }).min(1, 'Year label cannot be empty'),
+  yearLabel: z.string({ required_error: 'Year label is required' }).trim().min(1, 'Year label cannot be empty'),
   isLocked: z.boolean().optional(),
   status: z.enum(['active', 'inactive']).optional()
 }).strict();
+
+const updateFYSchema = z.object({
+  startDate: z.string().datetime({ message: 'Invalid start date datetime string' }).or(z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Invalid start date format (YYYY-MM-DD)')).optional(),
+  endDate: z.string().datetime({ message: 'Invalid end date datetime string' }).or(z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Invalid end date format (YYYY-MM-DD)')).optional(),
+  yearLabel: z.string().trim().min(1, 'Year label cannot be empty').optional(),
+  status: z.enum(['active', 'inactive']).optional()
+}).strict().refine((value) => Object.keys(value).length > 0, {
+  message: 'At least one field must be provided for update'
+});
 
 module.exports = {
   createCompanySchema,
   updateCompanySchema,
   createBranchSchema,
   updateBranchSchema,
-  createFYSchema
+  createFYSchema,
+  updateFYSchema
 };

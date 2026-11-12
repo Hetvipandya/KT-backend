@@ -6,6 +6,7 @@ const { MongoMemoryServer } = require('mongodb-memory-server');
 const Company = require('../models/Company');
 const Employee = require('../models/Employee');
 const User = require('../models/User');
+const AuditLog = require('../models/AuditLog');
 const Department = require('../models/Department');
 const companyRoutes = require('../routes/company.routes');
 const { createCompany } = require('../controllers/company.controller');
@@ -258,6 +259,114 @@ describe('GET /api/company authorization', () => {
     const updatedUser = await User.findById(hr._id);
     expect(updatedUser.companyId).toBeDefined();
     expect(updatedUser.companyId.toString()).toBe(company._id.toString());
+  });
+});
+
+describe('PUT /api/company/:id profile updates', () => {
+  it('updates company fields, clears optional tax details, and keeps legacy aliases in sync', async () => {
+    const admin = await User.create({
+      name: 'Profile Admin',
+      email: 'profile-admin@example.com',
+      password: 'Password123!',
+      role: 'admin'
+    });
+    const company = await Company.create({
+      name: 'Old Company Name',
+      companyName: 'Old Company Name',
+      gstin: '27ABCDE1234F1Z5',
+      gstNumber: '27ABCDE1234F1Z5',
+      pan: 'ABCDE1234F',
+      panNumber: 'ABCDE1234F',
+      createdBy: admin._id
+    });
+
+    const app = express();
+    app.use(express.json());
+    app.use('/api/company', companyRoutes);
+
+    const token = generateAccessToken({
+      userId: admin._id.toString(),
+      role: admin.role
+    });
+    const response = await request(app)
+      .put(`/api/company/${company._id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        name: 'Updated Company Name',
+        gstin: '',
+        pan: '',
+        logoUrl: '',
+        workingHours: {
+          startTime: '09:00 AM',
+          endTime: '06:00 PM'
+        },
+        weeklyOff: ['Sunday']
+      });
+
+    expect(response.status).toBe(200);
+    expect(response.body.success).toBe(true);
+
+    const updatedCompany = await Company.findById(company._id);
+    expect(updatedCompany.name).toBe('Updated Company Name');
+    expect(updatedCompany.companyName).toBe('Updated Company Name');
+    expect(updatedCompany.gstin).toBe('');
+    expect(updatedCompany.gstNumber).toBe('');
+    expect(updatedCompany.pan).toBe('');
+    expect(updatedCompany.panNumber).toBe('');
+    expect(updatedCompany.logoUrl).toBe('');
+    expect(updatedCompany.companyLogo).toBe('');
+    expect(updatedCompany.workingHours.startTime).toBe('09:00 AM');
+    expect(updatedCompany.workingHours.endTime).toBe('06:00 PM');
+    expect(updatedCompany.weeklyOff).toEqual(['Sunday']);
+
+    const auditLog = await AuditLog.findOne({ entityId: company._id.toString() });
+    expect(auditLog.oldValues.name).toBe('Old Company Name');
+    expect(auditLog.newValues.name).toBe('Updated Company Name');
+  });
+
+  it('uploads a company logo and synchronizes its legacy logo field', async () => {
+    const admin = await User.create({
+      name: 'Logo Admin',
+      email: 'logo-admin@example.com',
+      password: 'Password123!',
+      role: 'admin'
+    });
+    const company = await Company.create({
+      name: 'Logo Company',
+      logoUrl: 'https://example.com/old-logo.png',
+      companyLogo: 'https://example.com/old-logo.png',
+      createdBy: admin._id
+    });
+    const cloudinaryService = require('../services/cloudinary.service');
+    const uploadLogo = jest.spyOn(cloudinaryService, 'uploadCompanyLogo')
+      .mockResolvedValue({ secure_url: 'https://example.com/new-logo.png' });
+
+    const app = express();
+    app.use('/api/company', companyRoutes);
+    const token = generateAccessToken({
+      userId: admin._id.toString(),
+      role: admin.role
+    });
+
+    try {
+      const response = await request(app)
+        .post(`/api/company/${company._id}/logo`)
+        .set('Authorization', `Bearer ${token}`)
+        .attach('logo', Buffer.from('fake image'), {
+          filename: 'company-logo.png',
+          contentType: 'image/png'
+        });
+
+      expect(response.status).toBe(200);
+      expect(response.body.data.logoUrl).toBe('https://example.com/new-logo.png');
+      expect(response.body.data.companyLogo).toBe('https://example.com/new-logo.png');
+
+      const updatedCompany = await Company.findById(company._id);
+      expect(updatedCompany.logoUrl).toBe('https://example.com/new-logo.png');
+      expect(updatedCompany.companyLogo).toBe('https://example.com/new-logo.png');
+    } finally {
+      uploadLogo.mockRestore();
+    }
   });
 });
 
