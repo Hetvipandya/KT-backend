@@ -68,8 +68,20 @@ describe("Finance monthly payroll register", () => {
       expect.stringContaining("bankAccountNumber")
     );
     expect(query.populate).toHaveBeenCalledWith(
+      "employeeId",
+      expect.stringContaining("phoneNumber")
+    );
+    expect(query.populate).toHaveBeenCalledWith(
       "userId",
       expect.stringContaining("ifscCode")
+    );
+    expect(query.populate).toHaveBeenCalledWith(
+      "customDeductionsList.deductionMasterId",
+      expect.stringContaining("description")
+    );
+    expect(query.populate).toHaveBeenCalledWith(
+      "generatedBy approvedBy paidBy",
+      "name email"
     );
   });
 

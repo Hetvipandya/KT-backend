@@ -506,6 +506,8 @@ const getFinancePayrollRegister = async (req, res) => {
     const employeeFields = [
       "name",
       "email",
+      "phone",
+      "phoneNumber",
       "uniqueID",
       "role",
       "designation",
@@ -528,6 +530,8 @@ const getFinancePayrollRegister = async (req, res) => {
     const salaries = await MonthlySalary.find(salaryQuery)
       .populate("employeeId", employeeFields)
       .populate("userId", employeeFields)
+      .populate("customDeductionsList.deductionMasterId", "name code category description isLegallyPermissible")
+      .populate("generatedBy approvedBy paidBy", "name email")
       .sort({ createdAt: -1 });
 
     return res.status(200).json({
