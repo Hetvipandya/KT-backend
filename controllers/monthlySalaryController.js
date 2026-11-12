@@ -7,6 +7,8 @@ const Leave = require("../models/Leave");
 const Company = require("../models/Company");
 const Branch = require("../models/Branch");
 const Employee = require("../models/Employee");
+const BankAccount = require("../models/BankAccount");
+const bankAccountService = require("../services/bankAccount.service");
 const { calculateWorkingLeaveDays, toDateString } = require("../utils/leaveUtils");
 const { notify } = require("../utils/sendNotification");
 const {
@@ -16,6 +18,15 @@ const {
 } = require("../services/deduction.service");
 const { recordAuditEvent } = require("../services/auditLog.service");
 const { calculateMonthlyPayroll } = require("../services/payrollCalculationService");
+
+const UPI_PAYMENT_TYPES = new Set([
+  "GOOGLE_PAY",
+  "PHONEPE",
+  "PAYTM",
+  "BHIM",
+  "AMAZON_PAY",
+  "OTHER",
+]);
  
 const monthNames = [
   "January", "February", "March", "April", "May", "June",
@@ -532,6 +543,7 @@ const getFinancePayrollRegister = async (req, res) => {
       .populate("userId", employeeFields)
       .populate("customDeductionsList.deductionMasterId", "name code category description isLegallyPermissible")
       .populate("generatedBy approvedBy paidBy", "name email")
+      .populate("paidFromAccountId", "accountName bankName accountType")
       .sort({ createdAt: -1 });
 
     return res.status(200).json({
@@ -968,7 +980,8 @@ const updateMonthlySalary = async (req, res) => {
       });
     }
 
-    if (salary.status === "Approved" || salary.status === "Paid") {
+    const currentStatus = String(salary.status || "").toLowerCase();
+    if (currentStatus === "approved" || currentStatus === "paid") {
       return res.status(400).json({
         success: false,
         message: `Salary record is already ${salary.status} and cannot be modified directly. Reset approval status first if modification is required.`,
@@ -1030,7 +1043,7 @@ const updateMonthlySalary = async (req, res) => {
       "totalDays",
       "leaveDeduction",
     ];
-    const editableStatuses = ["Draft", "Generated", "pending", "processed"];
+    const editableStatuses = ["draft", "generated", "pending", "processed", "unpaid"];
     const providedFields = numericFields.filter((field) =>
       Object.prototype.hasOwnProperty.call(updates, field)
     );
@@ -1041,13 +1054,13 @@ const updateMonthlySalary = async (req, res) => {
       salary.remarks = updates.remarks;
     }
     if (hasStatus) {
-      if (typeof updates.status !== "string" || !editableStatuses.includes(updates.status)) {
+      if (typeof updates.status !== "string" || !editableStatuses.includes(updates.status.toLowerCase())) {
         return res.status(400).json({
           success: false,
           message: `status must be one of: ${editableStatuses.join(", ")}`,
         });
       }
-      salary.status = updates.status;
+      salary.status = updates.status.toLowerCase();
     }
     if (hasPenaltyApproved) {
       salary.isPenaltyApproved = Boolean(updates.isPenaltyApproved);
@@ -1180,10 +1193,43 @@ const updateMonthlySalary = async (req, res) => {
         activeStructure = await SalaryStructure.findById(salary.salaryStructureId);
       } catch (_) {}
     }
+    const structureValues = activeStructure
+      ? (typeof activeStructure.toObject === "function" ? activeStructure.toObject() : activeStructure)
+      : {};
+    const calculationStructure = {
+      ...structureValues,
+      structureType: salary.structureType || structureValues.structureType,
+      fixedSalary: salary.fixedSalary,
+      basicSalary: salary.basicSalary,
+      hra: salary.hra,
+      conveyanceAllowance: salary.conveyanceAllowance,
+      medicalAllowance: salary.medicalAllowance,
+      specialAllowance: salary.specialAllowance,
+      allowance: salary.allowance,
+      dearnessAllowance: salary.dearnessAllowance,
+      otherAllowances: salary.otherAllowances,
+      fixedBonus: salary.fixedBonus,
+      extraAllowance: salary.extraAllowance,
+      incentive: salary.incentive,
+      bonus: salary.bonus,
+      extraBonus: salary.extraBonus,
+      isPfApplicable: salary.isPfApplicable ?? structureValues.isPfApplicable,
+      isEsicApplicable: salary.isEsicApplicable ?? structureValues.isEsicApplicable,
+      isPtApplicable: salary.isPtApplicable ?? structureValues.isPtApplicable,
+      isTdsApplicable: salary.isTdsApplicable ?? structureValues.isTdsApplicable,
+      pfDeduction: salary.pfDeduction,
+      esicDeduction: salary.esicDeduction,
+      professionalTax: salary.professionalTax,
+      tds: salary.tds,
+      tdsPercentage: salary.tdsPercentage,
+      fixedDeduction: salary.fixedDeduction,
+      otherDeductions: salary.otherDeductions,
+      employerContributions: salary.employerContributions || structureValues.employerContributions,
+    };
 
     const calcResult = await calculateMonthlyPayroll({
       user: targetUserId,
-      activeStructure,
+      activeStructure: calculationStructure,
       month: salary.month || 1,
       year: salary.year || 2026,
       calculationMode: salary.calculationMode || "CALENDAR_DAYS",
@@ -1223,6 +1269,20 @@ const updateMonthlySalary = async (req, res) => {
     });
 
     // Sync recalculated values into salary record
+    salary.basicSalary = calcResult.baseEarnings.basicSalary;
+    salary.hra = calcResult.baseEarnings.hra;
+    salary.conveyanceAllowance = calcResult.baseEarnings.conveyanceAllowance;
+    salary.medicalAllowance = calcResult.baseEarnings.medicalAllowance;
+    salary.specialAllowance = calcResult.baseEarnings.specialAllowance;
+    salary.allowance = calcResult.baseEarnings.allowance;
+    salary.dearnessAllowance = calcResult.baseEarnings.dearnessAllowance;
+    salary.otherAllowances = calcResult.baseEarnings.otherAllowances;
+    salary.fixedBonus = calcResult.baseEarnings.fixedBonus;
+    salary.extraAllowance = calcResult.extraEarnings.extraAllowance;
+    salary.incentive = calcResult.extraEarnings.incentive;
+    salary.bonus = calcResult.extraEarnings.bonus;
+    salary.extraBonus = calcResult.extraEarnings.bonus;
+    salary.extraEarnings = calcResult.extraEarnings.totalExtraEarnings;
     salary.monthlySalary = calcResult.baseEarnings.monthlySalary;
     salary.earnedBaseSalary = calcResult.earnedBaseSalary;
     salary.grossSalary = calcResult.grossSalary;
@@ -1266,6 +1326,17 @@ const updateMonthlySalary = async (req, res) => {
     salary.legallyApprovedPenalties = calcResult.leaveDeductions.appliedPenalty;
     salary.isPenaltyApproved = calcResult.leaveDeductions.isPenaltyApproved;
 
+    salary.pfDeduction = calcResult.statutoryDeductions.pfDeduction;
+    salary.esicDeduction = calcResult.statutoryDeductions.esicDeduction;
+    salary.professionalTax = calcResult.statutoryDeductions.professionalTax;
+    salary.tds = calcResult.statutoryDeductions.tds;
+    salary.tdsAmount = calcResult.statutoryDeductions.tds;
+    salary.fixedDeduction = calcResult.customDeductions.fixedDeduction;
+    salary.extraDeduction = calcResult.customDeductions.extraDeduction;
+    salary.otherDeductions = calcResult.customDeductions.otherDeductions;
+    salary.customDeductions = calcResult.customDeductions.totalApprovedCustomDeductions;
+    salary.customDeductionsList = calcResult.customDeductions.approvedAndPermissible;
+    salary.employerContributions = calcResult.employerContributions;
     salary.statutoryDeductions = calcResult.statutoryDeductions.totalStatutoryDeductions;
     salary.approvedOtherDeductions = calcResult.customDeductions.totalOtherDeductions;
     salary.totalAppliedDeductions = calcResult.totalAppliedDeductions;
@@ -1503,7 +1574,17 @@ const payMonthlySalary = async (req, res) => {
     const targetSalaryId =
       (req.params && (req.params.id || req.params.salaryId || req.params.employeeId)) ||
       (req.body && (req.body.id || req.body.salaryId || req.body.employeeId || req.body.userId));
-    const { paymentMode = "BANK_TRANSFER", paidAt, remarks, month, year, companyId, branchId } = req.body || {};
+    const {
+      paymentMode = "BANK_TRANSFER",
+      paymentType,
+      paidAt,
+      remarks,
+      month,
+      year,
+      companyId,
+      branchId,
+    } = req.body || {};
+    const paidFromAccountId = req.validatedPaidFromAccountId;
 
     if (!targetSalaryId) {
       return res.status(400).json({
@@ -1539,6 +1620,10 @@ const payMonthlySalary = async (req, res) => {
     salary.paidAt = paidAt ? new Date(paidAt) : new Date();
     salary.paidBy = req.user ? req.user._id : null;
     salary.paymentMode = paymentMode;
+    salary.paymentType = paymentMode === "UPI" ? paymentType : null;
+    if (paidFromAccountId && mongoose.Types.ObjectId.isValid(paidFromAccountId)) {
+      salary.paidFromAccountId = paidFromAccountId;
+    }
     if (remarks) salary.remarks = remarks;
 
     await salary.save();
@@ -1551,7 +1636,13 @@ const payMonthlySalary = async (req, res) => {
       entityId: salary._id,
       description: `Monthly salary marked as Paid for ${salary.salaryMonth}`,
       oldValues: { status: previousPayStatus },
-      newValues: { status: "Paid", paymentMode: salary.paymentMode, paidAt: salary.paidAt },
+      newValues: {
+        status: "Paid",
+        paymentMode: salary.paymentMode,
+        paymentType: salary.paymentType,
+        paidFromAccountId: salary.paidFromAccountId,
+        paidAt: salary.paidAt,
+      },
       companyId: salary.companyId || req.user?.companyId,
     });
     await notifySalaryRecipient(salary, "paid");
@@ -1560,7 +1651,8 @@ const payMonthlySalary = async (req, res) => {
     try {
       paidSalary = await MonthlySalary.findById(salary._id)
         .populate("employeeId userId", "name email uniqueID role designation department profileImage profileImg panNumber joiningDate dateOfJoining bankAccountNumber ifscCode upiId bankDetails")
-        .populate("paidBy", "name email");
+        .populate("paidBy", "name email")
+        .populate("paidFromAccountId", "accountName bankName accountType");
     } catch (_) {}
 
     return res.status(200).json({
@@ -1580,20 +1672,33 @@ const payMonthlySalary = async (req, res) => {
 
 const payFinanceMonthlySalary = async (req, res) => {
   try {
-    const { salaryId, companyId, branchId, transferConfirmed, paymentMode, remarks } = req.body || {};
+    const {
+      salaryId,
+      companyId,
+      branchId,
+      transferConfirmed,
+      paymentMode,
+      paymentType,
+      paidFromAccountId,
+      remarks,
+    } = req.body || {};
     const isBankTransfer = paymentMode === "BANK_TRANSFER";
     const isCashPayment = paymentMode === "CASH";
+    const isUpiPayment = paymentMode === "UPI";
     if (
       !salaryId ||
       !mongoose.Types.ObjectId.isValid(salaryId) ||
       !companyId ||
       !branchId ||
+      !paidFromAccountId ||
+      !mongoose.Types.ObjectId.isValid(paidFromAccountId) ||
       transferConfirmed !== true ||
-      (!isBankTransfer && !isCashPayment)
+      (!isBankTransfer && !isCashPayment && !isUpiPayment) ||
+      (isUpiPayment && !UPI_PAYMENT_TYPES.has(paymentType))
     ) {
       return res.status(400).json({
         success: false,
-        message: "Select a salary, confirm the cash or bank payment, and provide its company and branch",
+        message: "Select a supported payment method and type, confirm the completed payment, and provide its company and branch",
       });
     }
 
@@ -1624,6 +1729,43 @@ const payFinanceMonthlySalary = async (req, res) => {
       });
     }
 
+    const fundingAccount = await BankAccount.findOne({
+      _id: paidFromAccountId,
+      companyId,
+      branchId: { $in: [branchId, null] },
+      isActive: true,
+    });
+    if (!fundingAccount) {
+      return res.status(404).json({
+        success: false,
+        message: "Select an active company bank or cash account for this payment",
+      });
+    }
+
+    const allowedAccountTypes = isCashPayment ? ["Cash"] : ["Savings", "Current"];
+    if (!allowedAccountTypes.includes(fundingAccount.accountType)) {
+      return res.status(400).json({
+        success: false,
+        message: isCashPayment
+          ? "Select a Cash account for this cash payment"
+          : `Select a Savings or Current account for this ${isUpiPayment ? "UPI payment" : "bank transfer"}`,
+      });
+    }
+
+    const availableBalance = Number(await bankAccountService.getAccountBalance(fundingAccount.coaAccountId));
+    if (!Number.isFinite(availableBalance)) {
+      return res.status(503).json({
+        success: false,
+        message: "Could not verify the selected company account balance. Try again before recording payment.",
+      });
+    }
+    if (availableBalance + 0.01 < netSalary) {
+      return res.status(409).json({
+        success: false,
+        message: `Insufficient funds in ${fundingAccount.accountName}. Available: ${Math.max(availableBalance, 0).toFixed(2)}; required: ${netSalary.toFixed(2)}.`,
+      });
+    }
+
     if (isBankTransfer) {
       const recipient = await resolveSalaryRecipient(salary);
       if (!recipient || !recipient.bankAccountNumber || !recipient.ifscCode) {
@@ -1633,13 +1775,24 @@ const payFinanceMonthlySalary = async (req, res) => {
         });
       }
     }
+    if (isUpiPayment) {
+      const recipient = await resolveSalaryRecipient(salary);
+      if (!recipient || !String(recipient.upiId || "").trim()) {
+        return res.status(400).json({
+          success: false,
+          message: "Complete the employee's UPI ID before recording a UPI salary payment",
+        });
+      }
+    }
 
     req.body = {
       ...req.body,
       paymentMode,
+      paymentType: isUpiPayment ? paymentType : null,
       paidAt: req.body.paidAt || new Date().toISOString(),
       remarks: String(remarks || "").trim(),
     };
+    req.validatedPaidFromAccountId = fundingAccount._id.toString();
     return payMonthlySalary(req, res);
   } catch (error) {
     console.error("Pay Finance Monthly Salary Error:", error);

@@ -504,8 +504,20 @@ const monthlySalarySchema = new mongoose.Schema(
 
     paymentMode: {
       type: String,
-      enum: ["BANK_TRANSFER", "CASH", "CHEQUE", "OTHER"],
+      enum: ["BANK_TRANSFER", "CASH", "CHEQUE", "OTHER", "UPI"],
       default: "BANK_TRANSFER",
+    },
+
+    paymentType: {
+      type: String,
+      enum: ["GOOGLE_PAY", "PHONEPE", "PAYTM", "BHIM", "AMAZON_PAY", "OTHER"],
+      default: null,
+    },
+
+    paidFromAccountId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "BankAccount",
+      default: null,
     },
 
     remarks: {

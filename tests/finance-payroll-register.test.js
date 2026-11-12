@@ -4,6 +4,8 @@ const request = require("supertest");
 const Branch = require("../models/Branch");
 const Company = require("../models/Company");
 const MonthlySalary = require("../models/MonthlySalary");
+const BankAccount = require("../models/BankAccount");
+const bankAccountService = require("../services/bankAccount.service");
 const monthlySalaryRoutes = require("../routes/monthlySalaryRoutes");
 const {
   getFinancePayrollRegister,
@@ -83,6 +85,10 @@ describe("Finance monthly payroll register", () => {
       "generatedBy approvedBy paidBy",
       "name email"
     );
+    expect(query.populate).toHaveBeenCalledWith(
+      "paidFromAccountId",
+      "accountName bankName accountType"
+    );
   });
 
   it("lists all payroll periods when month and year are omitted", async () => {
@@ -145,6 +151,7 @@ describe("Finance monthly payroll register", () => {
   it("records a confirmed cash payment without requiring bank details", async () => {
     const salaryId = new mongoose.Types.ObjectId();
     const employeeId = new mongoose.Types.ObjectId();
+    const paidFromAccountId = new mongoose.Types.ObjectId();
     const salary = {
       _id: salaryId,
       companyId,
@@ -157,6 +164,13 @@ describe("Finance monthly payroll register", () => {
     };
     jest.spyOn(MonthlySalary, "findOne").mockResolvedValue(salary);
     jest.spyOn(MonthlySalary, "findById").mockResolvedValue(salary);
+    jest.spyOn(BankAccount, "findOne").mockResolvedValue({
+      _id: paidFromAccountId,
+      accountName: "Office cash",
+      accountType: "Cash",
+      coaAccountId: new mongoose.Types.ObjectId(),
+    });
+    jest.spyOn(bankAccountService, "getAccountBalance").mockResolvedValue(50000);
     const findUser = jest.spyOn(require("../models/User"), "findById");
     const res = createResponse();
 
@@ -166,6 +180,7 @@ describe("Finance monthly payroll register", () => {
         companyId: companyId.toString(),
         branchId: branchId.toString(),
         paymentMode: "CASH",
+        paidFromAccountId: paidFromAccountId.toString(),
         transferConfirmed: true,
         remarks: "Cash salary payment confirmed.",
       },
@@ -174,8 +189,99 @@ describe("Finance monthly payroll register", () => {
     expect(res.statusCode).toBe(200);
     expect(salary.status).toBe("Paid");
     expect(salary.paymentMode).toBe("CASH");
+    expect(salary.paidFromAccountId).toEqual(paidFromAccountId.toString());
     expect(salary.save).toHaveBeenCalledTimes(1);
     expect(findUser).not.toHaveBeenCalled();
+  });
+
+  it("records a confirmed UPI payment with its payment type and employee UPI ID", async () => {
+    const salaryId = new mongoose.Types.ObjectId();
+    const employeeId = new mongoose.Types.ObjectId();
+    const paidFromAccountId = new mongoose.Types.ObjectId();
+    const salary = {
+      _id: salaryId,
+      companyId,
+      branchId,
+      employeeId,
+      userId: employeeId,
+      status: "Generated",
+      netSalary: 45000,
+      save: jest.fn().mockResolvedValue(undefined),
+    };
+    jest.spyOn(MonthlySalary, "findOne").mockResolvedValue(salary);
+    jest.spyOn(MonthlySalary, "findById").mockResolvedValue(salary);
+    jest.spyOn(BankAccount, "findOne").mockResolvedValue({
+      _id: paidFromAccountId,
+      accountName: "Payroll Bank",
+      accountType: "Savings",
+      coaAccountId: new mongoose.Types.ObjectId(),
+    });
+    jest.spyOn(bankAccountService, "getAccountBalance").mockResolvedValue(50000);
+    jest.spyOn(require("../models/User"), "findById").mockResolvedValue({
+      _id: employeeId,
+      name: "Employee",
+      upiId: "employee@upi",
+    });
+    const res = createResponse();
+
+    await payFinanceMonthlySalary({
+      body: {
+        salaryId: salaryId.toString(),
+        companyId: companyId.toString(),
+        branchId: branchId.toString(),
+        paymentMode: "UPI",
+        paymentType: "PHONEPE",
+        paidFromAccountId: paidFromAccountId.toString(),
+        transferConfirmed: true,
+      },
+    }, res);
+
+    expect(res.statusCode).toBe(200);
+    expect(salary.status).toBe("Paid");
+    expect(salary.paymentMode).toBe("UPI");
+    expect(salary.paymentType).toBe("PHONEPE");
+    expect(salary.paidFromAccountId).toBe(paidFromAccountId.toString());
+    expect(salary.save).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects salary payment when the selected company account has insufficient funds", async () => {
+    const salaryId = new mongoose.Types.ObjectId();
+    const employeeId = new mongoose.Types.ObjectId();
+    const paidFromAccountId = new mongoose.Types.ObjectId();
+    const salary = {
+      _id: salaryId,
+      companyId,
+      branchId,
+      employeeId,
+      userId: employeeId,
+      status: "Generated",
+      netSalary: 45000,
+      save: jest.fn(),
+    };
+    jest.spyOn(MonthlySalary, "findOne").mockResolvedValue(salary);
+    jest.spyOn(BankAccount, "findOne").mockResolvedValue({
+      _id: paidFromAccountId,
+      accountName: "Payroll Bank",
+      accountType: "Savings",
+      coaAccountId: new mongoose.Types.ObjectId(),
+    });
+    jest.spyOn(bankAccountService, "getAccountBalance").mockResolvedValue(200);
+    const res = createResponse();
+
+    await payFinanceMonthlySalary({
+      body: {
+        salaryId: salaryId.toString(),
+        companyId: companyId.toString(),
+        branchId: branchId.toString(),
+        paymentMode: "BANK_TRANSFER",
+        paidFromAccountId: paidFromAccountId.toString(),
+        transferConfirmed: true,
+      },
+    }, res);
+
+    expect(res.statusCode).toBe(409);
+    expect(res.body.message).toMatch(/insufficient funds/i);
+    expect(salary.save).not.toHaveBeenCalled();
   });
 
   it("prevents recording payment twice for a salary already paid", async () => {
@@ -187,6 +293,7 @@ describe("Finance monthly payroll register", () => {
       companyId,
       branchId,
       status: "Paid",
+      netSalary: 45000,
     });
 
     const res = createResponse();
@@ -197,6 +304,7 @@ describe("Finance monthly payroll register", () => {
         companyId,
         branchId,
         paymentMode: "BANK_TRANSFER",
+        paidFromAccountId: new mongoose.Types.ObjectId().toString(),
         transferConfirmed: true,
       },
     }, res);
@@ -213,6 +321,7 @@ describe("Finance monthly payroll register", () => {
   it("requires the employee's bank account and IFSC before recording payment", async () => {
     const salaryId = new mongoose.Types.ObjectId();
     const employeeId = new mongoose.Types.ObjectId();
+    const paidFromAccountId = new mongoose.Types.ObjectId();
     const findOne = jest.spyOn(MonthlySalary, "findOne").mockResolvedValue({
       _id: salaryId,
       companyId,
@@ -223,6 +332,13 @@ describe("Finance monthly payroll register", () => {
       netSalary: 45000,
       save: jest.fn(),
     });
+    jest.spyOn(BankAccount, "findOne").mockResolvedValue({
+      _id: paidFromAccountId,
+      accountName: "Payroll Bank",
+      accountType: "Savings",
+      coaAccountId: new mongoose.Types.ObjectId(),
+    });
+    jest.spyOn(bankAccountService, "getAccountBalance").mockResolvedValue(50000);
     jest.spyOn(require("../models/User"), "findById").mockResolvedValue({
       _id: employeeId,
       name: "Employee",
@@ -237,6 +353,7 @@ describe("Finance monthly payroll register", () => {
         companyId: companyId.toString(),
         branchId: branchId.toString(),
         paymentMode: "BANK_TRANSFER",
+        paidFromAccountId: paidFromAccountId.toString(),
         transferConfirmed: true,
       },
     }, res);
@@ -298,7 +415,7 @@ describe("Finance monthly payroll register", () => {
       });
 
     expect(response.status).toBe(400);
-    expect(response.body.message).toMatch(/confirm the cash or bank payment/i);
+    expect(response.body.message).toMatch(/confirm the completed payment/i);
     expect(findOne).not.toHaveBeenCalled();
   });
 

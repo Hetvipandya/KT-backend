@@ -1,5 +1,6 @@
 const mongoose = require("mongoose");
 const MonthlySalary = require("../models/MonthlySalary");
+const SalaryStructure = require("../models/SalaryStructure");
 const { updateMonthlySalary } = require("../controllers/monthlySalaryController");
 
 describe("Monthly salary update API", () => {
@@ -67,6 +68,56 @@ describe("Monthly salary update API", () => {
     expect(salary.totalDeduction).toBe(1635.33);
     expect(salary.netSalary).toBe(9384.67);
     expect(res.json.mock.calls[0][0].data.basicSalary).toBe(10000);
+  });
+
+  test("uses edited salary and deduction values instead of stale linked structure values", async () => {
+    salary.salaryStructureId = new mongoose.Types.ObjectId();
+    salary.structureType = "COMPONENT_BASED";
+    salary.isPfApplicable = true;
+    salary.isEsicApplicable = true;
+    salary.isPtApplicable = false;
+    salary.isTdsApplicable = false;
+    jest.spyOn(SalaryStructure, "findById").mockResolvedValue({
+      structureType: "COMPONENT_BASED",
+      basicSalary: 8000,
+      hra: 1020,
+      conveyanceAllowance: 0,
+      medicalAllowance: 0,
+      specialAllowance: 0,
+      dearnessAllowance: 0,
+      otherAllowances: 0,
+      fixedBonus: 0,
+      isPfApplicable: true,
+      isEsicApplicable: true,
+      isPtApplicable: false,
+      isTdsApplicable: false,
+      pfDeduction: 960,
+      esicDeduction: 68,
+      professionalTax: 0,
+      tds: 0,
+      fixedDeduction: 0,
+      otherDeductions: 0,
+    });
+    jest.spyOn(MonthlySalary, "findById")
+      .mockResolvedValueOnce(salary)
+      .mockReturnValueOnce({
+        populate: jest.fn().mockResolvedValue(salary),
+      });
+
+    await updateMonthlySalary(
+      {
+        params: { id: salary._id.toString() },
+        body: { basicSalary: 10000, pfDeduction: 1200, fixedDeduction: 300 },
+      },
+      res
+    );
+
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(salary.grossSalary).toBe(11020);
+    expect(salary.pfDeduction).toBe(1200);
+    expect(salary.fixedDeduction).toBe(300);
+    expect(salary.totalDeduction).toBe(1568);
+    expect(salary.netSalary).toBe(9452);
   });
 
   test("does not report success when the request has no supported fields", async () => {
