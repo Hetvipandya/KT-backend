@@ -6,6 +6,8 @@ const { MongoMemoryServer } = require("mongodb-memory-server");
 const DeductionMaster = require("../models/DeductionMaster");
 const EmployeeDeduction = require("../models/EmployeeDeduction");
 const User = require("../models/User");
+const Employee = require("../models/Employee");
+const Team = require("../models/Team");
 const Company = require("../models/Company");
 const Branch = require("../models/Branch");
 const SalaryStructure = require("../models/SalaryStructure");
@@ -34,6 +36,7 @@ describe("Centralized Employee Deduction Management Module Test Suite", () => {
   let hrUser;
   let teamLeadUser;
   let employeeUser;
+  let outsideTeamUser;
   let caUser;
   let activeSalaryStructure;
 
@@ -117,6 +120,48 @@ describe("Centralized Employee Deduction Management Module Test Suite", () => {
       department: "Engineering",
       joiningDate: new Date("2025-01-01"),
       pan: "ABCDE1234F",
+    });
+
+    outsideTeamUser = await User.create({
+      name: "Outside Team Employee",
+      email: "outside.team@kevalon.com",
+      password: "password123",
+      role: "employee",
+      uniqueID: "EMP-OUTSIDE",
+      companyId,
+      branchId,
+      isApproved: true,
+      status: "Active",
+    });
+
+    const teamLeadEmployee = await Employee.create({
+      userID: teamLeadUser._id,
+      firstName: "Engineering",
+      lastName: "Lead",
+      email: teamLeadUser.email,
+      employeeID: "TL0001",
+      isTeamLead: true,
+    });
+    const assignedEmployee = await Employee.create({
+      userID: employeeUser._id,
+      firstName: "John",
+      lastName: "Doe",
+      email: employeeUser.email,
+      employeeID: "EMP-001",
+    });
+    await Employee.create({
+      userID: outsideTeamUser._id,
+      firstName: "Outside",
+      lastName: "Employee",
+      email: outsideTeamUser.email,
+      employeeID: "EMP-OUTSIDE",
+    });
+    await Team.create({
+      name: "Engineering Team",
+      teamLeadId: "TL0001",
+      teamLeadUser: teamLeadUser._id,
+      teamLeadEmployee: teamLeadEmployee._id,
+      employees: [assignedEmployee._id],
     });
 
     caUser = await User.create({
@@ -674,11 +719,42 @@ describe("Centralized Employee Deduction Management Module Test Suite", () => {
     test("7.3 Team Lead Portal: GET /api/teamLead/deductions returns team members' deductions", async () => {
       currentAuthUser = teamLeadUser;
 
+      await EmployeeDeduction.create({
+        deductionRecordId: `DED-TEAM-${Date.now()}`,
+        employeeId: employeeUser._id,
+        teamLeadId: "TL0001",
+        deductionMasterId: new mongoose.Types.ObjectId(),
+        month: 11,
+        year: 2026,
+        amount: 125,
+      });
+      await EmployeeDeduction.create({
+        deductionRecordId: `DED-OUTSIDE-${Date.now()}`,
+        employeeId: outsideTeamUser._id,
+        teamLeadId: "OTHER-TL",
+        deductionMasterId: new mongoose.Types.ObjectId(),
+        month: 11,
+        year: 2026,
+        amount: 999,
+      });
+
+      const listRes = await request(app)
+        .get("/api/employee-deductions?month=11&year=2026");
+
+      expect(listRes.status).toBe(200);
+      expect(listRes.body.data.length).toBeGreaterThan(0);
+      expect(listRes.body.data.every((deduction) =>
+        String(deduction.employeeId?._id || deduction.employeeId) === String(employeeUser._id)
+      )).toBe(true);
+
       const res = await request(app)
         .get("/api/teamLead/deductions?month=11&year=2026");
 
       expect(res.status).toBe(200);
       expect(res.body.success).toBe(true);
+      expect(res.body.data.every((deduction) =>
+        String(deduction.employeeId?._id || deduction.employeeId) === String(employeeUser._id)
+      )).toBe(true);
     });
 
     test("7.4 Authorized Accounting Entry helper creates journal entry with deduction lines", async () => {

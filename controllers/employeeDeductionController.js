@@ -6,6 +6,7 @@ const Employee = require("../models/Employee");
 const MonthlySalary = require("../models/MonthlySalary");
 const SalaryStructure = require("../models/SalaryStructure");
 const { getTeamLeadForUser } = require("../utils/teamLeadLookup");
+const { getTeamMemberDeductionQuery } = require("../utils/teamLeadDeductionScope");
 const { generateDeductionRecordId } = require("../utils/deductionRecordId");
 const {
   getApprovedLegallyPermissibleDeductions,
@@ -289,15 +290,18 @@ const getEmployeeDeductions = async (req, res) => {
     } = req.query;
 
     const query = {};
+    let targetEmployeeFilter = null;
 
     const targetEmp = employeeId || userId;
     if (targetEmp) {
       if (mongoose.Types.ObjectId.isValid(targetEmp)) {
-        query.$or = [{ employeeId: targetEmp }, { userId: targetEmp }];
+        targetEmployeeFilter = { $or: [{ employeeId: targetEmp }, { userId: targetEmp }] };
       } else {
         const empUser = await resolveEmployeeUser(targetEmp);
         if (empUser) {
-          query.$or = [{ employeeId: empUser._id }, { userId: empUser._id }];
+          targetEmployeeFilter = {
+            $or: [{ employeeId: empUser._id }, { userId: empUser._id }],
+          };
         }
       }
     }
@@ -314,6 +318,30 @@ const getEmployeeDeductions = async (req, res) => {
     }
     if (companyId) query.companyId = companyId;
     if (branchId) query.branchId = branchId;
+
+    const normalizedRole = String(req.user?.role || "")
+      .trim()
+      .toLowerCase()
+      .replace(/[\s_-]+/g, "");
+    let accessFilter = null;
+    if (["teamlead", "teamleader", "tl"].includes(normalizedRole)) {
+      accessFilter = await getTeamMemberDeductionQuery(req.user);
+    } else if (["employee", "intern"].includes(normalizedRole)) {
+      accessFilter = {
+        $or: [
+          { employeeId: req.user._id },
+          { userId: req.user._id },
+        ],
+      };
+    }
+
+    if (accessFilter && targetEmployeeFilter) {
+      query.$and = [accessFilter, targetEmployeeFilter];
+    } else if (accessFilter) {
+      Object.assign(query, accessFilter);
+    } else if (targetEmployeeFilter) {
+      Object.assign(query, targetEmployeeFilter);
+    }
 
     const deductions = await EmployeeDeduction.find(query)
       .populate("employeeId userId", "name email uniqueID role designation department employeeID employeeCode")

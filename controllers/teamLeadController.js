@@ -22,6 +22,7 @@ const Leave =
 
 const { ensureTeamLeadUniqueID } = require("../utils/teamLeadId");
 const { notifyNewAssignments } = require("../utils/assignmentNotifications");
+const { getTeamMemberDeductionQuery } = require("../utils/teamLeadDeductionScope");
 
 /*
 =========================
@@ -1044,21 +1045,9 @@ TEAM LEAD DEDUCTIONS MANAGEMENT
 */
 exports.getTeamDeductions = async (req, res) => {
   try {
-    const teamIds = await getTeamIds(req.user._id);
-    if (!teamIds || teamIds.length === 0) {
-      return res.status(200).json({ success: true, count: 0, data: [] });
-    }
-
     const { month, year, status } = req.query;
     const EmployeeDeduction = require("../models/EmployeeDeduction");
-
-    const query = {
-      $or: [
-        { employeeId: { $in: teamIds } },
-        { userId: { $in: teamIds } },
-        { teamLeadId: req.user.uniqueID || req.user._id.toString() },
-      ],
-    };
+    const query = await getTeamMemberDeductionQuery(req.user);
 
     if (month) query.month = Number(month);
     if (year) query.year = Number(year);
