@@ -39,6 +39,12 @@ router.post("/announcement/create", protect, authorizeRoles("admin", "hr"), noti
 router.put("/announcement/:id", protect, authorizeRoles("admin", "hr"), notificationController.updateAnnouncement);
 router.delete("/announcement/:id", protect, authorizeRoles("admin", "hr"), notificationController.deleteAnnouncement);
 
+router.get(
+  "/announcement/admin/all",
+  protect,
+  authorizeRoles("admin", "hr"),
+  notificationController.getAdminAnnouncements
+);
 router.get("/announcement/all", protect, notificationController.getAnnouncements);
 
 module.exports = router;

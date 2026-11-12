@@ -10,6 +10,7 @@ const {
   createAnnouncement,
   getUserNotifications,
   getAnnouncements,
+  getAdminAnnouncements,
 } = require("../controllers/notificarionController");
 
 const makeResponse = () => ({
@@ -190,6 +191,44 @@ describe("Announcement notifications", () => {
 
     expect(res.statusCode).toBe(200);
     expect(res.body.data.map((announcement) => announcement._id)).toEqual(["all", "department"]);
+  });
+
+  test("admin announcement list includes announcements for every audience type", async () => {
+    const companyId = new mongoose.Types.ObjectId();
+    const announcements = [
+      { _id: "all", targetType: "ALL" },
+      { _id: "person", targetType: "PERSON", targetUserIds: [new mongoose.Types.ObjectId()] },
+      { _id: "department", targetType: "DEPARTMENT", targetDepartmentIds: [new mongoose.Types.ObjectId()] },
+      { _id: "role", targetType: "ROLE", targetRole: "employee" },
+    ];
+    const find = jest.spyOn(Announcement, "find").mockReturnValue({
+      sort: () => ({ lean: jest.fn().mockResolvedValue(announcements) }),
+    });
+    const res = makeResponse();
+
+    await getAdminAnnouncements({ user: { companyId } }, res);
+
+    expect(find).toHaveBeenCalledWith({
+      $or: [
+        { companyId: { $in: [companyId.toString()] } },
+        { companyId: null },
+      ],
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.body.data).toEqual(announcements);
+  });
+
+  test("admin without a company scope only receives global announcements", async () => {
+    const announcements = [{ _id: "global", companyId: null, targetType: "ALL" }];
+    const find = jest.spyOn(Announcement, "find").mockReturnValue({
+      sort: () => ({ lean: jest.fn().mockResolvedValue(announcements) }),
+    });
+    const res = makeResponse();
+
+    await getAdminAnnouncements({ user: {} }, res);
+
+    expect(find).toHaveBeenCalledWith({ companyId: null });
+    expect(res.body.data).toEqual(announcements);
   });
 
   test("does not include recipient-less legacy notifications in a user's feed", async () => {
