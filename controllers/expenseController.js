@@ -88,7 +88,7 @@ const postIncomeJournalEntry = async (income, financialYear, bankAccount, userId
     companyId: income.companyId,
     branchId: income.branchId || null,
     financialYearId: financialYear._id,
-    entryDate: income.receivedDate,
+    entryDate: new Date(income.receivedDate),
     reference: income.reference || `INC-${income._id.toString().slice(-6)}`,
     narration: `Income: ${income.incomeType} - ${income.title}`,
     lines: [
