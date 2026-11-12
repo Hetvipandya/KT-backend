@@ -73,6 +73,28 @@ describe("Finance monthly payroll register", () => {
     );
   });
 
+  it("lists all payroll periods when month and year are omitted", async () => {
+    const companyId = new mongoose.Types.ObjectId().toString();
+    const branchId = new mongoose.Types.ObjectId().toString();
+    const salaries = [
+      { _id: new mongoose.Types.ObjectId(), month: 10, year: 2026 },
+      { _id: new mongoose.Types.ObjectId(), month: 11, year: 2026 },
+    ];
+    const query = {
+      populate: jest.fn(),
+      sort: jest.fn().mockResolvedValue(salaries),
+    };
+    query.populate.mockReturnValue(query);
+    const find = jest.spyOn(MonthlySalary, "find").mockReturnValue(query);
+    const res = createResponse();
+
+    await getFinancePayrollRegister({ query: { companyId, branchId } }, res);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.data).toBe(salaries);
+    expect(find).toHaveBeenCalledWith({ companyId, branchId });
+  });
+
   it("rejects invalid payroll periods without querying salary records", async () => {
     const find = jest.spyOn(MonthlySalary, "find");
     const res = createResponse();
@@ -106,6 +128,42 @@ describe("Finance monthly payroll register", () => {
 
     expect(res.statusCode).toBe(400);
     expect(findOne).not.toHaveBeenCalled();
+  });
+
+  it("records a confirmed cash payment without requiring bank details", async () => {
+    const salaryId = new mongoose.Types.ObjectId();
+    const employeeId = new mongoose.Types.ObjectId();
+    const salary = {
+      _id: salaryId,
+      companyId,
+      branchId,
+      employeeId,
+      userId: employeeId,
+      status: "Generated",
+      netSalary: 45000,
+      save: jest.fn().mockResolvedValue(undefined),
+    };
+    jest.spyOn(MonthlySalary, "findOne").mockResolvedValue(salary);
+    jest.spyOn(MonthlySalary, "findById").mockResolvedValue(salary);
+    const findUser = jest.spyOn(require("../models/User"), "findById");
+    const res = createResponse();
+
+    await payFinanceMonthlySalary({
+      body: {
+        salaryId: salaryId.toString(),
+        companyId: companyId.toString(),
+        branchId: branchId.toString(),
+        paymentMode: "CASH",
+        transferConfirmed: true,
+        remarks: "Cash salary payment confirmed.",
+      },
+    }, res);
+
+    expect(res.statusCode).toBe(200);
+    expect(salary.status).toBe("Paid");
+    expect(salary.paymentMode).toBe("CASH");
+    expect(salary.save).toHaveBeenCalledTimes(1);
+    expect(findUser).not.toHaveBeenCalled();
   });
 
   it("prevents recording payment twice for a salary already paid", async () => {
@@ -228,7 +286,7 @@ describe("Finance monthly payroll register", () => {
       });
 
     expect(response.status).toBe(400);
-    expect(response.body.message).toMatch(/confirm the bank transfer/i);
+    expect(response.body.message).toMatch(/confirm the cash or bank payment/i);
     expect(findOne).not.toHaveBeenCalled();
   });
 

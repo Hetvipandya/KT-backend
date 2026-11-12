@@ -479,25 +479,27 @@ const getFinancePayrollRegister = async (req, res) => {
     const monthNumber = Number(month);
     const yearNumber = Number(year);
 
-    if (!companyId || !branchId || !month || !year) {
+    if (!companyId || !branchId || Boolean(month) !== Boolean(year)) {
       return res.status(400).json({
         success: false,
-        message: "companyId, branchId, month, and year are required",
+        message: "companyId and branchId are required; month and year must be supplied together",
       });
     }
     if (
       !mongoose.Types.ObjectId.isValid(companyId) ||
       !mongoose.Types.ObjectId.isValid(branchId) ||
-      !Number.isInteger(monthNumber) ||
-      monthNumber < 1 ||
-      monthNumber > 12 ||
-      !Number.isInteger(yearNumber) ||
-      yearNumber < 2000 ||
-      yearNumber > 9999
+      (month && (
+        !Number.isInteger(monthNumber) ||
+        monthNumber < 1 ||
+        monthNumber > 12 ||
+        !Number.isInteger(yearNumber) ||
+        yearNumber < 2000 ||
+        yearNumber > 9999
+      ))
     ) {
       return res.status(400).json({
         success: false,
-        message: "A valid company, branch, month, and year are required",
+        message: "A valid company, branch, and payroll period are required",
       });
     }
 
@@ -515,12 +517,15 @@ const getFinancePayrollRegister = async (req, res) => {
       "ifscCode",
       "upiId",
     ].join(" ");
-    const salaries = await MonthlySalary.find({
+    const salaryQuery = {
       companyId,
       branchId,
-      month: monthNumber,
-      year: yearNumber,
-    })
+    };
+    if (month) {
+      salaryQuery.month = monthNumber;
+      salaryQuery.year = yearNumber;
+    }
+    const salaries = await MonthlySalary.find(salaryQuery)
       .populate("employeeId", employeeFields)
       .populate("userId", employeeFields)
       .sort({ createdAt: -1 });
@@ -1572,17 +1577,19 @@ const payMonthlySalary = async (req, res) => {
 const payFinanceMonthlySalary = async (req, res) => {
   try {
     const { salaryId, companyId, branchId, transferConfirmed, paymentMode, remarks } = req.body || {};
+    const isBankTransfer = paymentMode === "BANK_TRANSFER";
+    const isCashPayment = paymentMode === "CASH";
     if (
       !salaryId ||
       !mongoose.Types.ObjectId.isValid(salaryId) ||
       !companyId ||
       !branchId ||
       transferConfirmed !== true ||
-      paymentMode !== "BANK_TRANSFER"
+      (!isBankTransfer && !isCashPayment)
     ) {
       return res.status(400).json({
         success: false,
-        message: "Select a salary, confirm the bank transfer, and provide its company and branch",
+        message: "Select a salary, confirm the cash or bank payment, and provide its company and branch",
       });
     }
 
@@ -1613,17 +1620,19 @@ const payFinanceMonthlySalary = async (req, res) => {
       });
     }
 
-    const recipient = await resolveSalaryRecipient(salary);
-    if (!recipient || !recipient.bankAccountNumber || !recipient.ifscCode) {
-      return res.status(400).json({
-        success: false,
-        message: "Complete the employee's bank account number and IFSC code before recording payment",
-      });
+    if (isBankTransfer) {
+      const recipient = await resolveSalaryRecipient(salary);
+      if (!recipient || !recipient.bankAccountNumber || !recipient.ifscCode) {
+        return res.status(400).json({
+          success: false,
+          message: "Complete the employee's bank account number and IFSC code before recording payment",
+        });
+      }
     }
 
     req.body = {
       ...req.body,
-      paymentMode: "BANK_TRANSFER",
+      paymentMode,
       paidAt: req.body.paidAt || new Date().toISOString(),
       remarks: String(remarks || "").trim(),
     };
@@ -1632,7 +1641,7 @@ const payFinanceMonthlySalary = async (req, res) => {
     console.error("Pay Finance Monthly Salary Error:", error);
     return res.status(500).json({
       success: false,
-      message: "Failed to record the salary bank transfer",
+      message: "Failed to record the salary payment",
       error: error.message,
     });
   }
