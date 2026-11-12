@@ -1,9 +1,26 @@
+const express = require("express");
 const mongoose = require("mongoose");
+const request = require("supertest");
+const Branch = require("../models/Branch");
+const Company = require("../models/Company");
 const MonthlySalary = require("../models/MonthlySalary");
+const monthlySalaryRoutes = require("../routes/monthlySalaryRoutes");
 const {
   getFinancePayrollRegister,
   payFinanceMonthlySalary,
 } = require("../controllers/monthlySalaryController");
+
+const adminId = new mongoose.Types.ObjectId();
+const companyId = new mongoose.Types.ObjectId();
+const branchId = new mongoose.Types.ObjectId();
+let requestRole = "admin";
+const app = express();
+app.use(express.json());
+app.use((req, _res, next) => {
+  req.user = { _id: adminId, role: requestRole, companyId };
+  next();
+});
+app.use("/api/salaries", monthlySalaryRoutes);
 
 const createResponse = () => {
   const res = {
@@ -24,6 +41,7 @@ const createResponse = () => {
 describe("Finance monthly payroll register", () => {
   afterEach(() => {
     jest.restoreAllMocks();
+    requestRole = "admin";
   });
 
   it("lists payroll for only the requested company, branch, month, and year", async () => {
@@ -100,6 +118,7 @@ describe("Finance monthly payroll register", () => {
       branchId,
       status: "Paid",
     });
+
     const res = createResponse();
 
     await payFinanceMonthlySalary({
@@ -119,5 +138,111 @@ describe("Finance monthly payroll register", () => {
       companyId,
       branchId,
     });
+  });
+
+  it("requires the employee's bank account and IFSC before recording payment", async () => {
+    const salaryId = new mongoose.Types.ObjectId();
+    const employeeId = new mongoose.Types.ObjectId();
+    const findOne = jest.spyOn(MonthlySalary, "findOne").mockResolvedValue({
+      _id: salaryId,
+      companyId,
+      branchId,
+      employeeId,
+      userId: employeeId,
+      status: "Generated",
+      netSalary: 45000,
+      save: jest.fn(),
+    });
+    jest.spyOn(require("../models/User"), "findById").mockResolvedValue({
+      _id: employeeId,
+      name: "Employee",
+      bankAccountNumber: null,
+      ifscCode: null,
+    });
+    const res = createResponse();
+
+    await payFinanceMonthlySalary({
+      body: {
+        salaryId: salaryId.toString(),
+        companyId: companyId.toString(),
+        branchId: branchId.toString(),
+        paymentMode: "BANK_TRANSFER",
+        transferConfirmed: true,
+      },
+    }, res);
+
+    expect(res.statusCode).toBe(400);
+    expect(res.body.message).toMatch(/bank account number and IFSC/i);
+    expect(findOne).toHaveBeenCalledTimes(1);
+  });
+
+  it("serves the protected finance register route before the generic salary-id route", async () => {
+    jest.spyOn(Company, "findById").mockResolvedValue({
+      _id: companyId,
+      createdBy: adminId,
+    });
+    jest.spyOn(Branch, "findOne").mockResolvedValue({
+      _id: branchId,
+      companyId,
+    });
+    const salaries = [{ _id: new mongoose.Types.ObjectId(), month: 11, year: 2026 }];
+    const query = {
+      populate: jest.fn(),
+      sort: jest.fn().mockResolvedValue(salaries),
+    };
+    query.populate.mockReturnValue(query);
+    jest.spyOn(MonthlySalary, "find").mockReturnValue(query);
+
+    const response = await request(app)
+      .get("/api/salaries/finance-register")
+      .query({
+        companyId: companyId.toString(),
+        branchId: branchId.toString(),
+        month: 11,
+        year: 2026,
+      });
+
+    expect(response.status).toBe(200);
+    expect(response.body.data).toHaveLength(1);
+  });
+
+  it("routes finance payment confirmations through the explicit-confirmation handler", async () => {
+    jest.spyOn(Company, "findById").mockResolvedValue({
+      _id: companyId,
+      createdBy: adminId,
+    });
+    jest.spyOn(Branch, "findOne").mockResolvedValue({
+      _id: branchId,
+      companyId,
+    });
+    const findOne = jest.spyOn(MonthlySalary, "findOne");
+
+    const response = await request(app)
+      .put("/api/salaries/finance-register/pay")
+      .send({
+        salaryId: new mongoose.Types.ObjectId().toString(),
+        companyId: companyId.toString(),
+        branchId: branchId.toString(),
+        paymentMode: "BANK_TRANSFER",
+        transferConfirmed: false,
+      });
+
+    expect(response.status).toBe(400);
+    expect(response.body.message).toMatch(/confirm the bank transfer/i);
+    expect(findOne).not.toHaveBeenCalled();
+  });
+
+  it("does not expose the finance payroll register to employees", async () => {
+    requestRole = "employee";
+    const response = await request(app)
+      .get("/api/salaries/finance-register")
+      .query({
+        companyId: companyId.toString(),
+        branchId: branchId.toString(),
+        month: 11,
+        year: 2026,
+      });
+
+    expect(response.status).toBe(403);
   });
 });
