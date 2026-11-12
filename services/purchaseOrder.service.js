@@ -373,4 +373,4 @@ const rejectPurchaseOrder = async (po, userId, reason) => {
   };
 };
 
-module.exports = { createPurchaseOrder, updatePurchaseOrder, deletePurchaseOrder, listPurchaseOrders, getPurchaseOrderDocument, approvePurchaseOrder, rejectPurchaseOrder, shape };
+module.exports = { createPurchaseOrder, updatePurchaseOrder, deletePurchaseOrder, listPurchaseOrders, getPurchaseOrderDocument, getPurchaseOrderDetails, approvePurchaseOrder, rejectPurchaseOrder, shape };

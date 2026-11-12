@@ -83,6 +83,14 @@ describe('Purchase order CRUD safeguards', () => {
     jest.clearAllMocks();
   });
 
+  test('exports the purchase order details method used by the controller', async () => {
+    PurchaseOrder.findById.mockReturnValue(createDetailsQuery());
+    Purchase.exists.mockResolvedValue(null);
+
+    await expect(purchaseOrderService.getPurchaseOrderDetails(PO_ID))
+      .resolves.toMatchObject({ id: PO_ID, poNumber: 'PO-2026-27-0001' });
+  });
+
   test('refuses to edit an order linked to a purchase bill', async () => {
     Purchase.exists.mockResolvedValue({ _id: '6ac8a921e6b91ab589aa3010' });
     const order = createPurchaseOrder();
