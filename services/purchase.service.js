@@ -81,7 +81,79 @@ const shape = (p, detail = false) => {
     updatedAt: p.updatedAt
   };
 };
-const postJournal = async (purchase, supplier, userId) => { const payable = supplier.payableAccountId ? await ChartOfAccount.findById(supplier.payableAccountId) : await ChartOfAccount.findOne({ companyId: purchase.companyId, code: '2310', isActive: true, isGroup: false }); const purchaseAccount = await ChartOfAccount.findOne({ companyId: purchase.companyId, code: '5110', isActive: true, isGroup: false }); const gst = purchase.taxTotal > 0 ? await ChartOfAccount.findOne({ companyId: purchase.companyId, code: '1410', isActive: true, isGroup: false }) : null; if (!payable || !purchaseAccount || (purchase.taxTotal > 0 && !gst)) throw fail('Required purchase, input GST, or supplier payable COA account is unavailable', 500, 'PURCHASE_JOURNAL_ENTRY_FAILED'); const lines = [{ accountId: purchaseAccount._id, debit: purchase.subTotal - purchase.discountTotal, credit: 0, remarks: 'Purchase / inventory' }, ...(purchase.taxTotal ? [{ accountId: gst._id, debit: purchase.taxTotal, credit: 0, remarks: 'Input GST' }] : []), { accountId: payable._id, debit: 0, credit: purchase.grandTotal, remarks: 'Supplier payable' }]; return journal.createJournalEntry({ companyId: purchase.companyId, branchId: purchase.branchId || null, financialYearId: purchase.financialYearId, entryDate: purchase.billDate, reference: purchase.billNumber, narration: `Purchase bill ${purchase.billNumber}`, lines }, userId); };
+const postJournal = async (purchase, supplier, userId) => {
+  const payable = supplier.payableAccountId
+    ? await ChartOfAccount.findById(supplier.payableAccountId)
+    : await ChartOfAccount.findOne({ companyId: purchase.companyId, code: '2310', isActive: true, isGroup: false });
+  const purchaseAccount = await ChartOfAccount.findOne({
+    companyId: purchase.companyId,
+    code: '5110',
+    isActive: true,
+    isGroup: false
+  });
+  const gst = purchase.taxTotal > 0
+    ? await ChartOfAccount.findOne({ companyId: purchase.companyId, code: '1410', isActive: true, isGroup: false })
+    : null;
+  if (!payable || !purchaseAccount || (purchase.taxTotal > 0 && !gst)) {
+    throw fail('Required purchase, input GST, or supplier payable COA account is unavailable', 500, 'PURCHASE_JOURNAL_ENTRY_FAILED');
+  }
+
+  const lines = [
+    {
+      accountId: purchaseAccount._id,
+      debit: purchase.subTotal - purchase.discountTotal,
+      credit: 0,
+      remarks: 'Purchase / inventory'
+    },
+    ...(purchase.taxTotal ? [{
+      accountId: gst._id,
+      debit: purchase.taxTotal,
+      credit: 0,
+      remarks: 'Input GST'
+    }] : []),
+    {
+      accountId: payable._id,
+      debit: 0,
+      credit: purchase.grandTotal,
+      remarks: 'Supplier payable'
+    }
+  ];
+
+  const roundOff = Number(purchase.roundOff) || 0;
+  if (roundOff > 0) {
+    const { ensureExpenseLedger } = require('./autoCoaMapping.service');
+    const roundingExpense = await ensureExpenseLedger(purchase.companyId, 'Purchase Round Off');
+    lines.push({
+      accountId: roundingExpense._id,
+      debit: roundOff,
+      credit: 0,
+      remarks: 'Purchase bill round off'
+    });
+  } else if (roundOff < 0) {
+    const { ensureIncomeLedger } = require('./autoCoaMapping.service');
+    const roundingIncome = await ensureIncomeLedger(
+      purchase.companyId,
+      'Purchase Round Off',
+      'purchase:round-off:income'
+    );
+    lines.push({
+      accountId: roundingIncome._id,
+      debit: 0,
+      credit: Math.abs(roundOff),
+      remarks: 'Purchase bill round off'
+    });
+  }
+
+  return journal.createJournalEntry({
+    companyId: purchase.companyId,
+    branchId: purchase.branchId || null,
+    financialYearId: purchase.financialYearId,
+    entryDate: purchase.billDate,
+    reference: purchase.billNumber,
+    narration: `Purchase bill ${purchase.billNumber}`,
+    lines
+  }, userId);
+};
 const createPurchase = async (data, userId) => { validateTotals(data); const supplier = await validateRefs(data); const purchase = await Purchase.create({ ...data, billDate: new Date(data.billDate), dueDate: data.dueDate ? new Date(data.dueDate) : null, status: 'POSTED', createdBy: userId, updatedBy: userId }); try { const entry = await postJournal(purchase, supplier, userId); purchase.journalEntryId = entry._id; await purchase.save(); const populated = await Purchase.findById(purchase._id).populate('supplierId', 'name gstin').populate('branchId', 'branchName').populate('financialYearId', 'yearLabel').populate('lineItems.productId', 'name code hsnSacCode unitOfMeasure').populate('lineItems.taxRateId', 'name rate type').lean(); return shape(populated, true); } catch (error) { await Purchase.deleteOne({ _id: purchase._id }); throw error; } };
 const listPurchases = async (companyId, q) => { const filter = { companyId }; if (q.branchId) filter.branchId = q.branchId; for (const key of ['supplierId', 'financialYearId', 'status']) if (q[key]) filter[key] = q[key]; if (q.from || q.to) { filter.billDate = {}; if (q.from) filter.billDate.$gte = new Date(q.from); if (q.to) filter.billDate.$lte = new Date(q.to); } if (q.search) filter.$or = [{ billNumber: new RegExp(q.search, 'i') }, { notes: new RegExp(q.search, 'i') }]; const [items, total] = await Promise.all([Purchase.find(filter).populate('supplierId', 'name gstin').populate('branchId', 'branchName').populate('financialYearId', 'yearLabel').sort({ billDate: -1, createdAt: -1 }).skip((q.page - 1) * q.limit).limit(q.limit).lean(), Purchase.countDocuments(filter)]); return { items: items.map((item) => shape(item)), pagination: { page: q.page, limit: q.limit, total } }; };
 const getPurchaseDocument = async (value) => {
@@ -227,4 +299,4 @@ const createReturn = async (purchase, data, userId) => {
     note: 'Stock-out and Debit Note integration remain pending Modules 18 and 24.'
   };
 };
-module.exports = { createPurchase, listPurchases, getPurchaseDocument, updatePurchase, createReturn, shape };
+module.exports = { createPurchase, listPurchases, getPurchaseDocument, updatePurchase, createReturn, shape, postJournal };
