@@ -419,19 +419,73 @@ const updateInvoice = async (invoice, data, userId) => {
   const existing = typeof invoice.toObject === 'function' ? invoice.toObject() : { ...invoice };
   data = normalizeInvoiceTotals({ ...existing, ...data });
   validateTotals(data);
-  const { customer } = await validateReferences({ ...data, companyId: id(invoice.companyId), financialYearId: id(invoice.financialYearId), customerId: id(invoice.customerId) });
+  const { customer, products } = await validateReferences({
+    ...data,
+    companyId: id(invoice.companyId),
+    financialYearId: id(invoice.financialYearId),
+    customerId: id(invoice.customerId)
+  });
 
   const oldPublicId = invoice.cloudinaryPublicId;
   const oldResourceType = invoice.cloudinaryResourceType;
+  let reversalJournalEntry = null;
+  let replacementJournalEntry = null;
 
-  Object.assign(invoice, data, {
-    customerName: customer.name,
-    invoiceDate: new Date(data.invoiceDate),
-    dueDate: data.dueDate ? new Date(data.dueDate) : null,
-    balanceDue: data.grandTotal,
-    updatedBy: userId
-  });
-  await invoice.save();
+  try {
+    if (invoice.journalEntryId) {
+      const reversed = await journalService.reverseJournalEntry(invoice.journalEntryId, userId);
+      reversalJournalEntry = reversed.reversal;
+    }
+
+    Object.assign(invoice, data, {
+      customerName: customer.name,
+      invoiceDate: new Date(data.invoiceDate),
+      dueDate: data.dueDate ? new Date(data.dueDate) : null,
+      balanceDue: data.grandTotal,
+      journalEntryId: null,
+      reversalJournalEntryId: reversalJournalEntry?._id || invoice.reversalJournalEntryId,
+      updatedBy: userId
+    });
+    await invoice.save();
+
+    replacementJournalEntry = await createJournalEntryForInvoice({
+      ...invoice.toObject(),
+      customer,
+      products
+    }, userId);
+    invoice.journalEntryId = replacementJournalEntry._id;
+    await invoice.save();
+  } catch (error) {
+    const recoveryErrors = [];
+    if (replacementJournalEntry) {
+      try {
+        await journalService.reverseJournalEntry(replacementJournalEntry._id, userId);
+      } catch (recoveryError) {
+        recoveryErrors.push(recoveryError);
+      }
+    }
+    if (reversalJournalEntry) {
+      try {
+        const restored = await journalService.reverseJournalEntry(reversalJournalEntry._id, userId);
+        Object.assign(invoice, existing, {
+          journalEntryId: restored.reversal._id,
+          reversalJournalEntryId: existing.reversalJournalEntryId || null,
+          updatedBy: userId
+        });
+        await invoice.save();
+      } catch (recoveryError) {
+        recoveryErrors.push(recoveryError);
+      }
+    } else if (!recoveryErrors.length) {
+      Object.assign(invoice, existing, { updatedBy: userId });
+      await invoice.save();
+    }
+    if (recoveryErrors.length) {
+      error.message = `${error.message}. Invoice accounting recovery also failed: ${recoveryErrors.map((item) => item.message).join('; ')}`;
+      error.statusCode = 500;
+    }
+    throw error;
+  }
 
   // Generate new PDF and upload to Cloudinary, then delete old PDF
   try {
