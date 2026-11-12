@@ -7,7 +7,17 @@ const { getAccountBalance, hasTransactions, generateNextCode, seedDefaultCoa } =
  */
 const createAccount = async (req, res, next) => {
   try {
-    const { companyId, name, type, isGroup, parentId, code, openingBalance, openingBalanceType } = req.body;
+    const {
+      companyId,
+      name,
+      type,
+      isGroup,
+      parentId,
+      branchId: requestedBranchId,
+      code,
+      openingBalance,
+      openingBalanceType
+    } = req.body;
 
     // Validate parentId if provided
     let resolvedParentId = null;
@@ -40,7 +50,19 @@ const createAccount = async (req, res, next) => {
       resolvedParentId = parentAcc._id;
     }
 
-    const branchId = req.branchId || (req.body && req.body.branchId) || (req.user && req.user.branchId) || null;
+    const activeAccess = (req.user?.companyAccess || []).find(
+      (access) => access.isActive !== false &&
+        (!req.company || access.companyId.toString() === req.company._id.toString())
+    );
+    const role = String(activeAccess?.role || req.user?.role || '').trim().toLowerCase();
+    const canCreateSharedAccount = ['admin', 'superadmin'].includes(role) ||
+      req.user?.companyCreated === true ||
+      Boolean(req.company?.createdBy &&
+        req.company.createdBy.toString() === req.user?._id?.toString());
+    const hasRequestedBranch = Object.prototype.hasOwnProperty.call(req.body, 'branchId');
+    const branchId = hasRequestedBranch && (requestedBranchId || canCreateSharedAccount)
+      ? requestedBranchId
+      : req.branchId || (req.user && req.user.branchId) || null;
 
     // Auto-generate code if omitted
     let finalCode = code;
@@ -48,8 +70,7 @@ const createAccount = async (req, res, next) => {
       finalCode = await generateNextCode(companyId, type);
     } else {
       // Check if code is already in use by another account in the same company/branch
-      const codeQuery = { companyId, code: finalCode };
-      if (branchId) codeQuery.branchId = branchId;
+      const codeQuery = { companyId, code: finalCode, branchId };
       const codeExists = await ChartOfAccount.findOne(codeQuery);
       if (codeExists) {
         return res.status(400).json({

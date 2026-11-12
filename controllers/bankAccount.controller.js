@@ -64,7 +64,21 @@ const createBankAccount = async (req, res, next) => {
       openingBalance
     );
 
-    const branchId = bodyBranchId || req.branchId || (req.user && req.user.branchId) || null;
+    const activeCompanyAccess = (req.user?.companyAccess || []).find((access) => (
+      access.isActive !== false &&
+      (!req.company?._id || access.companyId?.toString() === req.company._id.toString())
+    ));
+    const userRole = String(activeCompanyAccess?.role || req.user?.role || '').trim().toLowerCase();
+    const isCompanyOwner = Boolean(
+      req.company?.createdBy &&
+      req.user?._id &&
+      req.company.createdBy.toString() === req.user._id.toString()
+    );
+    const canCreateCompanyWideAccount = ['admin', 'superadmin'].includes(userRole) ||
+      isCompanyOwner || req.user?.companyCreated === true;
+    const branchId = bodyBranchId === null && canCreateCompanyWideAccount
+      ? null
+      : bodyBranchId || req.branchId || (req.user && req.user.branchId) || null;
 
     const bankAccount = await BankAccount.create({
       companyId,
@@ -87,6 +101,7 @@ const createBankAccount = async (req, res, next) => {
       success: true,
       data: {
         ...bankAccount.toObject(),
+        bankBranchName: bankAccount.branchName || '',
         coaAccountId: bankAccount.coaAccountId ? bankAccount.coaAccountId.toString() : null,
         coaAccountName: coaDoc?.name || bankAccount.accountName || null,
         coaAccountCode: coaDoc?.code || null,
@@ -147,6 +162,8 @@ const listBankAccounts = async (req, res, next) => {
         ...acc,
         branchId: branchIdStr,
         branchName,
+        bankBranchName: acc.branchName || '',
+        companyBranchName: branchName,
         coaAccountId: acc.coaAccountId ? acc.coaAccountId.toString() : null,
         coaAccountName: coaDoc?.name || acc.accountName || null,
         coaAccountCode: coaDoc?.code || null,
@@ -200,6 +217,8 @@ const getBankAccountDetails = async (req, res, next) => {
         ...bankAccount,
         branchId: branchIdStr,
         branchName,
+        bankBranchName: bankAccount.branchName || '',
+        companyBranchName: branchName,
         coaAccountId: bankAccount.coaAccountId ? bankAccount.coaAccountId.toString() : null,
         coaAccountName: coaDoc?.name || bankAccount.accountName || null,
         coaAccountCode: coaDoc?.code || null,
@@ -257,6 +276,7 @@ const updateBankAccount = async (req, res, next) => {
       success: true,
       data: {
         ...saved.toObject(),
+        bankBranchName: saved.branchName || '',
         coaAccountId: saved.coaAccountId ? saved.coaAccountId.toString() : null,
         coaAccountName: coaDoc?.name || saved.accountName || null,
         coaAccountCode: coaDoc?.code || null,

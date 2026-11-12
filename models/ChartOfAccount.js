@@ -40,6 +40,11 @@ const chartOfAccountSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
+  autoMapKey: {
+    type: String,
+    trim: true,
+    default: null
+  },
   openingBalance: {
     type: Number,
     default: 0
@@ -64,6 +69,10 @@ chartOfAccountSchema.index({ companyId: 1, branchId: 1, code: 1 }, { unique: tru
 chartOfAccountSchema.index({ companyId: 1, branchId: 1, parentId: 1 });
 chartOfAccountSchema.index({ companyId: 1, branchId: 1, type: 1, name: 1 });
 chartOfAccountSchema.index({ companyId: 1, branchId: 1, isActive: 1 });
+chartOfAccountSchema.index(
+  { companyId: 1, autoMapKey: 1 },
+  { unique: true, partialFilterExpression: { autoMapKey: { $type: 'string' } } }
+);
 
 const ChartOfAccount = mongoose.model('ChartOfAccount', chartOfAccountSchema);
 

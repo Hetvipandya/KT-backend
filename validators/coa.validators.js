@@ -25,6 +25,10 @@ const createCoaSchema = z.object({
     .or(z.literal('none'))
     .or(z.literal('null'))
     .or(z.literal(null)),
+  branchId: z.string()
+    .regex(objectIdRegex, 'Invalid Branch ID format')
+    .nullable()
+    .optional(),
   code: z.string().trim().optional().or(z.literal('')),
   openingBalance: z.coerce.number().default(0),
   openingBalanceType: z.enum(['Dr', 'Cr']).default('Dr')

@@ -1,6 +1,7 @@
 const Expense = require("../models/Expense");
 const Income = require("../models/Income");
 const Transaction = require("../models/Transaction");
+const { ensureIncomeLedger } = require("../services/autoCoaMapping.service");
 
 /**
  * Create Expense
@@ -95,9 +96,10 @@ exports.updateExpense = async (req, res) => {
   }
 };
 
-exports.updateIncome = async (req, res) => {
+exports.updateIncome = async (req, res, next) => {
   try {
-    const income = await Income.findById(req.params.id);
+    const companyId = req.company?._id;
+    const income = await Income.findOne({ _id: req.params.id, companyId });
 
     if (!income) {
       return res.status(404).json({
@@ -106,22 +108,31 @@ exports.updateIncome = async (req, res) => {
       });
     }
 
-    const updatedIncome = await Income.findByIdAndUpdate(
-      req.params.id,
-      req.body,
-      { new: true, runValidators: true }
-    );
+    const updates = {};
+    ["incomeType", "title", "amount", "receivedDate", "paymentMode", "description"].forEach((field) => {
+      if (req.body[field] !== undefined) updates[field] = req.body[field];
+    });
+    if (updates.title || updates.incomeType) {
+      const title = updates.title || income.title;
+      const incomeType = updates.incomeType || income.incomeType;
+      const incomeAccount = await ensureIncomeLedger(
+        companyId,
+        title,
+        `income:legacy:${incomeType}:${String(title).trim().replace(/\s+/g, " ").toLowerCase()}`
+      );
+      updates.coaAccountId = incomeAccount._id;
+    }
+
+    Object.assign(income, updates, { branchId: req.branchId || null });
+    await income.save();
 
     res.status(200).json({
       success: true,
       message: "Income updated successfully",
-      data: updatedIncome,
+      data: income,
     });
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: error.message,
-    });
+    next(error);
   }
 };
 
@@ -234,9 +245,28 @@ exports.deleteExpense = async (req, res) => {
 /**
  * Create Income
  */
-exports.createIncome = async (req, res) => {
+exports.createIncome = async (req, res, next) => {
   try {
-    const income = await Income.create(req.body);
+    const companyId = req.company?._id || req.body.companyId;
+    if (!companyId) {
+      return res.status(400).json({
+        success: false,
+        message: "Company ID is required for income COA mapping.",
+      });
+    }
+
+    const incomeAccount = await ensureIncomeLedger(
+      companyId,
+      req.body.title,
+      `income:legacy:${req.body.incomeType}:${String(req.body.title).trim().replace(/\s+/g, " ").toLowerCase()}`
+    );
+    const income = await Income.create({
+      ...req.body,
+      companyId,
+      branchId: req.branchId || null,
+      coaAccountId: incomeAccount._id,
+      createdBy: req.user?._id || null,
+    });
 
     await Transaction.create({
       transactionType: "income",
@@ -248,22 +278,21 @@ exports.createIncome = async (req, res) => {
     res.status(201).json({
       success: true,
       message: "Income created successfully",
-      data: income,
+      data: { ...income.toObject(), coaAccountName: incomeAccount.name, coaAccountCode: incomeAccount.code },
     });
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: error.message,
-    });
+    next(error);
   }
 };
 
 /**
  * Get All Income
  */
-exports.getAllIncome = async (req, res) => {
+exports.getAllIncome = async (req, res, next) => {
   try {
-    const incomes = await Income.find().sort({
+    const incomes = await Income.find({ companyId: req.company._id })
+      .populate("coaAccountId", "name code")
+      .sort({
       createdAt: -1,
     });
 
@@ -273,10 +302,7 @@ exports.getAllIncome = async (req, res) => {
       data: incomes,
     });
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: error.message,
-    });
+    next(error);
   }
 };
 

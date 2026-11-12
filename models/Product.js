@@ -48,6 +48,11 @@ const ProductSchema = new mongoose.Schema({
     ref: 'Tax',
     default: null
   },
+  incomeAccountId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'ChartOfAccount',
+    default: null
+  },
   gstRate: {
     type: Number,
     default: 0,

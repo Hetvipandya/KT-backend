@@ -4,6 +4,7 @@ const Branch = require('../models/Branch');
 const ChartOfAccount = require('../models/ChartOfAccount');
 const BankAccount = require('../models/BankAccount');
 const journalService = require('./journalEntry.service');
+const { ensureExpenseLedger } = require('./autoCoaMapping.service');
 
 const fail = (message, statusCode = 400, errorCode) =>
   Object.assign(new Error(message), { statusCode, errorCode });
@@ -21,15 +22,20 @@ const create = async (data, userId) => {
   if (Math.abs(data.totalAmount - (data.amount + data.taxAmount)) > 0.01) {
     throw fail('totalAmount is inconsistent', 400, 'INVALID_TOTALS');
   }
-  const expenseAccount = await ChartOfAccount.findOne({
-    _id: data.expenseAccountId,
-    companyId: data.companyId,
-    isActive: true,
-    isGroup: false
-  });
+  const expenseAccount = data.expenseAccountId
+    ? await ChartOfAccount.findOne({
+      _id: data.expenseAccountId,
+      companyId: data.companyId,
+      type: 'Expense',
+      isActive: true,
+      isGroup: false,
+      $or: [{ branchId: data.branchId }, { branchId: null }]
+    })
+    : await ensureExpenseLedger(data.companyId, data.category);
   if (!expenseAccount) {
-    throw fail('Expense account not found', 404, 'ACCOUNT_NOT_FOUND');
+    throw fail('Expense account not found or is not an active expense ledger for this branch', 404, 'ACCOUNT_NOT_FOUND');
   }
+  data.expenseAccountId = expenseAccount._id;
 
   // Resolve taxRateId if passed as string rate (e.g. "18" or "18%") or ObjectId
   if (data.taxRateId) {
@@ -119,6 +125,10 @@ const create = async (data, userId) => {
     }
   }
 
+  if (!creditCoaAccountId) {
+    throw fail('An active cash or bank COA ledger is required to post this expense.', 400, 'PAYMENT_ACCOUNT_REQUIRED');
+  }
+
   const expense = await Expense.create({
     ...data,
     expenseDate: new Date(data.expenseDate),
@@ -127,68 +137,51 @@ const create = async (data, userId) => {
   });
 
   // Post corresponding Journal Entry for accounting flow
+  let journalEntry;
   try {
-    let creditCoaAccountId = null;
-    if (data.bankAccountId) {
-      const bank = await BankAccount.findOne({ _id: data.bankAccountId, companyId: data.companyId });
-      if (bank) creditCoaAccountId = bank.coaAccountId;
+    const lines = [
+      {
+        accountId: data.expenseAccountId,
+        debit: data.amount,
+        credit: 0,
+        remarks: data.description || 'Expense'
+      },
+      ...(data.taxAmount > 0 ? [{
+        accountId: data.expenseAccountId,
+        debit: data.taxAmount,
+        credit: 0,
+        remarks: 'Tax amount'
+      }] : []),
+      {
+        accountId: creditCoaAccountId,
+        debit: 0,
+        credit: data.totalAmount,
+        remarks: `Expense payment (${data.paymentMode})`
+      }
+    ];
+
+    journalEntry = await journalService.createJournalEntry({
+      companyId: data.companyId,
+      branchId: data.branchId || null,
+      financialYearId: data.financialYearId,
+      entryDate: new Date(data.expenseDate),
+      reference: data.reference || `EXP-${expense._id.toString().slice(-6)}`,
+      narration: `Expense: ${data.category} - ${data.description}`,
+      lines
+    }, userId);
+
+    expense.journalEntryId = journalEntry._id;
+    await expense.save();
+  } catch (error) {
+    if (journalEntry) {
+      try {
+        await journalService.reverseJournalEntry(journalEntry._id, userId);
+      } catch (reversalError) {
+        console.error('Failed to reverse journal entry after expense posting failed:', reversalError.message);
+      }
     }
-
-    if (!creditCoaAccountId) {
-      // Fallback to Cash account
-      const cashAccount = await ChartOfAccount.findOne({
-        companyId: data.companyId,
-        code: { $in: ['1210', '1200'] },
-        isActive: true,
-        isGroup: false
-      }) || await ChartOfAccount.findOne({
-        companyId: data.companyId,
-        type: 'Asset',
-        name: /cash/i,
-        isActive: true,
-        isGroup: false
-      });
-      if (cashAccount) creditCoaAccountId = cashAccount._id;
-    }
-
-    if (creditCoaAccountId) {
-      const lines = [
-        {
-          accountId: data.expenseAccountId,
-          debit: data.amount,
-          credit: 0,
-          remarks: data.description || 'Expense'
-        },
-        ...(data.taxAmount > 0 ? [{
-          accountId: data.expenseAccountId,
-          debit: data.taxAmount,
-          credit: 0,
-          remarks: 'Tax amount'
-        }] : []),
-        {
-          accountId: creditCoaAccountId,
-          debit: 0,
-          credit: data.totalAmount,
-          remarks: `Expense payment (${data.paymentMode})`
-        }
-      ];
-
-      const entry = await journalService.createJournalEntry({
-        companyId: data.companyId,
-        branchId: data.branchId || null,
-        financialYearId: data.financialYearId,
-        entryDate: new Date(data.expenseDate),
-        reference: data.reference || `EXP-${expense._id.toString().slice(-6)}`,
-        narration: `Expense: ${data.category} - ${data.description}`,
-        lines
-      }, userId);
-
-      expense.journalEntryId = entry._id;
-      await expense.save();
-    }
-  } catch (err) {
-    // If journal posting fails, expense remains created with journalEntryId = null
-    console.error('Failed to post automatic journal entry for expense:', err.message);
+    await Expense.deleteOne({ _id: expense._id });
+    throw error;
   }
 
   const populated = await Expense.findById(expense._id)

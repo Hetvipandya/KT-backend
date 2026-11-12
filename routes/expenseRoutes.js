@@ -1,5 +1,7 @@
 const express = require("express");
 const router = express.Router();
+const authenticate = require("../middleware/authenticate");
+const checkCompanyAccess = require("../middleware/companyAccess");
 
 const {
   // Expense APIs
@@ -52,6 +54,8 @@ router.put(
 
 router.put(
   "/update/income/:id",
+  authenticate,
+  checkCompanyAccess,
   updateIncome
 );
 
@@ -76,11 +80,15 @@ router.delete(
 
 router.post(
   "/income/create",
+  authenticate,
+  checkCompanyAccess,
   createIncome
 );
 
 router.get(
   "/income/all",
+  authenticate,
+  checkCompanyAccess,
   getAllIncome
 );
 

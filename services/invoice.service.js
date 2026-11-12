@@ -4,7 +4,9 @@ const Customer = require('../models/Customer');
 const Tax = require('../models/Tax');
 const FinancialYear = require('../models/FinancialYear');
 const ChartOfAccount = require('../models/ChartOfAccount');
+const Product = require('../models/Product');
 const journalService = require('./journalEntry.service');
+const { ensureIncomeLedger } = require('./autoCoaMapping.service');
 const { recordAuditEvent } = require('./auditLog.service');
 const { createNotification } = require('./notification.service');
 const pdfService = require('./invoicePdf.service');
@@ -67,8 +69,14 @@ const validateReferences = async (data) => {
     if (count !== taxIds.length) throw fail('One or more tax rates are invalid for this company', 400, 'INVALID_TAX_RATE');
   }
 
-  // TODO: validate productIds against Module 7 Product/Service once that model exists.
-  return { fy, customer };
+  const productIds = [...new Set(data.lineItems.filter((line) => line.productId).map((line) => id(line.productId)))];
+  const products = productIds.length
+    ? await Product.find({ _id: { $in: productIds }, companyId: data.companyId, isActive: true })
+    : [];
+  if (products.length !== productIds.length) {
+    throw fail('One or more products or services are unavailable for this company', 400, 'INVALID_PRODUCT');
+  }
+  return { fy, customer, products };
 };
 
 const shape = (invoice, detail = false) => {
@@ -154,31 +162,120 @@ const nextNumber = async (companyId, financialYearId, label) => {
 };
 
 const createJournalEntryForInvoice = async (invoice, userId) => {
-  const customerAccountId = invoice.customer?.coaAccountId || invoice.customerId;
-  const customerAccount = customerAccountId ? await ChartOfAccount.findById(customerAccountId) : null;
-  const salesAccount = await ChartOfAccount.findOne({ companyId: invoice.companyId, code: '4110', isActive: true });
-  const gstAccount = await ChartOfAccount.findOne({ companyId: invoice.companyId, code: '2200', isActive: true });
-
-  // TODO: real implementation should map customer AR from Module 3/5 and sales/output GST from COA/Module 25.
-  const lines = [];
-  if (customerAccount) {
-    lines.push({ accountId: customerAccount._id, debit: invoice.grandTotal, credit: 0, remarks: 'Sales invoice receivable' });
+  const customerAccountId = invoice.customer?.coaAccountId;
+  const customerAccount = customerAccountId
+    ? await ChartOfAccount.findOne({
+      _id: customerAccountId,
+      companyId: invoice.companyId,
+      type: 'Asset',
+      isActive: true,
+      isGroup: false,
+    })
+    : null;
+  if (!customerAccount) {
+    throw fail('Customer receivable COA account is unavailable', 500, 'INVOICE_JOURNAL_ENTRY_FAILED');
   }
-  if (salesAccount) {
-    lines.push({
+
+  const productsById = new Map((invoice.products || []).map((product) => [id(product._id), product]));
+  let defaultSalesAccount = null;
+  const getDefaultSalesAccount = async () => {
+    if (!defaultSalesAccount) {
+      defaultSalesAccount = await ChartOfAccount.findOne({
+        companyId: invoice.companyId,
+        branchId: null,
+        code: '4110',
+        type: 'Income',
+        isActive: true,
+        isGroup: false,
+      }) || await ensureIncomeLedger(invoice.companyId, 'Sales Revenue', 'income:default:sales');
+    }
+    return defaultSalesAccount;
+  };
+
+  const revenueTotal = roundMoney(invoice.subTotal - invoice.discountTotal + (invoice.roundOff || 0));
+  if (revenueTotal < 0) {
+    throw fail('Invoice discounts cannot exceed the revenue total', 400, 'INVALID_TOTALS');
+  }
+  const revenueByAccount = new Map();
+  let allocatedRevenue = 0;
+  for (let index = 0; index < invoice.lineItems.length; index += 1) {
+    const item = invoice.lineItems[index];
+    let incomeAccount = null;
+    if (item.productId) {
+      const product = productsById.get(id(item.productId));
+      if (!product) {
+        throw fail('Product or service is unavailable for this invoice', 400, 'INVALID_PRODUCT');
+      }
+      incomeAccount = product.incomeAccountId
+        ? await ChartOfAccount.findOne({
+          _id: product.incomeAccountId,
+          companyId: invoice.companyId,
+          type: 'Income',
+          isActive: true,
+          isGroup: false,
+        })
+        : null;
+      if (!incomeAccount) {
+        incomeAccount = await ensureIncomeLedger(
+          invoice.companyId,
+          product.name,
+          `income:product:${id(product._id)}`
+        );
+        product.incomeAccountId = incomeAccount._id;
+        await product.save();
+      }
+    } else {
+      incomeAccount = await getDefaultSalesAccount();
+    }
+
+    const isLastLine = index === invoice.lineItems.length - 1;
+    const lineRevenue = isLastLine
+      ? roundMoney(revenueTotal - allocatedRevenue)
+      : (invoice.subTotal > 0
+        ? roundMoney(revenueTotal * (item.taxableAmount / invoice.subTotal))
+        : 0);
+    allocatedRevenue = roundMoney(allocatedRevenue + lineRevenue);
+    if (lineRevenue > 0) {
+      const accountKey = id(incomeAccount._id);
+      revenueByAccount.set(accountKey, {
+        accountId: incomeAccount._id,
+        credit: roundMoney((revenueByAccount.get(accountKey)?.credit || 0) + lineRevenue),
+      });
+    }
+  }
+
+  if (revenueTotal > 0 && !revenueByAccount.size) {
+    const salesAccount = await getDefaultSalesAccount();
+    revenueByAccount.set(id(salesAccount._id), {
       accountId: salesAccount._id,
-      debit: 0,
-      credit: roundMoney(invoice.subTotal - invoice.discountTotal + (invoice.roundOff || 0)),
-      remarks: 'Sales revenue' + ((invoice.roundOff || 0) !== 0 ? ' including round off' : '')
+      credit: revenueTotal,
     });
   }
-  if (gstAccount && invoice.taxTotal > 0) {
-    lines.push({ accountId: gstAccount._id, debit: 0, credit: invoice.taxTotal, remarks: 'Output GST' });
+
+  const gstAccount = invoice.taxTotal > 0
+    ? await ChartOfAccount.findOne({
+      companyId: invoice.companyId,
+      branchId: null,
+      code: '2200',
+      type: 'Liability',
+      isActive: true,
+      isGroup: false,
+    })
+    : null;
+  if (invoice.taxTotal > 0 && !gstAccount) {
+    throw fail('Output GST COA account is unavailable', 500, 'INVOICE_JOURNAL_ENTRY_FAILED');
   }
 
-  if (lines.length < 2) {
-    throw fail('Unable to create journal entry for invoice because required COA accounts are unavailable', 500, 'INVOICE_JOURNAL_ENTRY_FAILED');
-  }
+  const lines = [
+    { accountId: customerAccount._id, debit: invoice.grandTotal, credit: 0, remarks: 'Sales invoice receivable' },
+    ...[...revenueByAccount.values()].map((item) => ({
+      accountId: item.accountId,
+      debit: 0,
+      credit: item.credit,
+      remarks: 'Sales revenue',
+    })),
+    ...(gstAccount ? [{ accountId: gstAccount._id, debit: 0, credit: invoice.taxTotal, remarks: 'Output GST' }] : []),
+  ];
 
   const journalEntry = await journalService.createJournalEntry({
     companyId: invoice.companyId,
@@ -195,7 +292,7 @@ const createJournalEntryForInvoice = async (invoice, userId) => {
 const createInvoice = async (data, userId) => {
   data = normalizeInvoiceTotals(data);
   validateTotals(data);
-  const { fy, customer } = await validateReferences(data);
+  const { fy, customer, products } = await validateReferences(data);
 
   for (let attempt = 0; attempt < 3; attempt += 1) {
     const { sequence, invoiceNumber } = await nextNumber(data.companyId, data.financialYearId, fy.yearLabel);
@@ -218,7 +315,7 @@ const createInvoice = async (data, userId) => {
       });
 
       try {
-        const journalEntry = await createJournalEntryForInvoice({ ...invoiceDoc.toObject(), customer }, userId);
+        const journalEntry = await createJournalEntryForInvoice({ ...invoiceDoc.toObject(), customer, products }, userId);
         invoiceDoc.journalEntryId = journalEntry._id;
         invoiceDoc.updatedBy = userId;
         await invoiceDoc.save();

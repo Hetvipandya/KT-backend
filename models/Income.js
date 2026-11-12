@@ -3,6 +3,18 @@ const mongoose = require("mongoose");
 const incomeSchema =
   new mongoose.Schema(
     {
+      companyId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Company",
+        required: true,
+        index: true,
+      },
+      branchId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Branch",
+        default: null,
+        index: true,
+      },
       incomeType: {
         type: String,
         enum: [
@@ -42,6 +54,16 @@ const incomeSchema =
       description: {
         type: String,
         default: "",
+      },
+      coaAccountId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "ChartOfAccount",
+        required: true,
+      },
+      createdBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+        default: null,
       },
     },
     {
