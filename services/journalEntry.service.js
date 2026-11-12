@@ -12,7 +12,7 @@ const serviceError = (message, statusCode, errorCode) => {
   return error;
 };
 
-const validateFinancialYear = async (companyId, financialYearId, entryDate) => {
+const validateFinancialYear = async (companyId, financialYearId, entryDate, branchId) => {
   if (!mongoose.isValidObjectId(financialYearId)) {
     throw serviceError('Financial year not found', 404, 'FINANCIAL_YEAR_NOT_FOUND');
   }
@@ -20,6 +20,9 @@ const validateFinancialYear = async (companyId, financialYearId, entryDate) => {
   if (!financialYear) throw serviceError('Financial year not found', 404, 'FINANCIAL_YEAR_NOT_FOUND');
   if (financialYear.companyId.toString() !== companyId.toString()) {
     throw serviceError('Financial year does not belong to the specified company', 400, 'INVALID_FINANCIAL_YEAR_COMPANY');
+  }
+  if (branchId && financialYear.branchId && financialYear.branchId.toString() !== branchId.toString()) {
+    throw serviceError('Financial year does not belong to the specified branch', 400, 'INVALID_FINANCIAL_YEAR_BRANCH');
   }
   if (financialYear.isLocked) {
     throw serviceError('Cannot post to a locked financial year', 409, 'FINANCIAL_YEAR_LOCKED');
@@ -30,7 +33,7 @@ const validateFinancialYear = async (companyId, financialYearId, entryDate) => {
   return financialYear;
 };
 
-const validateLines = async (companyId, lines) => {
+const validateLines = async (companyId, lines, branchId) => {
   const totalDebit = lines.reduce((total, line) => total + line.debit, 0);
   const totalCredit = lines.reduce((total, line) => total + line.credit, 0);
   if (Math.abs(totalDebit - totalCredit) > AMOUNT_TOLERANCE) {
@@ -45,7 +48,8 @@ const validateLines = async (companyId, lines) => {
     _id: { $in: accountIds },
     companyId,
     isActive: true,
-    isGroup: false
+    isGroup: false,
+    ...(branchId ? { $or: [{ branchId }, { branchId: null }] } : {})
   }).select('_id');
   if (accounts.length !== new Set(accountIds.map(String)).size) {
     throw serviceError('Every account must be an active ledger account belonging to the company', 400, 'INVALID_ACCOUNT_IDS');
@@ -56,8 +60,8 @@ const validateLines = async (companyId, lines) => {
 
 const createJournalEntry = async (payload, userId) => {
   const entryDate = new Date(payload.entryDate);
-  await validateFinancialYear(payload.companyId, payload.financialYearId, entryDate);
-  const { totalDebit, totalCredit } = await validateLines(payload.companyId, payload.lines);
+  await validateFinancialYear(payload.companyId, payload.financialYearId, entryDate, payload.branchId);
+  const { totalDebit, totalCredit } = await validateLines(payload.companyId, payload.lines, payload.branchId);
 
   return JournalEntry.create({
     ...payload,
@@ -82,7 +86,11 @@ const listJournalEntries = async (companyId, { financialYearId, branchId, from, 
   if (from || to) {
     filter.entryDate = {};
     if (from) filter.entryDate.$gte = new Date(from);
-    if (to) filter.entryDate.$lte = new Date(to);
+    if (to) {
+      const endDate = new Date(to);
+      endDate.setUTCHours(23, 59, 59, 999);
+      filter.entryDate.$lte = endDate;
+    }
   }
   return JournalEntry.find(filter).sort({ entryDate: -1, createdAt: -1 }).lean();
 };
@@ -98,7 +106,7 @@ const reverseJournalEntry = async (id, userId) => {
   if (original.reversedFrom) throw serviceError('A reversal entry cannot be reversed again', 400, 'REVERSAL_ENTRY_IMMUTABLE');
   if (original.isReversed) throw serviceError('Journal entry has already been reversed', 409, 'JOURNAL_ENTRY_ALREADY_REVERSED');
 
-  await validateFinancialYear(original.companyId, original.financialYearId, original.entryDate);
+  await validateFinancialYear(original.companyId, original.financialYearId, original.entryDate, original.branchId);
   const reversal = await JournalEntry.create({
     companyId: original.companyId,
     branchId: original.branchId || null,

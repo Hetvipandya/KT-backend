@@ -31,7 +31,8 @@ const listJournalEntries = async (req, res, next) => {
     if (!validDate(from) || !validDate(to) || (from && to && new Date(from) > new Date(to))) {
       return res.status(400).json({ success: false, message: 'Use a valid YYYY-MM-DD date range', errorCode: 'INVALID_DATE_RANGE' });
     }
-    const branchId = req.branchId || req.query.branchId || null;
+    const requestedBranchId = req.query.branchId;
+    const branchId = req.branchId || (requestedBranchId === 'all' ? null : requestedBranchId) || null;
     const entries = await journalEntryService.listJournalEntries(companyId, { financialYearId, branchId, from, to });
     return res.status(200).json({ success: true, data: entries });
   } catch (error) {

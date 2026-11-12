@@ -81,8 +81,9 @@ const validateReferences = async (data) => {
     OTHER: ['Cash', 'Wallet', 'Savings', 'Current', 'UPI']
   }[data.mode];
   if (!accountTypes) throw fail('Select a valid payment mode', 400, 'INVALID_PAYMENT_MODE');
-  const branchAccountScope = data.branchId
-    ? { $or: [{ branchId: data.branchId }, { branchId: null }] }
+  const accountBranchId = data.branchId || customer.branchId;
+  const branchAccountScope = accountBranchId
+    ? { $or: [{ branchId: accountBranchId }, { branchId: null }] }
     : {};
   if (data.bankAccountId) {
     const account = await BankAccount.findOne({
@@ -100,7 +101,7 @@ const validateReferences = async (data) => {
     isActive: true,
     accountType: { $in: accountTypes },
     ...branchAccountScope
-  }) || (data.branchId ? await BankAccount.findOne({
+  }) || (accountBranchId ? await BankAccount.findOne({
     companyId: data.companyId,
     branchId: null,
     isActive: true,
@@ -176,9 +177,21 @@ const createPayment = async (data, userId) => {
         createdBy: userId,
         updatedBy: userId
       });
-      const journalEntry = await postPaymentJournalEntry(payment, customer, bankAccount, userId);
-      payment.journalEntryId = journalEntry._id;
-      await payment.save();
+      let journalEntry;
+      try {
+        journalEntry = await postPaymentJournalEntry(payment, customer, bankAccount, userId);
+        payment.journalEntryId = journalEntry._id;
+        await payment.save();
+      } catch (error) {
+        try {
+          if (journalEntry) await journalService.reverseJournalEntry(journalEntry._id, userId);
+          await Payment.deleteOne({ _id: payment._id });
+        } catch (rollbackError) {
+          console.error('Failed to roll back customer receipt after journal posting failed:', rollbackError.message);
+          error.rollbackError = rollbackError.message;
+        }
+        throw error;
+      }
       await applyAllocations(payment, data.allocations, invoices);
       createNotification({
         userId,
