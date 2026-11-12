@@ -17,7 +17,12 @@ const AuditLog = require('../models/AuditLog');
 const getAdminDashboard = async (req, res, next) => {
   try {
     const companyId = req.company._id;
-    const { branchId: queryBranchId, financialYearId } = req.query;
+    const {
+      branchId: queryBranchId,
+      financialYearId,
+      startDate: queryStartDate,
+      endDate: queryEndDate,
+    } = req.query;
     const effectiveBranchId = req.branchId || queryBranchId || null;
 
     // Validate ObjectIds if supplied
@@ -35,6 +40,48 @@ const getAdminDashboard = async (req, res, next) => {
         errorCode: 'INVALID_FINANCIAL_YEAR_ID'
       });
     }
+    const hasStartDate = queryStartDate !== undefined && queryStartDate !== '';
+    const hasEndDate = queryEndDate !== undefined && queryEndDate !== '';
+    if (
+      (hasStartDate && typeof queryStartDate !== 'string') ||
+      (hasEndDate && typeof queryEndDate !== 'string')
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: 'Start and end dates must be valid date strings',
+        errorCode: 'INVALID_DATE_RANGE',
+      });
+    }
+
+    const startDate = hasStartDate ? new Date(queryStartDate) : null;
+    const endDate = hasEndDate ? new Date(queryEndDate) : null;
+    const hasInvalidCalendarDate = [queryStartDate, queryEndDate].some((value) => {
+      if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+      const parsed = new Date(value);
+      return Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== value;
+    });
+    if (endDate && /^\d{4}-\d{2}-\d{2}$/.test(queryEndDate)) {
+      endDate.setUTCHours(23, 59, 59, 999);
+    }
+    if (
+      (startDate && Number.isNaN(startDate.getTime())) ||
+      (endDate && Number.isNaN(endDate.getTime())) ||
+      hasInvalidCalendarDate ||
+      (startDate && endDate && startDate > endDate)
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: 'Provide a valid date range with the start date on or before the end date',
+        errorCode: 'INVALID_DATE_RANGE',
+      });
+    }
+
+    const dateMatch = (field) => {
+      const range = {};
+      if (startDate) range.$gte = startDate;
+      if (endDate) range.$lte = endDate;
+      return Object.keys(range).length ? { [field]: range } : {};
+    };
 
     const companyIdObj = new mongoose.Types.ObjectId(companyId);
     const branchIdObj = effectiveBranchId ? new mongoose.Types.ObjectId(effectiveBranchId) : null;
@@ -47,6 +94,10 @@ const getAdminDashboard = async (req, res, next) => {
 
     const invoiceMatch = { ...baseMatch, status: { $ne: 'CANCELLED' } };
     const purchaseMatch = { ...baseMatch, status: { $ne: 'CANCELLED' } };
+    const invoiceDateMatch = { ...invoiceMatch, ...dateMatch('invoiceDate') };
+    const purchaseDateMatch = { ...purchaseMatch, ...dateMatch('billDate') };
+    const expenseDateMatch = { ...baseMatch, ...dateMatch('expenseDate') };
+    const salaryDateMatch = { ...baseMatch, ...dateMatch('periodStart') };
 
     const entityMatch = { companyId: companyIdObj };
     if (branchIdObj) entityMatch.branchId = branchIdObj;
@@ -66,11 +117,19 @@ const getAdminDashboard = async (req, res, next) => {
       usersCount,
       recentInvoices,
       recentPurchases,
-      recentAuditLogs
+      recentAuditLogs,
+      expenseCategoriesAgg,
+      recentExpenses,
+      recentSalaries,
+      branchSalesAgg,
+      branchPurchaseAgg,
+      branchExpenseAgg,
+      branchSalaryAgg,
+      branchReceivablesAgg,
     ] = await Promise.all([
       // Sales (Invoices) aggregation
       Invoice.aggregate([ 
-        { $match: invoiceMatch },
+        { $match: invoiceDateMatch },
         {
           $group: {
             _id: null,
@@ -82,7 +141,7 @@ const getAdminDashboard = async (req, res, next) => {
       ]),
       // Purchases aggregation
       Purchase.aggregate([
-        { $match: purchaseMatch },
+        { $match: purchaseDateMatch },
         {
           $group: {
             _id: null,
@@ -93,7 +152,7 @@ const getAdminDashboard = async (req, res, next) => {
       ]),
       // Expenses aggregation
       Expense.aggregate([
-        { $match: baseMatch },
+        { $match: expenseDateMatch },
         {
           $group: {
             _id: null,
@@ -104,7 +163,7 @@ const getAdminDashboard = async (req, res, next) => {
       ]),
       // Salaries aggregation
       Salary.aggregate([
-        { $match: baseMatch },
+        { $match: salaryDateMatch },
         {
           $group: {
             _id: null,
@@ -115,7 +174,7 @@ const getAdminDashboard = async (req, res, next) => {
       ]),
       // Receivables aggregation (outstanding invoice balances)
       Invoice.aggregate([
-        { $match: { ...invoiceMatch, balanceDue: { $gt: 0 } } },
+        { $match: { ...invoiceDateMatch, balanceDue: { $gt: 0 } } },
         {
           $group: {
             _id: null,
@@ -126,7 +185,7 @@ const getAdminDashboard = async (req, res, next) => {
       ]),
       // Payables aggregation (outstanding purchase balances)
       Purchase.aggregate([
-        { $match: { ...purchaseMatch, balanceDue: { $gt: 0 } } },
+        { $match: { ...purchaseDateMatch, balanceDue: { $gt: 0 } } },
         {
           $group: {
             _id: null,
@@ -147,12 +206,12 @@ const getAdminDashboard = async (req, res, next) => {
         ]
       }),
       // Recent activities
-      Invoice.find(invoiceMatch)
+      Invoice.find(invoiceDateMatch)
         .sort({ invoiceDate: -1, createdAt: -1 })
         .limit(5)
         .populate('customerId', 'name email')
         .lean(),
-      Purchase.find(purchaseMatch)
+      Purchase.find(purchaseDateMatch)
         .sort({ billDate: -1, createdAt: -1 })
         .limit(5)
         .populate('supplierId', 'name email')
@@ -161,7 +220,52 @@ const getAdminDashboard = async (req, res, next) => {
         .sort({ createdAt: -1 })
         .limit(5)
         .populate('userId', 'name email')
-        .lean()
+        .lean(),
+      Expense.aggregate([
+        { $match: expenseDateMatch },
+        {
+          $group: {
+            _id: '$category',
+            totalAmount: { $sum: { $ifNull: ['$totalAmount', '$amount'] } },
+          },
+        },
+        { $sort: { totalAmount: -1 } },
+      ]),
+      Expense.find(expenseDateMatch)
+        .sort({ expenseDate: -1, createdAt: -1 })
+        .limit(5)
+        .lean(),
+      Salary.find(salaryDateMatch)
+        .sort({ periodStart: -1, createdAt: -1 })
+        .limit(5)
+        .lean(),
+      Invoice.aggregate([
+        { $match: invoiceDateMatch },
+        { $group: { _id: '$branchId', totalAmount: { $sum: '$grandTotal' } } },
+      ]),
+      Purchase.aggregate([
+        { $match: purchaseDateMatch },
+        { $group: { _id: '$branchId', totalAmount: { $sum: '$grandTotal' } } },
+      ]),
+      Expense.aggregate([
+        {
+          $match: expenseDateMatch,
+        },
+        {
+          $group: {
+            _id: '$branchId',
+            totalAmount: { $sum: { $ifNull: ['$totalAmount', '$amount'] } },
+          },
+        },
+      ]),
+      Salary.aggregate([
+        { $match: salaryDateMatch },
+        { $group: { _id: '$branchId', totalAmount: { $sum: '$netPayable' } } },
+      ]),
+      Invoice.aggregate([
+        { $match: { ...invoiceDateMatch, balanceDue: { $gt: 0 } } },
+        { $group: { _id: '$branchId', totalAmount: { $sum: '$balanceDue' } } },
+      ]),
     ]);
 
     // Live Real-Time Bank & Cash Balances
@@ -199,6 +303,42 @@ const getAdminDashboard = async (req, res, next) => {
 
     // Net Profit: Sales - (Purchases + Expenses + Salaries)
     const netProfit = sales.totalAmount - (purchases.totalAmount + expenses.totalAmount + salaries.totalAmount);
+    const totalOutflow = purchases.totalAmount + expenses.totalAmount + salaries.totalAmount;
+    const expenseBreakdown = [
+      { name: 'Salaries', amount: salaries.totalAmount },
+      { name: 'Purchases', amount: purchases.totalAmount },
+      ...expenseCategoriesAgg.map((item) => ({
+        name: item._id || 'Other expenses',
+        amount: item.totalAmount,
+      })),
+    ].filter((item) => item.amount > 0);
+
+    const branchTotals = new Map();
+    const addBranchTotals = (rows, field) => {
+      rows.forEach(({ _id, totalAmount }) => {
+        const key = _id ? _id.toString() : 'unassigned';
+        const current = branchTotals.get(key) || {
+          branchId: _id ? _id.toString() : null,
+          revenue: 0,
+          purchases: 0,
+          expenses: 0,
+          salaries: 0,
+          receivables: 0,
+        };
+        current[field] = totalAmount || 0;
+        branchTotals.set(key, current);
+      });
+    };
+    addBranchTotals(branchSalesAgg, 'revenue');
+    addBranchTotals(branchPurchaseAgg, 'purchases');
+    addBranchTotals(branchExpenseAgg, 'expenses');
+    addBranchTotals(branchSalaryAgg, 'salaries');
+    addBranchTotals(branchReceivablesAgg, 'receivables');
+    const branchPerformance = Array.from(branchTotals.values()).map((branch) => ({
+      ...branch,
+      totalExpenses: branch.purchases + branch.expenses + branch.salaries,
+      netProfit: branch.revenue - branch.purchases - branch.expenses - branch.salaries,
+    }));
 
     return res.status(200).json({
       success: true,
@@ -246,6 +386,7 @@ const getAdminDashboard = async (req, res, next) => {
           totalSales: sales.totalAmount,
           totalPurchases: purchases.totalAmount,
           totalExpenses: expenses.totalAmount,
+          totalOutflow,
           totalSalaries: salaries.totalAmount,
           totalReceivables: receivables.totalAmount,
           totalPayables: payables.totalAmount,
@@ -272,6 +413,20 @@ const getAdminDashboard = async (req, res, next) => {
               email: inv.customerId.email
             } : null
           })),
+          expenses: recentExpenses.map((expense) => ({
+            id: expense._id.toString(),
+            description: expense.description || expense.category || 'Expense',
+            category: expense.category || 'Other expenses',
+            expenseDate: expense.expenseDate,
+            amount: expense.totalAmount || expense.amount || 0,
+          })),
+          salaries: recentSalaries.map((salary) => ({
+            id: salary._id.toString(),
+            employeeName: salary.employeeName || salary.employee?.name || 'Salary payment',
+            periodStart: salary.periodStart,
+            amount: salary.netPayable || 0,
+            paymentMode: salary.paymentMode || '',
+          })),
           purchases: recentPurchases.map((pur) => ({
             id: pur._id.toString(),
             billNumber: pur.billNumber,
@@ -296,7 +451,9 @@ const getAdminDashboard = async (req, res, next) => {
               email: log.userId.email
             } : null
           }))
-        }
+        },
+        expenseBreakdown,
+        branchPerformance
       }
     });
   } catch (error) {
