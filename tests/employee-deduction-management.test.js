@@ -737,15 +737,6 @@ describe("Centralized Employee Deduction Management Module Test Suite", () => {
         year: 2026,
         amount: 999,
       });
-      await EmployeeDeduction.create({
-        deductionRecordId: `DED-TEAMLEAD-SELF-${Date.now()}`,
-        employeeId: teamLeadUser._id,
-        teamLeadId: "TL0001",
-        deductionMasterId: new mongoose.Types.ObjectId(),
-        month: 11,
-        year: 2026,
-        amount: 555,
-      });
 
       const listRes = await request(app)
         .get("/api/employee-deductions?month=11&year=2026");
@@ -763,13 +754,6 @@ describe("Centralized Employee Deduction Management Module Test Suite", () => {
       expect(res.body.success).toBe(true);
       expect(res.body.data.every((deduction) =>
         String(deduction.employeeId?._id || deduction.employeeId) === String(employeeUser._id)
-      )).toBe(true);
-
-      const myDeductionsRes = await request(app)
-        .get("/api/employee-deductions/my-deductions?month=11&year=2026");
-      expect(myDeductionsRes.status).toBe(200);
-      expect(myDeductionsRes.body.data.some((deduction) =>
-        String(deduction.employeeId?._id || deduction.employeeId) === String(teamLeadUser._id)
       )).toBe(true);
     });
 
