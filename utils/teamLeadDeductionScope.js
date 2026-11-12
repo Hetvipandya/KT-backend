@@ -65,11 +65,12 @@ const getTeamMemberDeductionQuery = async (teamLead) => {
 
   const employeeIds = new Set();
   const userIds = new Set();
+  const excludedIds = new Set([teamLeadUserId, leadEmployeeId].filter(Boolean));
   for (const employee of [...directlyAssignedEmployees, ...teamMembers]) {
     const employeeId = getReferenceId(employee._id);
     const userId = getReferenceId(employee.userID || employee.userId);
-    if (employeeId) employeeIds.add(employeeId);
-    if (userId && userId !== teamLeadUserId) userIds.add(userId);
+    if (employeeId && !excludedIds.has(employeeId)) employeeIds.add(employeeId);
+    if (userId && !excludedIds.has(userId)) userIds.add(userId);
   }
 
   const deductionScopes = [];
@@ -84,7 +85,12 @@ const getTeamMemberDeductionQuery = async (teamLead) => {
   }
 
   return deductionScopes.length
-    ? { $or: deductionScopes }
+    ? {
+      $and: [
+        { $or: deductionScopes },
+        { $nor: [{ employeeId: { $in: [...excludedIds] } }, { userId: { $in: [...excludedIds] } }] },
+      ],
+    }
     : { _id: { $in: [] } };
 };
 
