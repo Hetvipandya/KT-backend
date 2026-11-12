@@ -7,6 +7,7 @@ const router =
 const {
   createDailyReport,
   getAllDailyReports,  
+  getAdminDailyReports,
   getTeamLeadDailyReports,
   getSingleDailyReport, 
   updateReportStatus,  
@@ -113,6 +114,13 @@ router.get(
   authorizeRoles("team lead"),
   getTeamLeadDailyReports
 ); 
+
+router.get(
+  "/admin/list",
+  protect,
+  authorizeRoles("admin", "hr"),
+  getAdminDailyReports
+);
 
 // Update report status
 router.put(

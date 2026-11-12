@@ -2,7 +2,7 @@ const mongoose = require("mongoose");
 const DailyReport = require("../models/DailyReport");
 const DailyReportComment = require("../models/DailyReportComment");
 const Employee = require("../models/Employee");
-require("../models/User");
+const User = require("../models/User");
 try { require("../models/projectModel"); } catch (e) {} 
 try { require("../models/taskModel"); } catch (e) {}
 
@@ -366,6 +366,63 @@ exports.getAllDailyReports = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: error.message,
+    });
+  }
+};
+
+exports.getAdminDailyReports = async (req, res) => {
+  try {
+    const companyId = req.user?.companyId;
+    if (!companyId || !mongoose.Types.ObjectId.isValid(companyId)) {
+      return res.status(403).json({
+        success: false,
+        message: "A valid company scope is required to view daily reports",
+      });
+    }
+
+    const [companyUsers, companyEmployees] = await Promise.all([
+      User.find({ companyId }).select("_id").lean(),
+      Employee.find({ companyId }).select("_id userID userId").lean(),
+    ]);
+    const employeeIds = new Set(companyUsers.map((user) => String(user._id)));
+    companyEmployees.forEach((employee) => {
+      employeeIds.add(String(employee._id));
+      if (employee.userID) employeeIds.add(String(employee.userID));
+      if (employee.userId) employeeIds.add(String(employee.userId));
+    });
+
+    if (!employeeIds.size) {
+      return res.status(200).json({ success: true, count: 0, data: [] });
+    }
+
+    const reports = await DailyReport.find({
+      employeeId: {
+        $in: [...employeeIds].map((id) => new mongoose.Types.ObjectId(id)),
+      },
+    })
+      .populate({
+        path: "employeeId",
+        select: "name role email firstName lastName customerName",
+      })
+      .populate({ path: "projectId", select: "projectName" })
+      .populate({
+        path: "taskReferences",
+        model: "Task",
+        select: "taskTitle status progress projectId",
+      })
+      .sort({ reportDate: -1, createdAt: -1 })
+      .lean();
+
+    return res.status(200).json({
+      success: true,
+      count: reports.length,
+      data: reports,
+    });
+  } catch (error) {
+    console.error("Admin daily reports:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch daily reports",
     });
   }
 };

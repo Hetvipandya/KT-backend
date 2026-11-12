@@ -124,3 +124,52 @@ describe("getTeamLeadDailyReports", () => {
     );
   });
 });
+
+describe("getAdminDailyReports", () => {
+  it("returns daily reports for employees in the admin's company only", async () => {
+    const companyId = new mongoose.Types.ObjectId();
+    const otherCompanyId = new mongoose.Types.ObjectId();
+    const [companyEmployee, outsideEmployee] = await User.create([
+      {
+        name: "Company Employee",
+        email: "company-employee@example.com",
+        phoneNumber: "9000000011",
+        password: "StrongPassword123",
+        role: "employee",
+        companyId,
+      },
+      {
+        name: "Outside Employee",
+        email: "outside-employee@example.com",
+        phoneNumber: "9000000012",
+        password: "StrongPassword123",
+        role: "employee",
+        companyId: otherCompanyId,
+      },
+    ]);
+    const projectId = new mongoose.Types.ObjectId();
+    await DailyReport.create([
+      {
+        employeeId: companyEmployee._id,
+        projectId,
+        todaysWork: "Company report",
+        hoursWorked: 7,
+      },
+      {
+        employeeId: outsideEmployee._id,
+        projectId,
+        todaysWork: "Outside report",
+        hoursWorked: 8,
+      },
+    ]);
+    const req = { user: { companyId }, query: {} };
+    const res = createMockRes();
+
+    await dailyReportController.getAdminDailyReports(req, res);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.count).toBe(1);
+    expect(res.body.data[0].todaysWork).toBe("Company report");
+    expect(res.body.data[0].employeeId.name).toBe("Company Employee");
+  });
+});
