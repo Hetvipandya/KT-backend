@@ -244,6 +244,71 @@ describe("Finance monthly payroll register", () => {
     expect(salary.save).toHaveBeenCalledTimes(1);
   });
 
+  it("requires a UPI payment type before looking up the payroll record", async () => {
+    const findOne = jest.spyOn(MonthlySalary, "findOne");
+    const res = createResponse();
+
+    await payFinanceMonthlySalary({
+      body: {
+        salaryId: new mongoose.Types.ObjectId().toString(),
+        companyId: companyId.toString(),
+        branchId: branchId.toString(),
+        paymentMode: "UPI",
+        paidFromAccountId: new mongoose.Types.ObjectId().toString(),
+        transferConfirmed: true,
+      },
+    }, res);
+
+    expect(res.statusCode).toBe(400);
+    expect(res.body.message).toMatch(/payment method and type/i);
+    expect(findOne).not.toHaveBeenCalled();
+  });
+
+  it("rejects a UPI salary payment when the employee has no UPI ID", async () => {
+    const salaryId = new mongoose.Types.ObjectId();
+    const employeeId = new mongoose.Types.ObjectId();
+    const paidFromAccountId = new mongoose.Types.ObjectId();
+    const salary = {
+      _id: salaryId,
+      companyId,
+      branchId,
+      employeeId,
+      userId: employeeId,
+      status: "Generated",
+      netSalary: 45000,
+      save: jest.fn(),
+    };
+    jest.spyOn(MonthlySalary, "findOne").mockResolvedValue(salary);
+    jest.spyOn(BankAccount, "findOne").mockResolvedValue({
+      _id: paidFromAccountId,
+      accountName: "Payroll Bank",
+      accountType: "Savings",
+      coaAccountId: new mongoose.Types.ObjectId(),
+    });
+    jest.spyOn(bankAccountService, "getAccountBalance").mockResolvedValue(50000);
+    jest.spyOn(require("../models/User"), "findById").mockResolvedValue({
+      _id: employeeId,
+      name: "Employee",
+    });
+    const res = createResponse();
+
+    await payFinanceMonthlySalary({
+      body: {
+        salaryId: salaryId.toString(),
+        companyId: companyId.toString(),
+        branchId: branchId.toString(),
+        paymentMode: "UPI",
+        paymentType: "PHONEPE",
+        paidFromAccountId: paidFromAccountId.toString(),
+        transferConfirmed: true,
+      },
+    }, res);
+
+    expect(res.statusCode).toBe(400);
+    expect(res.body.message).toMatch(/employee's UPI ID/i);
+    expect(salary.save).not.toHaveBeenCalled();
+  });
+
   it("rejects salary payment when the selected company account has insufficient funds", async () => {
     const salaryId = new mongoose.Types.ObjectId();
     const employeeId = new mongoose.Types.ObjectId();

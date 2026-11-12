@@ -1777,7 +1777,16 @@ const payFinanceMonthlySalary = async (req, res) => {
     }
     if (isUpiPayment) {
       const recipient = await resolveSalaryRecipient(salary);
-      if (!recipient || !String(recipient.upiId || "").trim()) {
+      const upiId = String(
+        recipient?.upiId ||
+        recipient?.upiID ||
+        recipient?.upi ||
+        recipient?.bankDetails?.upiId ||
+        recipient?.bankDetails?.upiID ||
+        recipient?.bankDetails?.upi ||
+        ""
+      ).trim();
+      if (!upiId) {
         return res.status(400).json({
           success: false,
           message: "Complete the employee's UPI ID before recording a UPI salary payment",
