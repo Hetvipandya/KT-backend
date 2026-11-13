@@ -23,7 +23,7 @@ exports.create = send(async (req, res) => {
 exports.list = send(async (req, res) => {
   const result = await service.listLendings({
     ...req.query,
-    branchId: req.branchId || req.query.branchId,
+    branchId: req.branchId || (req.query.branchId === 'all' ? undefined : req.query.branchId),
   });
   res.json({ success: true, data: { companyId: req.query.companyId, ...result } });
 });

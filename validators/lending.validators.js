@@ -41,7 +41,7 @@ const createLendingRepaymentSchema = z.object({
 
 const lendingQuerySchema = z.object({
   companyId: objectId,
-  branchId: objectId.optional(),
+  branchId: z.union([objectId, z.literal('all')]).optional(),
   status: z.enum(['ACTIVE', 'PAID_OFF']).optional(),
   search: z.string().trim().min(1).max(200).optional(),
   page: z.coerce.number().int().positive().optional().default(1),
