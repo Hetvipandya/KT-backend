@@ -12,10 +12,10 @@ const controller = require('../controllers/lending.controller');
 
 const router = express.Router();
 
-router.use(authenticate, checkCompanyAccess);
-router.post('/', validateRequest(createLendingSchema), controller.create);
-router.get('/', validateQuery(lendingQuerySchema), controller.list);
-router.get('/:id', controller.get);
-router.post('/:id/repayments', validateRequest(createLendingRepaymentSchema), controller.repay);
+router.use(authenticate);
+router.post('/', checkCompanyAccess, validateRequest(createLendingSchema), controller.create);
+router.get('/', checkCompanyAccess, validateQuery(lendingQuerySchema), controller.list);
+router.get('/:id', checkCompanyAccess, controller.get);
+router.post('/:id/repayments', checkCompanyAccess, validateRequest(createLendingRepaymentSchema), controller.repay);
 
 module.exports = router;
