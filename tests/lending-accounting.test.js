@@ -24,6 +24,7 @@ jest.mock('../services/journalEntry.service', () => ({
 jest.mock('../services/autoCoaMapping.service', () => ({ ensureIncomeLedger: jest.fn() }));
 
 const Lending = require('../models/Lending');
+const mongoose = require('mongoose');
 const Branch = require('../models/Branch');
 const Customer = require('../models/Customer');
 const FinancialYear = require('../models/FinancialYear');
@@ -243,7 +244,12 @@ describe('Customer lending accounting', () => {
       $or: expect.any(Array),
     }));
     expect(Lending.aggregate).toHaveBeenCalledWith(expect.arrayContaining([
-      { $match: { companyId: COMPANY_ID, branchId: BRANCH_ID } },
+      {
+        $match: {
+          companyId: new mongoose.Types.ObjectId(COMPANY_ID),
+          branchId: new mongoose.Types.ObjectId(BRANCH_ID),
+        },
+      },
     ]));
     expect(result.summary).toEqual(summary);
   });

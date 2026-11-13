@@ -214,9 +214,12 @@ const createLending = async (data, userId) => {
 };
 
 const listLendings = async (query) => {
-  const summaryFilter = { companyId: query.companyId };
-  if (query.branchId) summaryFilter.branchId = query.branchId;
-  const filter = { ...summaryFilter };
+  const filter = { companyId: query.companyId };
+  const summaryFilter = { companyId: new mongoose.Types.ObjectId(query.companyId) };
+  if (query.branchId) {
+    filter.branchId = query.branchId;
+    summaryFilter.branchId = new mongoose.Types.ObjectId(query.branchId);
+  }
   if (query.status) filter.status = query.status;
   if (query.search) {
     const pattern = new RegExp(escapeRegex(query.search), 'i');
