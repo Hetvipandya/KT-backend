@@ -214,8 +214,9 @@ const createLending = async (data, userId) => {
 };
 
 const listLendings = async (query) => {
-  const filter = { companyId: query.companyId };
-  if (query.branchId) filter.branchId = query.branchId;
+  const summaryFilter = { companyId: query.companyId };
+  if (query.branchId) summaryFilter.branchId = query.branchId;
+  const filter = { ...summaryFilter };
   if (query.status) filter.status = query.status;
   if (query.search) {
     const pattern = new RegExp(escapeRegex(query.search), 'i');
@@ -227,13 +228,15 @@ const listLendings = async (query) => {
     Lending.find(filter).sort({ startDate: -1, createdAt: -1 }).skip((page - 1) * limit).limit(limit).lean(),
     Lending.countDocuments(filter),
     Lending.aggregate([
-      { $match: filter },
+      { $match: summaryFilter },
       { $group: {
         _id: null,
         principalAmount: { $sum: '$principalAmount' },
+        principalRepaid: { $sum: { $subtract: ['$principalAmount', '$principalOutstanding'] } },
         principalOutstanding: { $sum: '$principalOutstanding' },
         interestReceived: { $sum: '$totalInterestReceived' },
         activeLoans: { $sum: { $cond: [{ $eq: ['$status', 'ACTIVE'] }, 1, 0] } },
+        paidOffLoans: { $sum: { $cond: [{ $eq: ['$status', 'PAID_OFF'] }, 1, 0] } },
       } },
     ]),
   ]);
@@ -242,9 +245,11 @@ const listLendings = async (query) => {
     pagination: { page, limit, total },
     summary: {
       principalAmount: aggregate[0]?.principalAmount || 0,
+      principalRepaid: aggregate[0]?.principalRepaid || 0,
       principalOutstanding: aggregate[0]?.principalOutstanding || 0,
       interestReceived: aggregate[0]?.interestReceived || 0,
       activeLoans: aggregate[0]?.activeLoans || 0,
+      paidOffLoans: aggregate[0]?.paidOffLoans || 0,
     },
   };
 };

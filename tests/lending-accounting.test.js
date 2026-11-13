@@ -33,7 +33,7 @@ const coaService = require('../services/coa.service');
 const bankAccountService = require('../services/bankAccount.service');
 const journalService = require('../services/journalEntry.service');
 const { ensureIncomeLedger } = require('../services/autoCoaMapping.service');
-const { createLending, createRepayment } = require('../services/lending.service');
+const { createLending, createRepayment, listLendings } = require('../services/lending.service');
 
 const COMPANY_ID = '6ac8a921e6b91ab589aa3001';
 const BRANCH_ID = '6ac8a921e6b91ab589aa3002';
@@ -208,5 +208,43 @@ describe('Customer lending accounting', () => {
     await expect(createRepayment(LENDING_ID, repaymentData(), USER_ID))
       .rejects.toMatchObject({ errorCode: 'LENDING_BALANCE_CHANGED' });
     expect(journalService.reverseJournalEntry).toHaveBeenCalledWith(JOURNAL_ID, USER_ID);
+  });
+
+  test('summarizes the whole branch portfolio regardless of table status or search filters', async () => {
+    const listQuery = {
+      sort: jest.fn().mockReturnThis(),
+      skip: jest.fn().mockReturnThis(),
+      limit: jest.fn().mockReturnThis(),
+      lean: jest.fn().mockResolvedValue([]),
+    };
+    const summary = {
+      principalAmount: 1000,
+      principalRepaid: 200,
+      principalOutstanding: 800,
+      interestReceived: 40,
+      activeLoans: 1,
+      paidOffLoans: 0,
+    };
+    Lending.find.mockReturnValue(listQuery);
+    Lending.countDocuments.mockResolvedValue(0);
+    Lending.aggregate.mockResolvedValue([summary]);
+
+    const result = await listLendings({
+      companyId: COMPANY_ID,
+      branchId: BRANCH_ID,
+      status: 'PAID_OFF',
+      search: 'Customer',
+    });
+
+    expect(Lending.find).toHaveBeenCalledWith(expect.objectContaining({
+      companyId: COMPANY_ID,
+      branchId: BRANCH_ID,
+      status: 'PAID_OFF',
+      $or: expect.any(Array),
+    }));
+    expect(Lending.aggregate).toHaveBeenCalledWith(expect.arrayContaining([
+      { $match: { companyId: COMPANY_ID, branchId: BRANCH_ID } },
+    ]));
+    expect(result.summary).toEqual(summary);
   });
 });
