@@ -59,6 +59,18 @@ const checkCompanyAccess = async (req, res, next) => {
         }
         companyId = purchase.companyId;
         req.purchase = purchase;
+      } else if (baseUrl.includes('lending')) {
+        const Lending = require('../models/Lending');
+        const lending = await Lending.findById(req.params.id);
+        if (!lending) {
+          return res.status(404).json({
+            success: false,
+            message: 'Lending record not found',
+            errorCode: 'LENDING_NOT_FOUND'
+          });
+        }
+        companyId = lending.companyId;
+        req.lending = lending;
       } else if (baseUrl.includes('expense')) {
         const Expense = require('../models/Expense');
         const expense = await Expense.findById(req.params.id);

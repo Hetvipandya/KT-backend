@@ -518,7 +518,10 @@ exports.createIncome = async (req, res, next) => {
  */
 exports.getAllIncome = async (req, res, next) => {
   try {
-    const incomes = await Income.find({ companyId: req.company._id })
+    const incomes = await Income.find({
+      companyId: req.company._id,
+      ...(req.branchId ? { branchId: req.branchId } : {}),
+    })
       .populate("coaAccountId", "name code")
       .sort({
       createdAt: -1,
