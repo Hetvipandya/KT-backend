@@ -3,10 +3,20 @@ const authenticate = require('../middleware/authenticate');
 const checkCompanyAccess = require('../middleware/companyAccess');
 const reportsController = require('../controllers/reports.controller');
 const { getDeductionsReport } = require('../controllers/employeeDeductionController');
+const {
+  READ_ROLES,
+  requireFinanceCompanyAccess,
+  requireFinanceRole
+} = require('../middleware/financeAccess');
 
 const router = express.Router();
 
-router.use(authenticate, checkCompanyAccess);
+router.use(
+  authenticate,
+  checkCompanyAccess,
+  requireFinanceCompanyAccess,
+  requireFinanceRole(READ_ROLES)
+);
 
 router.get('/trial-balance', reportsController.getTrialBalance);
 router.get('/trial-balance/pdf', reportsController.getTrialBalancePdf);

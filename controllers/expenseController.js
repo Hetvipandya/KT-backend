@@ -112,7 +112,13 @@ const postIncomeJournalEntry = async (income, financialYear, bankAccount, userId
  */
 exports.createExpense = async (req, res) => {
   try {
-    const expense = await Expense.create(req.body);
+    const expense = await Expense.create({
+      ...req.body,
+      companyId: req.company._id,
+      branchId: req.branchId || null,
+      createdBy: req.user._id,
+      updatedBy: req.user._id
+    });
 
     res.status(201).json({
       success: true, 
@@ -132,7 +138,10 @@ exports.createExpense = async (req, res) => {
  */
 exports.getExpenses = async (req, res) => {
   try {
-    const expenses = await Expense.find()
+    const expenses = await Expense.find({
+      companyId: req.company._id,
+      ...(req.branchId ? { branchId: req.branchId } : {})
+    })
       .populate("employeeId", "name email")
       .populate("projectId", "projectName")
       .sort({ createdAt: -1 });
@@ -155,7 +164,10 @@ exports.getExpenses = async (req, res) => {
  */
 exports.getExpenseById = async (req, res) => {
   try {
-    const expense = await Expense.findById(req.params.id);
+    const expense = await Expense.findOne({
+      _id: req.params.id,
+      companyId: req.company._id
+    });
 
     if (!expense) {
       return res.status(404).json({
@@ -181,10 +193,29 @@ exports.getExpenseById = async (req, res) => {
  */
 exports.updateExpense = async (req, res) => {
   try {
-    const expense = await Expense.findByIdAndUpdate(
-      req.params.id,
-      req.body,
-      { new: true }
+    const existing = await Expense.findOne({
+      _id: req.params.id,
+      companyId: req.company._id
+    });
+    if (!existing) {
+      return res.status(404).json({ success: false, message: "Expense not found" });
+    }
+    if (existing.journalEntryId) {
+      return res.status(409).json({
+        success: false,
+        message: "Posted expenses cannot be edited; use a reversal instead"
+      });
+    }
+
+    const updates = { ...req.body };
+    delete updates.companyId;
+    delete updates.branchId;
+    delete updates.journalEntryId;
+    updates.updatedBy = req.user._id;
+    const expense = await Expense.findOneAndUpdate(
+      { _id: existing._id, companyId: req.company._id },
+      { $set: updates },
+      { new: true, runValidators: true }
     );
 
     res.status(200).json({
@@ -286,12 +317,22 @@ exports.updateIncome = async (req, res, next) => {
  */
 exports.deleteExpense = async (req, res) => {
   try {
-    const expense = await Expense.findById(req.params.id);
+    const expense = await Expense.findOne({
+      _id: req.params.id,
+      companyId: req.company._id
+    });
 
     if (!expense) {
       return res.status(404).json({
         success: false,
         message: "Expense not found",
+      });
+    }
+
+    if (expense.journalEntryId) {
+      return res.status(409).json({
+        success: false,
+        message: "Posted expenses cannot be deleted; use a reversal instead"
       });
     }
 
@@ -498,7 +539,17 @@ exports.getAllIncome = async (req, res, next) => {
  */
 exports.getTransactions = async (req, res) => {
   try {
-    const transactions = await Transaction.find().sort({
+    const scope = {
+      companyId: req.company._id,
+      ...(req.branchId ? { branchId: req.branchId } : {})
+    };
+    const [expenseIds, incomeIds] = await Promise.all([
+      Expense.find(scope).distinct("_id"),
+      Income.find(scope).distinct("_id")
+    ]);
+    const transactions = await Transaction.find({
+      referenceId: { $in: [...expenseIds, ...incomeIds] }
+    }).sort({
       createdAt: -1,
     });
 
@@ -520,7 +571,12 @@ exports.getTransactions = async (req, res) => {
  */
 exports.getProfitLoss = async (req, res) => {
   try {
+    const scope = {
+      companyId: req.company._id,
+      ...(req.branchId ? { branchId: req.branchId } : {})
+    };
     const income = await Income.aggregate([
+      { $match: scope },
       {
         $group: {
           _id: null,
@@ -532,6 +588,7 @@ exports.getProfitLoss = async (req, res) => {
     const expense = await Expense.aggregate([
       {
         $match: {
+          ...scope,
           approvalStatus: "approved",
         },
       },
@@ -565,7 +622,12 @@ exports.getProfitLoss = async (req, res) => {
  */
 exports.getBalanceSheet = async (req, res) => {
   try {
+    const scope = {
+      companyId: req.company._id,
+      ...(req.branchId ? { branchId: req.branchId } : {})
+    };
     const income = await Income.aggregate([
+      { $match: scope },
       {
         $group: {
           _id: null,
@@ -577,6 +639,7 @@ exports.getBalanceSheet = async (req, res) => {
     const expense = await Expense.aggregate([
       {
         $match: {
+          ...scope,
           approvalStatus: "approved",
         },
       },

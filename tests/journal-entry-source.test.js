@@ -51,7 +51,7 @@ describe('Journal entry source controls', () => {
       companyId: COMPANY_ID,
       entrySource: 'AUTOMATIC',
     });
-    const req = { params: { id: 'automatic-entry' }, user: { _id: USER_ID, companyAccess: [] } };
+    const req = { params: { id: 'automatic-entry' }, user: { _id: USER_ID, role: 'admin', companyAccess: [] } };
     const res = createResponse();
 
     await controller.reverseJournalEntry(req, res, jest.fn());

@@ -11,6 +11,12 @@ const {
 const authenticate = require('../middleware/authenticate');
 const checkCompanyAccess = require('../middleware/companyAccess');
 const validateRequest = require('../middleware/validateRequest');
+const {
+  READ_ROLES,
+  WRITE_ROLES,
+  requireFinanceCompanyAccess,
+  requireFinanceRole
+} = require('../middleware/financeAccess');
 const { createCoaSchema, updateCoaSchema } = require('../validators/coa.validators');
 
 const router = express.Router();
@@ -26,7 +32,7 @@ router.use(authenticate);
  *     security:
  *       - bearerAuth: []
  */
-router.get('/:id/ledger', checkCompanyAccess, getAccountLedgerRoute);
+router.get('/:id/ledger', checkCompanyAccess, requireFinanceCompanyAccess, requireFinanceRole(READ_ROLES), getAccountLedgerRoute);
 
 /**
  * @openapi
@@ -37,7 +43,7 @@ router.get('/:id/ledger', checkCompanyAccess, getAccountLedgerRoute);
  *     security:
  *       - bearerAuth: []
  */
-router.post('/', validateRequest(createCoaSchema), checkCompanyAccess, createAccount);
+router.post('/', validateRequest(createCoaSchema), checkCompanyAccess, requireFinanceCompanyAccess, requireFinanceRole(WRITE_ROLES), createAccount);
 
 /**
  * @openapi
@@ -48,7 +54,7 @@ router.post('/', validateRequest(createCoaSchema), checkCompanyAccess, createAcc
  *     security:
  *       - bearerAuth: []
  */
-router.get('/', checkCompanyAccess, listAccounts);
+router.get('/', checkCompanyAccess, requireFinanceCompanyAccess, requireFinanceRole(READ_ROLES), listAccounts);
 
 /**
  * @openapi
@@ -59,7 +65,7 @@ router.get('/', checkCompanyAccess, listAccounts);
  *     security:
  *       - bearerAuth: []
  */
-router.post('/seed-default', checkCompanyAccess, seedDefaultCoaRoute);
+router.post('/seed-default', checkCompanyAccess, requireFinanceCompanyAccess, requireFinanceRole(WRITE_ROLES), seedDefaultCoaRoute);
 
 /**
  * @openapi
@@ -69,7 +75,7 @@ router.post('/seed-default', checkCompanyAccess, seedDefaultCoaRoute);
  *     security:
  *       - bearerAuth: []
  */
-router.get('/:id', checkCompanyAccess, getAccountDetails);
+router.get('/:id', checkCompanyAccess, requireFinanceCompanyAccess, requireFinanceRole(READ_ROLES), getAccountDetails);
 
 /**
  * @openapi
@@ -79,7 +85,7 @@ router.get('/:id', checkCompanyAccess, getAccountDetails);
  *     security:
  *       - bearerAuth: []
  */
-router.put('/:id', checkCompanyAccess, validateRequest(updateCoaSchema), updateAccount);
+router.put('/:id', checkCompanyAccess, requireFinanceCompanyAccess, requireFinanceRole(WRITE_ROLES), validateRequest(updateCoaSchema), updateAccount);
 
 /**
  * @openapi
@@ -89,6 +95,6 @@ router.put('/:id', checkCompanyAccess, validateRequest(updateCoaSchema), updateA
  *     security:
  *       - bearerAuth: []
  */
-router.delete('/:id', checkCompanyAccess, deleteAccount);
+router.delete('/:id', checkCompanyAccess, requireFinanceCompanyAccess, requireFinanceRole(WRITE_ROLES), deleteAccount);
 
 module.exports = router;

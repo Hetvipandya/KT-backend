@@ -101,39 +101,57 @@ const getJournalEntry = async (id) => {
 };
 
 const reverseJournalEntry = async (id, userId) => {
-  const original = await JournalEntry.findById(id);
-  if (!original) throw serviceError('Journal entry not found', 404, 'JOURNAL_ENTRY_NOT_FOUND');
-  if (original.reversedFrom) throw serviceError('A reversal entry cannot be reversed again', 400, 'REVERSAL_ENTRY_IMMUTABLE');
-  if (original.isReversed) throw serviceError('Journal entry has already been reversed', 409, 'JOURNAL_ENTRY_ALREADY_REVERSED');
+  const session = await mongoose.startSession();
+  let result;
 
-  await validateFinancialYear(original.companyId, original.financialYearId, original.entryDate, original.branchId);
-  const reversal = await JournalEntry.create({
-    companyId: original.companyId,
-    branchId: original.branchId || null,
-    financialYearId: original.financialYearId,
-    entryDate: original.entryDate,
-    reference: original.reference ? `REV-${original.reference}` : `REV-${original._id}`,
-    narration: `Reversal of journal entry ${original._id}${original.narration ? `: ${original.narration}` : ''}`,
-    entrySource: original.entrySource || 'AUTOMATIC',
-    lines: original.lines.map((line) => ({
-      accountId: line.accountId,
-      debit: line.credit,
-      credit: line.debit,
-      remarks: line.remarks
-    })),
-    totalDebit: original.totalCredit,
-    totalCredit: original.totalDebit,
-    reversedFrom: original._id,
-    createdBy: userId,
-    updatedBy: userId
-  });
+  try {
+    await session.withTransaction(async () => {
+      const original = await JournalEntry.findById(id).session(session);
+      if (!original) throw serviceError('Journal entry not found', 404, 'JOURNAL_ENTRY_NOT_FOUND');
+      if (original.reversedFrom) throw serviceError('A reversal entry cannot be reversed again', 400, 'REVERSAL_ENTRY_IMMUTABLE');
+      if (original.isReversed) throw serviceError('Journal entry has already been reversed', 409, 'JOURNAL_ENTRY_ALREADY_REVERSED');
 
-  original.isReversed = true;
-  original.reversalEntryId = reversal._id;
-  original.updatedBy = userId;
-  await original.save();
+      await validateFinancialYear(original.companyId, original.financialYearId, original.entryDate, original.branchId);
+      const [reversal] = await JournalEntry.create([{
+        companyId: original.companyId,
+        branchId: original.branchId || null,
+        financialYearId: original.financialYearId,
+        entryDate: original.entryDate,
+        reference: original.reference ? `REV-${original.reference}` : `REV-${original._id}`,
+        narration: `Reversal of journal entry ${original._id}${original.narration ? `: ${original.narration}` : ''}`,
+        entrySource: original.entrySource || 'AUTOMATIC',
+        lines: original.lines.map((line) => ({
+          accountId: line.accountId,
+          debit: line.credit,
+          credit: line.debit,
+          remarks: line.remarks
+        })),
+        totalDebit: original.totalCredit,
+        totalCredit: original.totalDebit,
+        reversedFrom: original._id,
+        createdBy: userId,
+        updatedBy: userId
+      }], { session });
 
-  return { original, reversal };
+      const update = await JournalEntry.updateOne(
+        { _id: original._id, isReversed: { $ne: true }, reversedFrom: null },
+        { $set: { isReversed: true, reversalEntryId: reversal._id, updatedBy: userId } },
+        { session }
+      );
+      if (update.modifiedCount !== 1) {
+        throw serviceError('Journal entry has already been reversed', 409, 'JOURNAL_ENTRY_ALREADY_REVERSED');
+      }
+
+      original.isReversed = true;
+      original.reversalEntryId = reversal._id;
+      original.updatedBy = userId;
+      result = { original, reversal };
+    });
+  } finally {
+    await session.endSession();
+  }
+
+  return result;
 };
 
 module.exports = {

@@ -1,46 +1,32 @@
 const express = require("express");
 
 const router = express.Router();
-
+const { protect } = require("../middleware/authMiddleware");
+const { authorizeRoles } = require("../middleware/roleMiddleware");
 const {
   createSalaryStructure,
-  getAllSalaryStructures, 
-  getSalaryStructureById, 
-  updateSalaryStructure, 
+  getAllSalaryStructures,
+  getSalaryStructureById,
+  updateSalaryStructure,
   patchSalaryStructure,
   deleteSalaryStructure,
 } = require("../controllers/salary.controller");
 
+router.use(protect);
 
-// =====================================================
-// SALARY STRUCTURE ROUTES
-// =====================================================
+// Keep this legacy alias aligned with the protected salary-structure API.
+router.get("/", authorizeRoles("ca", "accountant", "admin", "hr", "super admin"), getAllSalaryStructures);
+router.get("/all", authorizeRoles("ca", "accountant", "admin", "hr", "super admin"), getAllSalaryStructures);
+router.get("/company/:companyId", authorizeRoles("ca", "accountant", "admin", "hr", "super admin"), getAllSalaryStructures);
+router.get("/company/:companyId/branch/:branchId", authorizeRoles("ca", "accountant", "admin", "hr", "super admin"), getAllSalaryStructures);
+router.get("/employee/:employeeId", authorizeRoles("ca", "accountant", "admin", "hr", "super admin"), getSalaryStructureById);
+router.get("/user/:userId", authorizeRoles("ca", "accountant", "admin", "hr", "super admin"), getSalaryStructureById);
+router.get("/:id", authorizeRoles("ca", "accountant", "admin", "hr", "super admin"), getSalaryStructureById);
 
-// Create
-router.post("/", createSalaryStructure);
-router.post("/create", createSalaryStructure);
-
-// Get All (Supports ?companyId=...&branchId=...&employeeId=...)
-router.get("/", getAllSalaryStructures);
-router.get("/all", getAllSalaryStructures);
-
-// Get By Company ID
-router.get("/company/:companyId", getAllSalaryStructures);
-router.get("/company/:companyId/branch/:branchId", getAllSalaryStructures);
-
-// Get By User ID, Employee ID, or Structure ID
-router.get("/employee/:employeeId", getSalaryStructureById);
-router.get("/user/:userId", getSalaryStructureById);
-router.get("/:id", getSalaryStructureById);
-
-// Full Update
-router.put("/:id", updateSalaryStructure);
-
-// Partial Update
-router.patch("/:id", patchSalaryStructure);
-
-// Delete
-router.delete("/:id", deleteSalaryStructure);
-
+router.post("/", authorizeRoles("ca", "accountant", "admin", "hr", "super admin"), createSalaryStructure);
+router.post("/create", authorizeRoles("ca", "accountant", "admin", "hr", "super admin"), createSalaryStructure);
+router.put("/:id", authorizeRoles("ca", "accountant", "admin", "hr", "super admin"), updateSalaryStructure);
+router.patch("/:id", authorizeRoles("ca", "accountant", "admin", "hr", "super admin"), patchSalaryStructure);
+router.delete("/:id", authorizeRoles("ca", "accountant", "admin", "hr", "super admin"), deleteSalaryStructure);
 
 module.exports = router;

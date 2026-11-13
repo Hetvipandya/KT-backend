@@ -14,16 +14,16 @@ const {
 // Protect all salary structure routes
 router.use(protect);
 
-// View Salary Structures (CA, Accountant, Admin, HR, Super Admin, Employee)
-router.get("/", authorizeRoles("ca", "accountant", "admin", "hr", "super admin", "employee"), getAllSalaryStructures);
-router.get("/all", authorizeRoles("ca", "accountant", "admin", "hr", "super admin", "employee"), getAllSalaryStructures);
-router.get("/employee/:employeeId", authorizeRoles("ca", "accountant", "admin", "hr", "super admin", "employee"), getSalaryStructureById);
-router.get("/user/:userId", authorizeRoles("ca", "accountant", "admin", "hr", "super admin", "employee"), getSalaryStructureById);
-router.get("/:id", authorizeRoles("ca", "accountant", "admin", "hr", "super admin", "employee"), getSalaryStructureById);
+// Salary details are limited to finance and HR roles.
+router.get("/", authorizeRoles("ca", "accountant", "admin", "hr", "super admin"), getAllSalaryStructures);
+router.get("/all", authorizeRoles("ca", "accountant", "admin", "hr", "super admin"), getAllSalaryStructures);
+router.get("/employee/:employeeId", authorizeRoles("ca", "accountant", "admin", "hr", "super admin"), getSalaryStructureById);
+router.get("/user/:userId", authorizeRoles("ca", "accountant", "admin", "hr", "super admin"), getSalaryStructureById);
+router.get("/:id", authorizeRoles("ca", "accountant", "admin", "hr", "super admin"), getSalaryStructureById);
 
 // Get By Company ID
-router.get("/company/:companyId", authorizeRoles("ca", "accountant", "admin", "hr", "super admin", "employee"), getAllSalaryStructures);
-router.get("/company/:companyId/branch/:branchId", authorizeRoles("ca", "accountant", "admin", "hr", "super admin", "employee"), getAllSalaryStructures);
+router.get("/company/:companyId", authorizeRoles("ca", "accountant", "admin", "hr", "super admin"), getAllSalaryStructures);
+router.get("/company/:companyId/branch/:branchId", authorizeRoles("ca", "accountant", "admin", "hr", "super admin"), getAllSalaryStructures);
 
 // Create, Update, Delete (CA, Accountant, Admin, HR, Super Admin)
 router.post("/", authorizeRoles("ca", "accountant", "admin", "hr", "super admin"), createSalaryStructure);

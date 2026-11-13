@@ -1,14 +1,17 @@
 const Company = require('../models/Company');
 const journalEntryService = require('../services/journalEntry.service');
+const {
+  READ_ROLES,
+  WRITE_ROLES,
+  hasFinanceCompanyAccess,
+  hasFinanceRole
+} = require('../middleware/financeAccess');
 
 const validDate = (value) => !value || (!Number.isNaN(Date.parse(value)) && /^\d{4}-\d{2}-\d{2}$/.test(value));
 
 const canAccessCompany = async (user, companyId) => {
   const company = await Company.findById(companyId).select('createdBy');
-  if (!company) return false;
-  if (company.createdBy.toString() === user._id.toString()) return true;
-  if (user.companyId?.toString() === companyId.toString()) return true;
-  return user.companyAccess.some((access) => access.isActive && access.companyId.toString() === companyId.toString());
+  return Boolean(company && hasFinanceCompanyAccess(user, company));
 };
 
 const createJournalEntry = async (req, res, next) => {
@@ -44,7 +47,8 @@ const getJournalEntry = async (req, res, next) => {
   try {
     const entry = await journalEntryService.getJournalEntry(req.params.id);
     if (!entry) return res.status(404).json({ success: false, message: 'Journal entry not found', errorCode: 'JOURNAL_ENTRY_NOT_FOUND' });
-    if (!await canAccessCompany(req.user, entry.companyId)) {
+    if (!await canAccessCompany(req.user, entry.companyId) ||
+      !hasFinanceRole(req.user, entry.companyId, READ_ROLES)) {
       return res.status(403).json({ success: false, message: 'Access denied to this journal entry', errorCode: 'FORBIDDEN' });
     }
     return res.status(200).json({ success: true, data: entry });
@@ -57,7 +61,8 @@ const reverseJournalEntry = async (req, res, next) => {
   try {
     const entry = await journalEntryService.getJournalEntry(req.params.id);
     if (!entry) return res.status(404).json({ success: false, message: 'Journal entry not found', errorCode: 'JOURNAL_ENTRY_NOT_FOUND' });
-    if (!await canAccessCompany(req.user, entry.companyId)) {
+    if (!await canAccessCompany(req.user, entry.companyId) ||
+      !hasFinanceRole(req.user, entry.companyId, WRITE_ROLES)) {
       return res.status(403).json({ success: false, message: 'Access denied to this journal entry', errorCode: 'FORBIDDEN' });
     }
     if (entry.entrySource !== 'MANUAL') {

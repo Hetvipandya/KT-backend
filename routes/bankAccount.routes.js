@@ -31,6 +31,12 @@ const {
   fundPlusSchema,
   fundMinusSchema
 } = require('../validators/accountTransfer.validators');
+const {
+  BANK_READ_ROLES,
+  WRITE_ROLES,
+  requireFinanceCompanyAccess,
+  requireFinanceRole
+} = require('../middleware/financeAccess');
 
 const router = express.Router();
 
@@ -42,6 +48,8 @@ router.post(
   '/',
   validateRequest(createBankAccountSchema),
   checkCompanyAccess,
+  requireFinanceCompanyAccess,
+  requireFinanceRole(WRITE_ROLES),
   createBankAccount
 );
 
@@ -49,6 +57,8 @@ router.post(
 router.get(
   '/',
   checkCompanyAccess,
+  requireFinanceCompanyAccess,
+  requireFinanceRole(BANK_READ_ROLES),
   listBankAccounts
 );
 
@@ -60,6 +70,8 @@ router.post(
   '/transfer',
   validateRequest(transferSchema),
   checkCompanyAccess,
+  requireFinanceCompanyAccess,
+  requireFinanceRole(WRITE_ROLES),
   createTransfer
 );
 
@@ -68,6 +80,8 @@ router.post(
   '/fund-plus',
   validateRequest(fundPlusSchema),
   checkCompanyAccess,
+  requireFinanceCompanyAccess,
+  requireFinanceRole(WRITE_ROLES),
   createFundPlus
 );
 
@@ -76,6 +90,8 @@ router.post(
   '/fund-minus',
   validateRequest(fundMinusSchema),
   checkCompanyAccess,
+  requireFinanceCompanyAccess,
+  requireFinanceRole(WRITE_ROLES),
   createFundMinus
 );
 
@@ -83,6 +99,8 @@ router.post(
 router.get(
   '/transfers',
   checkCompanyAccess,
+  requireFinanceCompanyAccess,
+  requireFinanceRole(BANK_READ_ROLES),
   listTransfers
 );
 
@@ -90,6 +108,8 @@ router.get(
 router.get(
   '/transfers/:id',
   checkCompanyAccess,
+  requireFinanceCompanyAccess,
+  requireFinanceRole(BANK_READ_ROLES),
   getTransferDetails
 );
 
@@ -97,6 +117,8 @@ router.get(
 router.post(
   '/transfers/:id/cancel',
   checkCompanyAccess,
+  requireFinanceCompanyAccess,
+  requireFinanceRole(WRITE_ROLES),
   cancelTransfer
 );
 
@@ -106,6 +128,8 @@ router.post(
 router.get(
   '/:id',
   checkCompanyAccess,
+  requireFinanceCompanyAccess,
+  requireFinanceRole(BANK_READ_ROLES),
   getBankAccountDetails
 );
 
@@ -113,6 +137,8 @@ router.get(
 router.put(
   '/:id',
   checkCompanyAccess,
+  requireFinanceCompanyAccess,
+  requireFinanceRole(WRITE_ROLES),
   validateRequest(updateBankAccountSchema),
   updateBankAccount
 );
@@ -121,6 +147,8 @@ router.put(
 router.get(
   '/:id/ledger',
   checkCompanyAccess,
+  requireFinanceCompanyAccess,
+  requireFinanceRole(BANK_READ_ROLES),
   getAccountLedger
 );
 
@@ -128,6 +156,8 @@ router.get(
 router.post(
   '/:id/reconcile',
   checkCompanyAccess,
+  requireFinanceCompanyAccess,
+  requireFinanceRole(WRITE_ROLES),
   validateRequest(reconcileSchema),
   reconcileAccount
 );
@@ -136,6 +166,8 @@ router.post(
 router.delete(
   '/:id',
   checkCompanyAccess,
+  requireFinanceCompanyAccess,
+  requireFinanceRole(WRITE_ROLES),
   requireAdmin,
   deleteBankAccount
 );
