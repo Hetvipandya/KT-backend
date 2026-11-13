@@ -22,11 +22,16 @@ exports.list = send(async (req, res) => {
 });
 
 exports.get = send(async (req, res) => {
-  const lending = await service.getLending(req.params.id, req.query.companyId, req.branchId);
+  const lending = await service.getLending(req.params.id, req.lending.companyId, req.branchId);
   res.json({ success: true, data: lending });
 });
 
 exports.repay = send(async (req, res) => {
-  const lending = await service.createRepayment(req.params.id, req.body, req.user._id, req.branchId);
+  const lending = await service.createRepayment(
+    req.params.id,
+    { ...req.body, companyId: req.lending.companyId },
+    req.user._id,
+    req.branchId,
+  );
   res.status(201).json({ success: true, data: lending });
 });
