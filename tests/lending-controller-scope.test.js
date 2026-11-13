@@ -34,6 +34,23 @@ describe('Lending controller resource scope', () => {
     expect(next).not.toHaveBeenCalled();
   });
 
+  test('uses the validated company context when middleware did not attach the lending record', async () => {
+    const req = {
+      params: { id: LENDING_ID },
+      query: { companyId: OTHER_COMPANY_ID },
+      company: { _id: COMPANY_ID },
+      branchId: BRANCH_ID,
+    };
+    const res = { json: jest.fn() };
+    const next = jest.fn();
+    service.getLending.mockResolvedValue({ id: LENDING_ID });
+
+    await controller.get(req, res, next);
+
+    expect(service.getLending).toHaveBeenCalledWith(LENDING_ID, COMPANY_ID, BRANCH_ID);
+    expect(next).not.toHaveBeenCalled();
+  });
+
   test('records repayments against the company resolved from the lending record', async () => {
     const body = { companyId: OTHER_COMPANY_ID, financialYearId: 'year-id' };
     const req = {

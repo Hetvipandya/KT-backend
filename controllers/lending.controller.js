@@ -8,6 +8,13 @@ const send = (handler) => async (req, res, next) => {
   }
 };
 
+const getCompanyId = (req) => (
+  req.lending?.companyId ||
+  req.company?._id ||
+  req.query?.companyId ||
+  req.body?.companyId
+);
+
 exports.create = send(async (req, res) => {
   const lending = await service.createLending(req.body, req.user._id);
   res.status(201).json({ success: true, data: lending });
@@ -22,14 +29,14 @@ exports.list = send(async (req, res) => {
 });
 
 exports.get = send(async (req, res) => {
-  const lending = await service.getLending(req.params.id, req.lending.companyId, req.branchId);
+  const lending = await service.getLending(req.params.id, getCompanyId(req), req.branchId);
   res.json({ success: true, data: lending });
 });
 
 exports.repay = send(async (req, res) => {
   const lending = await service.createRepayment(
     req.params.id,
-    { ...req.body, companyId: req.lending.companyId },
+    { ...req.body, companyId: getCompanyId(req) },
     req.user._id,
     req.branchId,
   );
