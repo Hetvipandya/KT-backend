@@ -28,6 +28,8 @@ const checkBranchAccess = async (req, res, next) => {
       targetBranchId = req.branch._id.toString();
     } else if (req.lending && req.lending.branchId) {
       targetBranchId = req.lending.branchId.toString();
+    } else if (req.bankAccount && req.bankAccount.branchId) {
+      targetBranchId = req.bankAccount.branchId.toString();
     } else if (req.query && req.query.branchId) {
       targetBranchId = req.query.branchId;
     } else if (req.headers && req.headers['x-branch-id']) {
