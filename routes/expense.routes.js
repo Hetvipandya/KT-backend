@@ -21,5 +21,7 @@ router.use('/', ktExpenseRoutes);
 // 2. Finance Expense Endpoints (/, /)
 router.post('/', authenticate, validate(expense), access, requireFinanceCompanyAccess, requireFinanceRole(ENTRY_ROLES), finExpenseController.create);
 router.get('/', authenticate, validateQuery(query), access, requireFinanceCompanyAccess, requireFinanceRole(READ_ROLES), finExpenseController.list);
+router.put('/:id', authenticate, validate(expense), access, requireFinanceCompanyAccess, requireFinanceRole(ENTRY_ROLES), finExpenseController.update);
+router.delete('/:id', authenticate, access, requireFinanceCompanyAccess, requireFinanceRole(WRITE_ROLES), finExpenseController.remove);
 
 module.exports = router;

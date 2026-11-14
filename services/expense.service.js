@@ -17,7 +17,7 @@ const validateRefs = async (data) => {
   }
 };
 
-const create = async (data, userId) => {
+const create = async (data, userId, { balanceAdjustment = 0 } = {}) => {
   await validateRefs(data);
   if (Math.abs(data.totalAmount - (data.amount + data.taxAmount)) > 0.01) {
     throw fail('totalAmount is inconsistent', 400, 'INVALID_TOTALS');
@@ -114,8 +114,9 @@ const create = async (data, userId) => {
     const bankAccountService = require('./bankAccount.service');
     const currentBalance = await bankAccountService.getAccountBalance(creditCoaAccountId);
 
-    if (Number(data.totalAmount || 0) > Number(currentBalance || 0)) {
-      const formattedBalance = `Rs.${Number(currentBalance || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    const availableBalance = Number(currentBalance || 0) + Number(balanceAdjustment || 0);
+    if (Number(data.totalAmount || 0) > availableBalance) {
+      const formattedBalance = `Rs.${availableBalance.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
       const formattedExpense = `Rs.${Number(data.totalAmount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
       throw fail(
         `Insufficient balance in ${targetAccountName}. Available balance is ${formattedBalance}, but expense total is ${formattedExpense}.`,
@@ -186,6 +187,7 @@ const create = async (data, userId) => {
 
   const populated = await Expense.findById(expense._id)
     .populate('expenseAccountId', 'name code')
+    .populate('taxRateId', 'name ratePercent isActive')
     .populate('bankAccountId', 'accountName bankName accountType')
     .populate('branchId', 'branchName')
     .populate('vendorId', 'name')
@@ -193,6 +195,170 @@ const create = async (data, userId) => {
 
   return shapeExpense(populated);
 };
+
+const restoreExpenseJournal = async (expense, userId) => {
+  let creditCoaAccountId = null;
+  if (expense.bankAccountId) {
+    const bank = await BankAccount.findOne({
+      _id: expense.bankAccountId,
+      companyId: expense.companyId
+    });
+    creditCoaAccountId = bank?.coaAccountId || null;
+  }
+  if (!creditCoaAccountId) {
+    const cashAccount = await ChartOfAccount.findOne({
+      companyId: expense.companyId,
+      code: { $in: ['1210', '1200'] },
+      isActive: true,
+      isGroup: false
+    }) || await ChartOfAccount.findOne({
+      companyId: expense.companyId,
+      type: 'Asset',
+      name: /cash/i,
+      isActive: true,
+      isGroup: false
+    });
+    creditCoaAccountId = cashAccount?._id || null;
+  }
+  if (!creditCoaAccountId) {
+    throw fail('An active cash or bank COA ledger is required to restore this expense.', 500, 'PAYMENT_ACCOUNT_REQUIRED');
+  }
+
+  const amount = Number(expense.amount) || 0;
+  const taxAmount = Number(expense.taxAmount) || 0;
+  const totalAmount = Number(expense.totalAmount) || amount + taxAmount;
+  const journal = await journalService.createJournalEntry({
+    companyId: expense.companyId,
+    branchId: expense.branchId || null,
+    financialYearId: expense.financialYearId,
+    entryDate: new Date(expense.expenseDate),
+    reference: expense.reference || `EXP-${expense._id.toString().slice(-6)}`,
+    narration: `Expense: ${expense.category} - ${expense.description}`,
+    lines: [
+      {
+        accountId: expense.expenseAccountId,
+        debit: amount,
+        credit: 0,
+        remarks: expense.description || 'Expense'
+      },
+      ...(taxAmount > 0 ? [{
+        accountId: expense.expenseAccountId,
+        debit: taxAmount,
+        credit: 0,
+        remarks: 'Tax amount'
+      }] : []),
+      {
+        accountId: creditCoaAccountId,
+        debit: 0,
+        credit: totalAmount,
+        remarks: `Expense payment (${expense.paymentMode})`
+      }
+    ]
+  }, userId);
+  return journal;
+};
+
+const update = async (id, data, userId) => {
+  const existing = await Expense.findOne({
+    _id: id,
+    companyId: data.companyId,
+    branchId: data.branchId,
+    isVoided: { $ne: true }
+  });
+  if (!existing) throw fail('Expense not found', 404, 'EXPENSE_NOT_FOUND');
+  if (Math.abs(data.totalAmount - (data.amount + data.taxAmount)) > 0.01) {
+    throw fail('totalAmount is inconsistent', 400, 'INVALID_TOTALS');
+  }
+
+  const samePaymentAccount = String(existing.bankAccountId || '') === String(data.bankAccountId || '');
+  const balanceAdjustment = samePaymentAccount ? Number(existing.totalAmount) || 0 : 0;
+  const replacement = await create({ ...data }, userId, { balanceAdjustment });
+  let oldReversal = null;
+  try {
+    if (existing.journalEntryId) {
+      oldReversal = await journalService.reverseJournalEntry(existing.journalEntryId, userId);
+    }
+    existing.isVoided = true;
+    existing.voidedAt = new Date();
+    existing.voidedBy = userId;
+    existing.reversalJournalEntryId = oldReversal?.reversal?._id || null;
+    existing.updatedBy = userId;
+    await existing.save();
+    return replacement;
+  } catch (error) {
+    const recoveryErrors = [];
+    if (oldReversal?.reversal?._id) {
+      try {
+        const restored = await restoreExpenseJournal(existing, userId);
+        existing.isVoided = false;
+        existing.voidedAt = null;
+        existing.voidedBy = null;
+        existing.reversalJournalEntryId = null;
+        existing.journalEntryId = restored._id;
+        existing.updatedBy = userId;
+        await existing.save();
+      } catch (recoveryError) {
+        recoveryErrors.push(recoveryError.message);
+      }
+    }
+    try {
+      const replacementJournalId = getJournalId(replacement.journalEntryId);
+      if (replacementJournalId) {
+        await journalService.reverseJournalEntry(replacementJournalId, userId);
+      }
+      await Expense.deleteOne({ _id: replacement._id });
+    } catch (recoveryError) {
+      recoveryErrors.push(recoveryError.message);
+    }
+    if (recoveryErrors.length) {
+      error.message = `${error.message}. Expense accounting recovery also failed: ${recoveryErrors.join('; ')}`;
+      error.statusCode = 500;
+    }
+    throw error;
+  }
+};
+
+const remove = async (id, companyId, branchId, userId) => {
+  const filter = { _id: id, companyId, isVoided: { $ne: true } };
+  if (branchId) filter.branchId = branchId;
+  const expense = await Expense.findOne(filter);
+  if (!expense) throw fail('Expense not found', 404, 'EXPENSE_NOT_FOUND');
+
+  let reversal = null;
+  try {
+    if (expense.journalEntryId) {
+      reversal = await journalService.reverseJournalEntry(expense.journalEntryId, userId);
+    }
+    expense.isVoided = true;
+    expense.voidedAt = new Date();
+    expense.voidedBy = userId;
+    expense.reversalJournalEntryId = reversal?.reversal?._id || null;
+    expense.updatedBy = userId;
+    await expense.save();
+    return { id: expense._id, reversalJournalEntryId: expense.reversalJournalEntryId };
+  } catch (error) {
+    if (reversal?.reversal?._id) {
+      try {
+        const restored = await restoreExpenseJournal(expense, userId);
+        expense.isVoided = false;
+        expense.voidedAt = null;
+        expense.voidedBy = null;
+        expense.reversalJournalEntryId = null;
+        expense.journalEntryId = restored._id;
+        expense.updatedBy = userId;
+        await expense.save();
+      } catch (recoveryError) {
+        error.message = `${error.message}. Expense accounting recovery also failed: ${recoveryError.message}`;
+        error.statusCode = 500;
+      }
+    }
+    throw error;
+  }
+};
+
+const getJournalId = (value) => (
+  value && typeof value === 'object' ? String(value._id || value.id || '') : String(value || '')
+);
 
 const shapeExpense = (exp) => {
   if (!exp) return null;
@@ -206,6 +372,13 @@ const shapeExpense = (exp) => {
 
   return {
     ...obj,
+    taxRateId: obj.taxRateId?._id?.toString() || (typeof obj.taxRateId === 'string' ? obj.taxRateId : obj.taxRateId?.toString()) || null,
+    taxRate: obj.taxRateId?.name ? {
+      id: obj.taxRateId?._id?.toString() || obj.taxRateId?.toString(),
+      name: obj.taxRateId.name,
+      ratePercent: Number(obj.taxRateId.ratePercent) || 0,
+      isActive: obj.taxRateId.isActive !== false
+    } : null,
     expenseAccountId: obj.expenseAccountId?._id?.toString() || (typeof obj.expenseAccountId === 'string' ? obj.expenseAccountId : obj.expenseAccountId?.toString()) || null,
     expenseAccountName,
     expenseAccountCode,
@@ -222,12 +395,13 @@ const shapeExpense = (exp) => {
 };
 
 const list = async (companyId, query) => {
-  const filter = { companyId };
+  const filter = { companyId, isVoided: { $ne: true } };
   if (query.branchId) filter.branchId = query.branchId;
   if (query.financialYearId) filter.financialYearId = query.financialYearId;
 
   const items = await Expense.find(filter)
     .populate('expenseAccountId', 'name code')
+    .populate('taxRateId', 'name ratePercent isActive')
     .populate('bankAccountId', 'accountName bankName accountType')
     .populate('branchId', 'branchName')
     .populate('vendorId', 'name')
@@ -240,15 +414,18 @@ const list = async (companyId, query) => {
 const get = async (id) => {
   const item = await Expense.findById(id)
     .populate('expenseAccountId', 'name code')
+    .populate('taxRateId', 'name ratePercent isActive')
     .populate('bankAccountId', 'accountName bankName accountType')
     .populate('branchId', 'branchName')
     .populate('vendorId', 'name')
     .lean();
-  return shapeExpense(item);
+  return item?.isVoided ? null : shapeExpense(item);
 };
 
 module.exports = {
   create,
+  update,
+  remove,
   list,
   get,
   shapeExpense

@@ -93,6 +93,24 @@ const expenseSchema = new mongoose.Schema(
       ref: 'JournalEntry',
       default: null
     },
+    reversalJournalEntryId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'JournalEntry',
+      default: null
+    },
+    isVoided: {
+      type: Boolean,
+      default: false
+    },
+    voidedAt: {
+      type: Date,
+      default: null
+    },
+    voidedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      default: null
+    },
     reference: {
       type: String,
       default: ''
