@@ -189,7 +189,7 @@ const parseBreaksFromInput = ({ sessions, breaks, breakStart, breakEnd }, attend
     return {
       breaks: parsedBreaks,
       totalBreakTime: Number(totalDuration.toFixed(2)),
-      provided: true,
+      provided: parsedBreaks.length > 0,
     };
   }
 
@@ -237,7 +237,7 @@ const parseBreaksFromInput = ({ sessions, breaks, breakStart, breakEnd }, attend
     return {
       breaks: parsedBreaks,
       totalBreakTime: Number(totalDuration.toFixed(2)),
-      provided: true,
+      provided: parsedBreaks.length > 0,
     };
   }
 
@@ -804,6 +804,7 @@ exports.putAttendanceAdjustment = async (req, res) => {
       breakIn,
       breakOut,
       reason,
+      totalBreakTime,
     } = req.body;
 
     if (!employeeId || !date || !reason) {
@@ -834,7 +835,9 @@ exports.putAttendanceAdjustment = async (req, res) => {
       }
     }
 
-    // If sessions not provided, check if flat timing fields or breaks provided
+    // If sessions not provided, check if flat timing fields, breaks, or a direct
+    // break-duration override was provided. Admin/manual adjustments may set a
+    // total break duration without also specifying break endpoints.
     if (!Array.isArray(sessions) || sessions.length === 0) {
       const cin = checkInTime ?? checkin ?? checkIn ?? "";
       const cout = checkOutTime ?? checkout ?? checkOut ?? "";
@@ -842,8 +845,9 @@ exports.putAttendanceAdjustment = async (req, res) => {
         breakStart ?? breakStartTime ?? break_start ?? breakIn ?? "";
       const bend =
         breakEnd ?? breakEndTime ?? break_end ?? breakOut ?? "";
+      const hasManualBreakDuration = totalBreakTime !== undefined;
 
-      if (cin || cout || bstart || bend || breaks) {
+      if (cin || cout || bstart || bend || breaks || hasManualBreakDuration) {
         sessions = [
           {
             checkin: cin,
@@ -962,8 +966,13 @@ exports.putAttendanceAdjustment = async (req, res) => {
       });
     }
 
-    attendance.breaks = breaksResult.breaks || [];
-    attendance.totalBreakTime = breaksResult.totalBreakTime || 0;
+    if (breaksResult.provided) {
+      attendance.breaks = breaksResult.breaks || [];
+      attendance.totalBreakTime = breaksResult.totalBreakTime || 0;
+    } else if (totalBreakTime !== undefined) {
+      attendance.breaks = [];
+      attendance.totalBreakTime = Number(totalBreakTime) || 0;
+    }
 
     // ==========================================
     // Calculate Work Time

@@ -853,6 +853,10 @@ const updateProfile = async (req, res) => {
       user.termsAccepted = termsBool;
     }
 
+    if (user.role) {
+      user.role = normalizeRole(user.role);
+    }
+
     await user.save();
 
     // --------------------------------------------------------

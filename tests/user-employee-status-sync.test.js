@@ -2,8 +2,10 @@ const {
   buildUserResponse,
   __test__getEmployeeStatus,
   __test__syncEmployeeStatus,
+  updateProfile,
 } = require("../controllers/userControllers");
 const User = require("../models/User");
+const Employee = require("../models/Employee");
 const {
   syncEmployeeActiveStatus,
   syncEmployeeToUser,
@@ -37,6 +39,30 @@ describe("user and employee active status synchronization", () => {
         status: "rejected",
       }).status,
     ).toBe("rejected");
+  });
+
+  it("normalizes legacy role casing before saving a profile", async () => {
+    const user = {
+      _id: "user-id",
+      constructor: { modelName: "User" },
+      role: "Admin",
+      email: "admin@example.com",
+      save: jest.fn().mockResolvedValue(undefined),
+    };
+    jest.spyOn(Employee, "findOne").mockResolvedValue(null);
+    const res = {
+      status: jest.fn().mockReturnThis(),
+      json: jest.fn(),
+    };
+
+    await updateProfile({ body: {}, user }, res);
+
+    expect(user.role).toBe("admin");
+    expect(user.save).toHaveBeenCalledTimes(1);
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({ success: true }),
+    );
   });
 
   it("persists both inactive employee status fields together", async () => {

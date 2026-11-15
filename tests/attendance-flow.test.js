@@ -168,6 +168,40 @@ describe("Attendance break-time adjustments", () => {
     expect(notice.meta.adjustmentId).toBe(history._id.toString());
   });
 
+  test("accepts a direct total break duration override without break endpoints", async () => {
+    const user = await User.create({
+      name: "Manual Break Adjustment Test",
+      email: "manual-break-adjustment-test@example.com",
+      password: "Password123",
+      role: "employee",
+      isApproved: true,
+    });
+    const res = createMockRes();
+
+    await adjustmentRequestController.putAttendanceAdjustment(
+      {
+        body: {
+          employeeId: user._id.toString(),
+          date: "2026-09-30",
+          reason: "Manual break correction",
+          checkInTime: "09:00",
+          checkOutTime: "18:00",
+          totalBreakTime: 90,
+        },
+      },
+      res
+    );
+
+    expect(res.statusCode).toBe(200);
+    const attendance = await Attendance.findOne({ userId: user._id, date: "2026-09-30" });
+    expect(attendance.totalBreakTime).toBe(90);
+    expect(attendance.totalWorkTime).toBe(7.5);
+
+    const history = await AdjustmentRequest.findOne({ userId: user._id });
+    expect(history.totalBreakTime).toBe(90);
+    expect(history.totalWorkTime).toBe(7.5);
+  });
+
   test("rejects a break adjustment with only one endpoint", async () => {
     const user = await User.create({
       name: "Invalid Adjustment Test",
