@@ -14,7 +14,9 @@ const {
   createFundMinus,
   listTransfers,
   getTransferDetails,
-  cancelTransfer
+  cancelTransfer,
+  updateTransfer,
+  deleteTransfer
 } = require('../controllers/accountTransfer.controller');
 
 const authenticate = require('../middleware/authenticate');
@@ -29,7 +31,8 @@ const {
 const {
   transferSchema,
   fundPlusSchema,
-  fundMinusSchema
+  fundMinusSchema,
+  updateTransferSchema
 } = require('../validators/accountTransfer.validators');
 const {
   BANK_READ_ROLES,
@@ -111,6 +114,23 @@ router.get(
   requireFinanceCompanyAccess,
   requireFinanceRole(BANK_READ_ROLES),
   getTransferDetails
+);
+
+router.put(
+  '/transfers/:id',
+  checkCompanyAccess,
+  requireFinanceCompanyAccess,
+  requireFinanceRole(WRITE_ROLES),
+  validateRequest(updateTransferSchema),
+  updateTransfer
+);
+
+router.delete(
+  '/transfers/:id',
+  checkCompanyAccess,
+  requireFinanceCompanyAccess,
+  requireFinanceRole(WRITE_ROLES),
+  deleteTransfer
 );
 
 // Cancel / Reverse a transfer transaction

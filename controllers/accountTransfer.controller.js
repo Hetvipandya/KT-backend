@@ -136,11 +136,68 @@ const cancelTransfer = async (req, res, next) => {
   }
 };
 
+const updateTransfer = async (req, res, next) => {
+  try {
+    const companyId = req.company?._id;
+    if (!companyId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Company ID is required to update a transfer'
+      });
+    }
+
+    const userId = req.user ? req.user._id : req.body.userId;
+    const transfer = await accountTransferService.updateTransfer(
+      req.params.id,
+      companyId,
+      req.body,
+      userId,
+      req.branchId
+    );
+    return res.status(200).json({
+      success: true,
+      message: 'Account transfer updated and journal reposted successfully',
+      data: transfer
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const deleteTransfer = async (req, res, next) => {
+  try {
+    const companyId = req.company?._id;
+    if (!companyId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Company ID is required to delete a transfer'
+      });
+    }
+
+    const userId = req.user ? req.user._id : req.body.userId;
+    const transfer = await accountTransferService.deleteTransfer(
+      req.params.id,
+      companyId,
+      userId,
+      req.branchId
+    );
+    return res.status(200).json({
+      success: true,
+      message: 'Account transfer deleted and its journal reversed',
+      data: transfer
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   createTransfer,
   createFundPlus,
   createFundMinus,
   listTransfers,
   getTransferDetails,
-  cancelTransfer
+  cancelTransfer,
+  updateTransfer,
+  deleteTransfer
 };

@@ -60,8 +60,32 @@ const fundMinusSchema = z.object({
   narration: z.string().trim().optional()
 }).strict();
 
+const updateTransferSchema = z.object({
+  companyId: z.string({ required_error: 'Company ID is required' })
+    .regex(objectIdRegex, 'Invalid Company ID format'),
+  branchId: z.string().regex(objectIdRegex, 'Invalid branchId format').nullable().optional(),
+  fromAccountId: z.string().regex(objectIdRegex, 'Invalid From Account ID format').optional(),
+  toAccountId: z.string().regex(objectIdRegex, 'Invalid To Account ID format').optional(),
+  contraAccountId: z.string().regex(objectIdRegex, 'Invalid Contra Account ID format').optional(),
+  amount: z.number({ required_error: 'Amount is required' })
+    .positive('Amount must be greater than 0'),
+  transferDate: z.string().datetime().or(z.date()).optional().or(z.literal('')),
+  paymentMode: paymentModeEnum.optional(),
+  referenceNo: z.string().trim().optional(),
+  narration: z.string().trim().optional()
+}).strict().superRefine((data, ctx) => {
+  if (data.fromAccountId && data.toAccountId && data.fromAccountId === data.toAccountId) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['toAccountId'],
+      message: 'Source and destination accounts must be different'
+    });
+  }
+});
+
 module.exports = {
   transferSchema,
   fundPlusSchema,
-  fundMinusSchema
+  fundMinusSchema,
+  updateTransferSchema
 };
