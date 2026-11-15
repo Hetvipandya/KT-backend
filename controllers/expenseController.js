@@ -234,7 +234,12 @@ exports.updateExpense = async (req, res) => {
 exports.updateIncome = async (req, res, next) => {
   try {
     const companyId = req.company?._id;
-    const income = await Income.findOne({ _id: req.params.id, companyId });
+    const income = await Income.findOne({
+      _id: req.params.id,
+      companyId,
+      ...(req.branchId ? { branchId: req.branchId } : {}),
+      isVoided: { $ne: true },
+    });
 
     if (!income) {
       return res.status(404).json({
@@ -309,6 +314,67 @@ exports.updateIncome = async (req, res, next) => {
     });
   } catch (error) {
     next(error);
+  }
+};
+
+exports.deleteIncome = async (req, res, next) => {
+  let income;
+  let reversal;
+  try {
+    income = await Income.findOne({
+      _id: req.params.id,
+      companyId: req.company._id,
+      ...(req.branchId ? { branchId: req.branchId } : {}),
+      isVoided: { $ne: true },
+    });
+    if (!income) {
+      return res.status(404).json({ success: false, message: "Income not found" });
+    }
+
+    if (income.journalEntryId) {
+      reversal = await journalEntryService.reverseJournalEntry(income.journalEntryId, req.user?._id);
+    }
+    income.isVoided = true;
+    income.voidedAt = new Date();
+    income.voidedBy = req.user?._id || null;
+    income.reversalJournalEntryId = reversal?.reversal?._id || null;
+    income.updatedBy = req.user?._id || null;
+    await income.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "Income deleted and accounting journal reversed.",
+    });
+  } catch (error) {
+    if (income && reversal?.reversal?._id) {
+      try {
+        const postingContext = await resolveIncomePostingContext({
+          companyId: income.companyId,
+          branchId: income.branchId,
+          financialYearId: income.financialYearId,
+          receivedDate: income.receivedDate,
+          paymentMode: income.paymentMode,
+          bankAccountId: income.bankAccountId,
+        });
+        const restoredJournal = await postIncomeJournalEntry(
+          income,
+          postingContext.financialYear,
+          postingContext.bankAccount,
+          req.user?._id
+        );
+        income.journalEntryId = restoredJournal._id;
+        income.reversalJournalEntryId = null;
+        income.isVoided = false;
+        income.voidedAt = null;
+        income.voidedBy = null;
+        await income.save();
+      } catch (rollbackError) {
+        console.error("Failed to restore income after delete failed:", rollbackError.message);
+        error.message = `${error.message}. Income accounting recovery also failed: ${rollbackError.message}`;
+        error.statusCode = 500;
+      }
+    }
+    return next(error);
   }
 };
 
@@ -521,6 +587,7 @@ exports.getAllIncome = async (req, res, next) => {
     const incomes = await Income.find({
       companyId: req.company._id,
       ...(req.branchId ? { branchId: req.branchId } : {}),
+      isVoided: { $ne: true },
     })
       .populate("coaAccountId", "name code")
       .sort({
@@ -548,7 +615,7 @@ exports.getTransactions = async (req, res) => {
     };
     const [expenseIds, incomeIds] = await Promise.all([
       Expense.find(scope).distinct("_id"),
-      Income.find(scope).distinct("_id")
+      Income.find({ ...scope, isVoided: { $ne: true } }).distinct("_id")
     ]);
     const transactions = await Transaction.find({
       referenceId: { $in: [...expenseIds, ...incomeIds] }
@@ -579,7 +646,7 @@ exports.getProfitLoss = async (req, res) => {
       ...(req.branchId ? { branchId: req.branchId } : {})
     };
     const income = await Income.aggregate([
-      { $match: scope },
+      { $match: { ...scope, isVoided: { $ne: true } } },
       {
         $group: {
           _id: null,
@@ -630,7 +697,7 @@ exports.getBalanceSheet = async (req, res) => {
       ...(req.branchId ? { branchId: req.branchId } : {})
     };
     const income = await Income.aggregate([
-      { $match: scope },
+      { $match: { ...scope, isVoided: { $ne: true } } },
       {
         $group: {
           _id: null,

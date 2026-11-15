@@ -72,11 +72,19 @@ const checkCompanyAccess = async (req, res, next) => {
         companyId = lending.companyId;
         req.lending = lending;
       } else if (baseUrl.includes('expense')) {
-        const Expense = require('../models/Expense');
-        const expense = await Expense.findById(req.params.id);
-        if (!expense) return res.status(404).json({ success: false, message: 'Expense not found', errorCode: 'EXPENSE_NOT_FOUND' });
-        companyId = expense.companyId;
-        req.expense = expense;
+        if (req.path.includes('/income/')) {
+          const Income = require('../models/Income');
+          const income = await Income.findById(req.params.id);
+          if (!income) return res.status(404).json({ success: false, message: 'Income not found', errorCode: 'INCOME_NOT_FOUND' });
+          companyId = income.companyId;
+          req.income = income;
+        } else {
+          const Expense = require('../models/Expense');
+          const expense = await Expense.findById(req.params.id);
+          if (!expense) return res.status(404).json({ success: false, message: 'Expense not found', errorCode: 'EXPENSE_NOT_FOUND' });
+          companyId = expense.companyId;
+          req.expense = expense;
+        }
       } else if (baseUrl.includes('employee')) {
         const Employee = require('../models/Employee');
         const employee = await Employee.findById(req.params.id);

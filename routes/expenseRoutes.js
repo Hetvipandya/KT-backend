@@ -24,6 +24,7 @@ const {
   createIncome,
   getAllIncome,
   updateIncome,
+  deleteIncome,
 
   // Transaction APIs
   getTransactions,
@@ -82,6 +83,15 @@ router.put(
   requireFinanceCompanyAccess,
   requireFinanceRole(WRITE_ROLES),
   updateIncome
+);
+
+router.delete(
+  "/income/delete/:id",
+  authenticate,
+  checkCompanyAccess,
+  requireFinanceCompanyAccess,
+  requireFinanceRole(WRITE_ROLES),
+  deleteIncome
 );
 
 router.delete(
