@@ -49,6 +49,8 @@ router.use(optionalAuth);
 // Approve Report
 router.put(
   "/approve/:id",
+  protect,
+  authorizeRoles("admin", "hr"),
   async (req, res) => {
     req.body.status =
       "Approved";
@@ -63,6 +65,8 @@ router.put(
 // Reject Report
 router.put(
   "/reject/:id",
+  protect,
+  authorizeRoles("admin", "hr"),
   async (req, res) => {
     req.body.status =
       "Rejected";
@@ -77,6 +81,8 @@ router.put(
 // Under Review
 router.put(
   "/review/:id",
+  protect,
+  authorizeRoles("admin", "hr"),
   async (req, res) => {
     req.body.status =
       "Under Review";
@@ -125,17 +131,23 @@ router.get(
 // Update report status
 router.put(
   "/status/:id",
+  protect,
+  authorizeRoles("admin", "hr"),
   updateReportStatus
 );
 
 // Update daily report details
 router.put(
   "/update/:id",
+  protect,
+  authorizeRoles("admin", "hr"),
   updateDailyReport
 );
 
 router.put(
   "/:id",
+  protect,
+  authorizeRoles("admin", "hr"),
   updateDailyReport
 );
 
@@ -154,11 +166,15 @@ router.post(
 // Delete report
 router.delete(
   "/delete/:id",
+  protect,
+  authorizeRoles("admin", "hr"),
   deleteDailyReport
 );
 
 router.delete(
   "/:id",
+  protect,
+  authorizeRoles("admin", "hr"),
   deleteDailyReport
 );
 

@@ -1528,19 +1528,33 @@ exports.checkIn = async (
     attendance.status =
       attendanceStatus.status;
 
-    // ========================================================
-    // APPROVAL REQUIRED
-    // ========================================================
+    const shouldAutoApprove =
+      !attendanceStatus.isAbsentDueToLate &&
+      !attendanceStatus.isLate &&
+      calcCheckInStatus(actualCheckInTime, settings).isLate === false;
 
-    attendance.approvalStatus =
-      "pending";
+    attendance.autoApproved = shouldAutoApprove;
+
+    if (shouldAutoApprove) {
+      attendance.approvalStatus = "approved";
+      attendance.approvedBy = null;
+      attendance.approvedAt = new Date();
+      attendance.approvedCheckInTime = actualCheckInTime;
+    } else {
+      attendance.approvalStatus = "pending";
+      attendance.approvedBy = undefined;
+      attendance.approvedAt = null;
+      attendance.approvedCheckInTime = null;
+    }
 
     await attendance.save();
     await notify({
       userId: attendance.userId,
       type: "ATTENDANCE_CHECK_IN",
-      title: "Check-in recorded",
-      message: "Your check-in request is awaiting approval.",
+      title: shouldAutoApprove ? "Check-in auto-approved" : "Check-in recorded",
+      message: shouldAutoApprove
+        ? `Your check-in at ${formatISTTime(actualCheckInTime)} was auto-approved.`
+        : "Your check-in request is awaiting approval.",
       meta: { attendanceId: attendance._id.toString(), status: attendance.approvalStatus },
     });
 
@@ -1567,6 +1581,11 @@ exports.checkIn = async (
         `You checked in at ${formatISTTime(
           actualCheckInTime
         )}. You are marked as late.`;
+    } else if (shouldAutoApprove) {
+      message =
+        `Check-in recorded successfully at ${formatISTTime(
+          actualCheckInTime
+        )}. This request was auto-approved.`;
     } else {
       message =
         `Check-in request sent successfully at ${formatISTTime(

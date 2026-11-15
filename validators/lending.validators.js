@@ -39,6 +39,24 @@ const createLendingRepaymentSchema = z.object({
   }
 });
 
+const updateLendingSchema = z.object({
+  companyId: objectId,
+  branchId: objectId.optional(),
+  financialYearId: objectId.optional(),
+  customerId: objectId.optional(),
+  loanReference: optionalText(100).optional(),
+  principalAmount: positive.optional(),
+  annualInterestRatePercent: nonNegative.max(100).optional(),
+  startDate: date.optional(),
+  maturityDate: date.nullable().optional(),
+  disbursementBankAccountId: objectId.optional(),
+  notes: optionalText(5000).optional(),
+}).strict().superRefine((value, ctx) => {
+  if (value.maturityDate && value.startDate && new Date(value.maturityDate) <= new Date(value.startDate)) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['maturityDate'], message: 'Maturity date must be after the loan start date' });
+  }
+});
+
 const lendingQuerySchema = z.object({
   companyId: objectId,
   branchId: z.union([objectId, z.literal('all')]).optional(),
@@ -62,4 +80,4 @@ const validateQuery = (schema) => (req, res, next) => {
   next();
 };
 
-module.exports = { createLendingSchema, createLendingRepaymentSchema, lendingQuerySchema, validateQuery };
+module.exports = { createLendingSchema, createLendingRepaymentSchema, updateLendingSchema, lendingQuerySchema, validateQuery };

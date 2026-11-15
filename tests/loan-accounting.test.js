@@ -30,7 +30,7 @@ const coaService = require('../services/coa.service');
 const bankAccountService = require('../services/bankAccount.service');
 const journalService = require('../services/journalEntry.service');
 const { ensureExpenseLedger } = require('../services/autoCoaMapping.service');
-const { createLoan, createRepayment } = require('../services/loan.service');
+const { createLoan, createRepayment, updateLoan, deleteLoan } = require('../services/loan.service');
 
 const COMPANY_ID = '6ac8a921e6b91ab589aa3001';
 const BRANCH_ID = '6ac8a921e6b91ab589aa3002';
@@ -192,5 +192,41 @@ describe('Loan accounting', () => {
     await expect(createRepayment(LOAN_ID, repaymentData(), USER_ID))
       .rejects.toMatchObject({ errorCode: 'LOAN_BALANCE_CHANGED' });
     expect(journalService.reverseJournalEntry).toHaveBeenCalledWith(JOURNAL_ID, USER_ID);
+  });
+
+  test('updates a loan when no repayments have been posted yet', async () => {
+    const loan = makeLoan();
+    Loan.findOne.mockResolvedValue(loan);
+    Loan.findOneAndUpdate.mockResolvedValue(makeLoan({ lenderName: 'Updated Bank', principalAmount: 1200, principalOutstanding: 1200 }));
+
+    const result = await updateLoan(LOAN_ID, {
+      companyId: COMPANY_ID,
+      lenderName: 'Updated Bank',
+      principalAmount: 1200,
+    }, USER_ID);
+
+    expect(Loan.findOneAndUpdate).toHaveBeenCalledWith(
+      { _id: LOAN_ID, companyId: COMPANY_ID },
+      expect.objectContaining({
+        $set: expect.objectContaining({
+          lenderName: 'Updated Bank',
+          principalAmount: 1200,
+          principalOutstanding: 1200,
+          updatedBy: USER_ID,
+        }),
+      }),
+      expect.any(Object)
+    );
+    expect(result.lenderName).toBe('Updated Bank');
+  });
+
+  test('deletes a loan without repayment history and rolls back the initial journal', async () => {
+    const loan = makeLoan();
+    Loan.findOne.mockResolvedValue(loan);
+
+    await deleteLoan(LOAN_ID, COMPANY_ID, USER_ID);
+
+    expect(journalService.reverseJournalEntry).toHaveBeenCalledWith(JOURNAL_ID, USER_ID);
+    expect(Loan.deleteOne).toHaveBeenCalledWith({ _id: LOAN_ID, companyId: COMPANY_ID });
   });
 });

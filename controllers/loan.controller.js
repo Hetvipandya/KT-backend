@@ -26,6 +26,16 @@ exports.get = send(async (req, res) => {
   res.json({ success: true, data: loan });
 });
 
+exports.update = send(async (req, res) => {
+  const loan = await service.updateLoan(req.params.id, req.body, req.user._id);
+  res.json({ success: true, data: loan });
+});
+
+exports.remove = send(async (req, res) => {
+  const result = await service.deleteLoan(req.params.id, req.query.companyId || req.body.companyId, req.user._id);
+  res.json({ success: true, data: result });
+});
+
 exports.repay = send(async (req, res) => {
   const loan = await service.createRepayment(req.params.id, req.body, req.user._id);
   res.status(201).json({ success: true, data: loan });

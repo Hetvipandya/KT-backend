@@ -143,6 +143,11 @@ const attendanceSchema = new mongoose.Schema(
       trim: true,
     },
 
+    autoApproved: {
+      type: Boolean,
+      default: false,
+    },
+
     approvedBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",

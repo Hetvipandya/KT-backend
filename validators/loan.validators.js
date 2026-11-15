@@ -48,6 +48,33 @@ const createLoanRepaymentSchema = z.object({
   }
 });
 
+const updateLoanSchema = z.object({
+  companyId: objectId,
+  branchId: objectId.optional(),
+  financialYearId: objectId.optional(),
+  lenderType: z.enum(['PERSON', 'BANK']).optional(),
+  lenderName: z.string().trim().min(1).max(200).optional(),
+  lenderPhone: optionalText(30).optional(),
+  lenderEmail: z.string().trim().email().max(254).optional().or(z.literal('')).default(''),
+  lenderBankName: optionalText(200).optional(),
+  lenderAccountNumber: optionalText(50).optional(),
+  lenderIfscCode: optionalText(20).optional(),
+  loanReference: optionalText(100).optional(),
+  principalAmount: positive.optional(),
+  annualInterestRatePercent: nonNegative.max(100).optional(),
+  startDate: date.optional(),
+  maturityDate: date.nullable().optional(),
+  disbursementBankAccountId: objectId.optional(),
+  notes: optionalText(5000).optional(),
+}).strict().superRefine((value, ctx) => {
+  if (value.lenderType === 'BANK' && (!value.lenderBankName || !value.lenderBankName.trim())) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['lenderBankName'], message: 'Bank name is required for a bank lender' });
+  }
+  if (value.maturityDate && value.startDate && new Date(value.maturityDate) <= new Date(value.startDate)) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['maturityDate'], message: 'Maturity date must be after the loan start date' });
+  }
+});
+
 const loanQuerySchema = z.object({
   companyId: objectId,
   branchId: objectId.optional(),
@@ -72,4 +99,4 @@ const validateQuery = (schema) => (req, res, next) => {
   next();
 };
 
-module.exports = { createLoanSchema, createLoanRepaymentSchema, loanQuerySchema, validateQuery };
+module.exports = { createLoanSchema, createLoanRepaymentSchema, updateLoanSchema, loanQuerySchema, validateQuery };

@@ -427,6 +427,59 @@ describe("Attendance approval authorization", () => {
 });
 
 describe("Attendance request ownership", () => {
+  test("auto-approves on-time check-ins before the 10:10 cutoff", async () => {
+    const RealDate = global.Date;
+    class MockDate extends RealDate {
+      constructor(...args) {
+        if (args.length > 0) {
+          return new RealDate(...args);
+        }
+        return new RealDate("2026-10-14T10:05:00+05:30");
+      }
+      static now() {
+        return new RealDate("2026-10-14T10:05:00+05:30").getTime();
+      }
+    }
+    global.Date = MockDate;
+
+    try {
+      const user = await User.create({
+        name: "Auto Approved User",
+        email: "auto-approved-owner@example.com",
+        phoneNumber: "9000000106",
+        password: "Password123",
+        role: "employee",
+        isApproved: true,
+      });
+      const officeCoords = {
+        latitude: OFFICE_LOCATION.latitude,
+        longitude: OFFICE_LOCATION.longitude,
+      };
+
+      const checkInRes = createMockRes();
+      await attendanceController.checkIn(
+        {
+          user: { _id: user._id },
+          body: {
+            userId: user._id.toString(),
+            ...officeCoords,
+          },
+        },
+        checkInRes
+      );
+
+      expect(checkInRes.statusCode).toBe(201);
+      expect(checkInRes.body.data.approvalStatus).toBe("approved");
+      expect(checkInRes.body.data.autoApproved).toBe(true);
+
+      const attendance = await Attendance.findOne({ userId: user._id, date: getToday() });
+      expect(attendance.approvalStatus).toBe("approved");
+      expect(attendance.autoApproved).toBe(true);
+    } finally {
+      global.Date = RealDate;
+    }
+  });
+
   test("creates a pending check-in only for the authenticated user", async () => {
     const kuresh = await User.create({
       name: "Kuresh",

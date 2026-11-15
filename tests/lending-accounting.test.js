@@ -34,7 +34,7 @@ const coaService = require('../services/coa.service');
 const bankAccountService = require('../services/bankAccount.service');
 const journalService = require('../services/journalEntry.service');
 const { ensureIncomeLedger } = require('../services/autoCoaMapping.service');
-const { createLending, createRepayment, listLendings } = require('../services/lending.service');
+const { createLending, createRepayment, listLendings, updateLending, deleteLending } = require('../services/lending.service');
 
 const COMPANY_ID = '6ac8a921e6b91ab589aa3001';
 const BRANCH_ID = '6ac8a921e6b91ab589aa3002';
@@ -209,6 +209,45 @@ describe('Customer lending accounting', () => {
     await expect(createRepayment(LENDING_ID, repaymentData(), USER_ID))
       .rejects.toMatchObject({ errorCode: 'LENDING_BALANCE_CHANGED' });
     expect(journalService.reverseJournalEntry).toHaveBeenCalledWith(JOURNAL_ID, USER_ID);
+  });
+
+  test('updates a lending record before any repayments are made', async () => {
+    const lending = makeLending();
+    Lending.findOne.mockResolvedValue(lending);
+    Lending.findOneAndUpdate.mockResolvedValue(makeLending({ customerName: 'Updated Customer', principalAmount: 1200, principalOutstanding: 1200 }));
+
+    const result = await updateLending(LENDING_ID, {
+      companyId: COMPANY_ID,
+      customerId: CUSTOMER_ID,
+      loanReference: 'LEND-2026',
+      principalAmount: 1200,
+    }, USER_ID, BRANCH_ID);
+
+    expect(Lending.findOneAndUpdate).toHaveBeenCalledWith(
+      { _id: LENDING_ID, companyId: COMPANY_ID },
+      expect.objectContaining({
+        $set: expect.objectContaining({
+          loanReference: 'LEND-2026',
+          principalAmount: 1200,
+          principalOutstanding: 1200,
+          updatedBy: USER_ID,
+        }),
+      }),
+      expect.any(Object),
+    );
+    expect(result.customerName).toBe('Updated Customer');
+  });
+
+  test('deletes a lending record without repayment history and reverses the opening journal', async () => {
+    Lending.findOne.mockResolvedValue(makeLending({
+      initialJournalEntryId: JOURNAL_ID,
+      receivableAccountId: RECEIVABLE_COA_ID,
+    }));
+
+    await deleteLending(LENDING_ID, COMPANY_ID, USER_ID, BRANCH_ID);
+
+    expect(journalService.reverseJournalEntry).toHaveBeenCalledWith(JOURNAL_ID, USER_ID);
+    expect(Lending.deleteOne).toHaveBeenCalledWith({ _id: LENDING_ID, companyId: COMPANY_ID });
   });
 
   test('summarizes the whole branch portfolio regardless of table status or search filters', async () => {

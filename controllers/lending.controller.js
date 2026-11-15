@@ -33,6 +33,26 @@ exports.get = send(async (req, res) => {
   res.json({ success: true, data: lending });
 });
 
+exports.update = send(async (req, res) => {
+  const lending = await service.updateLending(
+    req.params.id,
+    { ...req.body, companyId: getCompanyId(req) },
+    req.user._id,
+    req.branchId,
+  );
+  res.json({ success: true, data: lending });
+});
+
+exports.remove = send(async (req, res) => {
+  const result = await service.deleteLending(
+    req.params.id,
+    getCompanyId(req),
+    req.user._id,
+    req.branchId,
+  );
+  res.json({ success: true, data: result });
+});
+
 exports.repay = send(async (req, res) => {
   const lending = await service.createRepayment(
     req.params.id,

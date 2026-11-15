@@ -5,6 +5,7 @@ const validateRequest = require('../middleware/validateRequest');
 const {
   createLendingSchema,
   createLendingRepaymentSchema,
+  updateLendingSchema,
   lendingQuerySchema,
   validateQuery,
 } = require('../validators/lending.validators');
@@ -16,6 +17,8 @@ router.use(authenticate);
 router.post('/', checkCompanyAccess, validateRequest(createLendingSchema), controller.create);
 router.get('/', checkCompanyAccess, validateQuery(lendingQuerySchema), controller.list);
 router.get('/:id', checkCompanyAccess, controller.get);
+router.put('/:id', checkCompanyAccess, validateRequest(updateLendingSchema), controller.update);
+router.delete('/:id', checkCompanyAccess, controller.remove);
 router.post('/:id/repayments', checkCompanyAccess, validateRequest(createLendingRepaymentSchema), controller.repay);
 
 module.exports = router;

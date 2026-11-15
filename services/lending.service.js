@@ -266,6 +266,88 @@ const getLending = async (lendingId, companyId, branchId) => {
   return shape(lending, true);
 };
 
+const updateLending = async (lendingId, data, userId, branchId) => {
+  if (!mongoose.isValidObjectId(lendingId)) throw fail('Lending record not found', 404, 'LENDING_NOT_FOUND');
+  const filter = { _id: lendingId, companyId: data.companyId };
+  if (branchId) filter.branchId = branchId;
+  const lending = await Lending.findOne(filter);
+  if (!lending) throw fail('Lending record not found', 404, 'LENDING_NOT_FOUND');
+
+  const protectedFields = ['principalAmount', 'branchId', 'financialYearId', 'customerId', 'disbursementBankAccountId', 'startDate', 'maturityDate'];
+  if ((lending.repayments || []).length) {
+    const touched = protectedFields.some((field) => data[field] !== undefined && (
+      field === 'startDate' || field === 'maturityDate'
+        ? new Date(data[field]).getTime() !== new Date(lending[field] || null).getTime()
+        : String(data[field]) !== String(lending[field] || '')
+    ));
+    if (touched) throw fail('This lending record cannot be edited after repayments are recorded.', 409, 'LENDING_EDIT_FORBIDDEN');
+  }
+
+  const updates = { updatedBy: userId };
+  if (data.branchId) updates.branchId = data.branchId;
+  if (data.financialYearId) updates.financialYearId = data.financialYearId;
+  if (data.customerId) updates.customerId = data.customerId;
+  if (data.loanReference !== undefined) updates.loanReference = String(data.loanReference || '').trim();
+  if (data.principalAmount !== undefined) {
+    const nextPrincipalAmount = money(data.principalAmount);
+    const outstandingAdjustment = nextPrincipalAmount - lending.principalAmount;
+    const nextOutstanding = money(lending.principalOutstanding + outstandingAdjustment);
+    if (nextOutstanding < 0) throw fail('Updated principal amount cannot be less than the amount already repaid.', 400, 'LENDING_PRINCIPAL_INVALID');
+    updates.principalAmount = nextPrincipalAmount;
+    updates.principalOutstanding = nextOutstanding;
+    if (nextOutstanding <= EPSILON) {
+      updates.status = 'PAID_OFF';
+    } else if (lending.status === 'PAID_OFF') {
+      updates.status = 'ACTIVE';
+    }
+  }
+  if (data.annualInterestRatePercent !== undefined) updates.annualInterestRatePercent = money(data.annualInterestRatePercent);
+  if (data.startDate) updates.startDate = new Date(data.startDate);
+  if (data.maturityDate !== undefined) updates.maturityDate = data.maturityDate ? new Date(data.maturityDate) : null;
+  if (data.disbursementBankAccountId) updates.disbursementBankAccountId = data.disbursementBankAccountId;
+  if (data.notes !== undefined) updates.notes = String(data.notes || '').trim();
+
+  if (updates.customerId) {
+    const customer = await Customer.findOne({
+      _id: updates.customerId,
+      companyId: data.companyId,
+      isActive: { $ne: false },
+      branchId: { $in: [updates.branchId || lending.branchId, null] },
+    });
+    if (!customer) throw fail('Active customer not found for this company and branch', 404, 'CUSTOMER_NOT_FOUND');
+    updates.customerName = customer.name || customer.customerName;
+    updates.customerPhone = customer.phone || '';
+  }
+  if (updates.maturityDate && updates.startDate && new Date(updates.maturityDate) <= new Date(updates.startDate)) {
+    throw fail('Maturity date must be after the lending start date', 400, 'INVALID_MATURITY_DATE');
+  }
+
+  const updatedLending = await Lending.findOneAndUpdate(
+    { _id: lendingId, companyId: data.companyId },
+    { $set: updates },
+    { new: true, runValidators: true },
+  );
+  if (!updatedLending) throw fail('Lending record not found', 404, 'LENDING_NOT_FOUND');
+  return shape(updatedLending, true);
+};
+
+const deleteLending = async (lendingId, companyId, userId, branchId) => {
+  if (!mongoose.isValidObjectId(lendingId)) throw fail('Lending record not found', 404, 'LENDING_NOT_FOUND');
+  const filter = { _id: lendingId, companyId };
+  if (branchId) filter.branchId = branchId;
+  const lending = await Lending.findOne(filter);
+  if (!lending) throw fail('Lending record not found', 404, 'LENDING_NOT_FOUND');
+  if ((lending.repayments || []).length > 0) throw fail('This lending record has repayment history and cannot be deleted. Reverse or clear repayments first.', 409, 'LENDING_DELETE_FORBIDDEN');
+  if (lending.initialJournalEntryId) {
+    await journalService.reverseJournalEntry(lending.initialJournalEntryId, userId);
+  }
+  if (lending.receivableAccountId && typeof ChartOfAccount.deleteOne === 'function') {
+    await ChartOfAccount.deleteOne({ _id: lending.receivableAccountId });
+  }
+  await Lending.deleteOne({ _id: lendingId, companyId });
+  return { id: lendingId };
+};
+
 const createRepayment = async (lendingId, data, userId, branchId) => {
   if (!mongoose.isValidObjectId(lendingId)) throw fail('Lending record not found', 404, 'LENDING_NOT_FOUND');
   const filter = { _id: lendingId, companyId: data.companyId };
@@ -352,4 +434,4 @@ const createRepayment = async (lendingId, data, userId, branchId) => {
   return shape(updatedLending, true);
 };
 
-module.exports = { createLending, listLendings, getLending, createRepayment, shape };
+module.exports = { createLending, listLendings, getLending, updateLending, deleteLending, createRepayment, shape };
