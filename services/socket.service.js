@@ -1,9 +1,13 @@
 const { Server } = require('socket.io');
+const { createAdapter } = require('@socket.io/redis-adapter');
+const { createClient } = require('redis');
 const mongoose = require('mongoose');
 const User = require('../models/User');
 const Employee = require('../models/Employee');
 const { verifyAccessToken } = require('../utils/jwt');
 const { employeeRoom, setSocketServer } = require('../utils/notificationSocket');
+
+let redisClients = [];
 
 const getSocketToken = (socket) =>
   socket.handshake.auth?.token ||
@@ -110,4 +114,51 @@ const initializeSocketServer = (httpServer, options = {}) => {
   return io;
 };
 
-module.exports = { initializeSocketServer, authenticateSocket, resolveSocketUser };
+const initializeSocketAdapter = async (
+  io,
+  {
+    redisUrl = process.env.REDIS_URL,
+    required = process.env.SOCKET_REDIS_REQUIRED === 'true',
+  } = {}
+) => {
+  if (!redisUrl) {
+    if (required) {
+      throw new Error('REDIS_URL is required when SOCKET_REDIS_REQUIRED=true');
+    }
+    console.warn('[Socket.IO] Redis adapter is not configured; events are local to this instance.');
+    return false;
+  }
+
+  const pubClient = createClient({ url: redisUrl });
+  const subClient = pubClient.duplicate();
+  const onRedisError = (error) => console.error('[Socket.IO] Redis client error:', error);
+  pubClient.on('error', onRedisError);
+  subClient.on('error', onRedisError);
+
+  try {
+    await Promise.all([pubClient.connect(), subClient.connect()]);
+    io.adapter(createAdapter(pubClient, subClient));
+    redisClients = [pubClient, subClient];
+    return true;
+  } catch (error) {
+    await Promise.allSettled([
+      pubClient.isOpen ? pubClient.quit() : Promise.resolve(),
+      subClient.isOpen ? subClient.quit() : Promise.resolve(),
+    ]);
+    throw error;
+  }
+};
+
+const closeSocketAdapter = async () => {
+  const clients = redisClients;
+  redisClients = [];
+  await Promise.all(clients.map((client) => client.quit()));
+};
+
+module.exports = {
+  initializeSocketServer,
+  initializeSocketAdapter,
+  closeSocketAdapter,
+  authenticateSocket,
+  resolveSocketUser,
+};

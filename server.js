@@ -18,10 +18,12 @@ const isDev = (process.env.NODE_ENV || 'development') === 'development';
 const logger = pino({
   transport: isDev ? { target: 'pino-pretty' } : undefined
 });
+const runStartupMaintenance = process.env.RUN_STARTUP_MAINTENANCE !== 'false';
 
 const app = express();
 const httpServer = http.createServer(app);
-const io = require('./services/socket.service').initializeSocketServer(httpServer);
+const socketService = require('./services/socket.service');
+const io = socketService.initializeSocketServer(httpServer);
 app.locals.httpServer = httpServer;
 app.locals.io = io;
 
@@ -326,34 +328,39 @@ app.use((err, req, res, next) => {
 // ================= SERVER INITIALIZATION =================
 const startServer = async () => {
   try {
-    // 1. Connect to single shared MongoDB
+    // 1. Connect to the shared MongoDB and Redis services.
     await connectDB();
+    await socketService.initializeSocketAdapter(io);
 
-    // Resume geofence checkouts that were pending before a server restart.
-    const restoredGeofenceCheckouts =
-      await require('./controllers/attendanceController').restorePendingGeofenceCheckouts();
-    if (restoredGeofenceCheckouts > 0) {
-      logger.info(`Resumed ${restoredGeofenceCheckouts} pending geofence checkout(s).`);
+    if (runStartupMaintenance) {
+      // Resume geofence checkouts that were pending before a server restart.
+      const restoredGeofenceCheckouts =
+        await require('./controllers/attendanceController').restorePendingGeofenceCheckouts();
+      if (restoredGeofenceCheckouts > 0) {
+        logger.info(`Resumed ${restoredGeofenceCheckouts} pending geofence checkout(s).`);
+      }
+
+      // 2. Reconcile user references and synchronize payslips once per deployment.
+      try {
+        await cleanupAllOrphanedUsers();
+        const Payslip = require('./models/Payslip');
+        await Payslip.syncAllMonthlySalariesToPayslips();
+      } catch (reconcileErr) {
+        logger.warn(`⚠️ Reconcile/Payslip warning: ${reconcileErr.message}`);
+      }
+
+      // 3. Run scheduled background jobs on the designated maintenance instance only.
+      try {
+        const { startAttendanceScheduler } = require('./services/attendanceScheduler.service');
+        await startAttendanceScheduler();
+      } catch (schedErr) {
+        logger.warn(`⚠️ Attendance Scheduler warning: ${schedErr.message}`);
+      }
+    } else {
+      logger.info('Startup maintenance and scheduled jobs are disabled on this instance.');
     }
 
-    // 2. Reconcile any orphaned user references & ensure payslip collection sync
-    try {
-      await cleanupAllOrphanedUsers();
-      const Payslip = require('./models/Payslip');
-      await Payslip.syncAllMonthlySalariesToPayslips();
-    } catch (reconcileErr) {
-      logger.warn(`⚠️ Reconcile/Payslip warning: ${reconcileErr.message}`);
-    }
-
-    // 3. Initialize Daily 4:00 PM Asia/Kolkata Attendance Scheduler with catch-up
-    try {
-      const { startAttendanceScheduler } = require('./services/attendanceScheduler.service');
-      await startAttendanceScheduler();
-    } catch (schedErr) {
-      logger.warn(`⚠️ Attendance Scheduler warning: ${schedErr.message}`);
-    }
-
-    // 3. Start Listening 
+    // 4. Start Listening
     const PORT = process.env.PORT || 5000;
     httpServer.listen(PORT, () => {
       logger.info(`🚀 Server Running on Port ${PORT} (NODE_ENV=${process.env.NODE_ENV || 'development'})`);
@@ -369,6 +376,11 @@ const startServer = async () => {
       } catch (_) {}
       io.close(async () => {
         logger.info('Closed all HTTP connections.');
+        try {
+          await socketService.closeSocketAdapter();
+        } catch (error) {
+          logger.error(`Could not close Redis adapter cleanly: ${error.message}`);
+        }
         await disconnectDB();
         process.exit(0);
       });

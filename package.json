@@ -25,6 +25,7 @@
   "author": "Kevalon Technology",
   "license": "ISC",
   "dependencies": {
+    "@socket.io/redis-adapter": "^8.3.0",
     "axios": "^1.7.9",
     "bcryptjs": "^2.4.3",
     "cloudinary": "^2.10.0",
@@ -43,6 +44,7 @@
     "pdfkit": "^0.19.1",
     "pino": "^8.20.0",
     "pino-pretty": "^11.0.0",
+    "redis": "^6.3.1",
     "socket.io": "^4.8.4",
     "zod": "^3.22.4"
   },

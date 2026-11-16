@@ -72,16 +72,30 @@ the existing notification list, unread count, Socket.IO delivery, and FCM delive
 restricted to the selected recipients. Announcement write and recipient-lookup endpoints
 require an authenticated admin or HR session.
 
-No Nginx configuration is included in this repository. For Nginx deployments, proxy the
-Socket.IO path to the same backend as the API and allow WebSocket upgrades:
+## Scaling behind Nginx
 
-```nginx
-location /socket.io/ {
-    proxy_pass http://127.0.0.1:5000/socket.io/;
-    proxy_http_version 1.1;
-    proxy_set_header Upgrade $http_upgrade;
-    proxy_set_header Connection "upgrade";
-    proxy_set_header Host $host;
-    proxy_read_timeout 75s;
-}
+The Nginx example at [deployment/nginx/kevalon-backend.conf](./deployment/nginx/kevalon-backend.conf)
+balances API requests across two local backend processes and keeps Socket.IO polling
+sessions on one process. Adapt the upstream addresses and merge the `server` block with
+the existing TLS configuration for your API hostname.
+
+Run both processes against the same MongoDB and Redis services. Configure
+`REDIS_URL` and `SOCKET_REDIS_REQUIRED=true` on **every** backend process so
+Socket.IO notifications are shared across instances. Keep
+`RUN_STARTUP_MAINTENANCE=true` on exactly one process and set it to `false` on
+the others; this keeps index maintenance, reconciliation, payslip sync, geofence
+recovery, and the attendance scheduler from running repeatedly. The default is
+`true` for a single-instance deployment.
+
+Example process settings:
+
+```sh
+PORT=5000 REDIS_URL=redis://127.0.0.1:6379 SOCKET_REDIS_REQUIRED=true RUN_STARTUP_MAINTENANCE=true npm start
+PORT=5001 REDIS_URL=redis://127.0.0.1:6379 SOCKET_REDIS_REQUIRED=true RUN_STARTUP_MAINTENANCE=false npm start
 ```
+
+If legacy files are served from `/uploads`, both processes must see the same
+`uploads` directory (for example, through a shared mount). New managed uploads
+use Cloudinary. If the maintenance instance is stopped, move
+`RUN_STARTUP_MAINTENANCE=true` to another instance before expecting scheduled
+attendance jobs to run.

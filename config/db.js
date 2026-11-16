@@ -31,24 +31,18 @@ const connectDB = async (customUri = null) => {
   try {
     const conn = await mongoose.connect(uri);
 
-    // Remove indexes left by the old User schema before creating the current ones.
-    const User = require('../models/User');
-    const userIndexes = await User.collection.indexes();
-    for (const obsoleteIndex of ['phoneNumber_1', 'phone_1', 'uniqueID_1']) {
-      if (userIndexes.some((index) => index.name === obsoleteIndex)) {
-        await User.collection.dropIndex(obsoleteIndex);
-        logger.info(`Removed obsolete User index: ${obsoleteIndex}`);
+    if (process.env.RUN_STARTUP_MAINTENANCE !== 'false') {
+      // Run index migrations on one designated instance when scaling out.
+      const User = require('../models/User');
+      const userIndexes = await User.collection.indexes();
+      for (const obsoleteIndex of ['phoneNumber_1', 'phone_1', 'uniqueID_1']) {
+        if (userIndexes.some((index) => index.name === obsoleteIndex)) {
+          await User.collection.dropIndex(obsoleteIndex);
+          logger.info(`Removed obsolete User index: ${obsoleteIndex}`);
+        }
       }
+      await User.createIndexes();
     }
-    await User.createIndexes();
-
-    // Ensure Payslip collection exists in MongoDB and sync existing records
-    try {
-      const Payslip = require('../models/Payslip');
-      if (typeof Payslip.syncAllMonthlySalariesToPayslips === 'function') {
-        Payslip.syncAllMonthlySalariesToPayslips().catch(() => {});
-      }
-    } catch (_) {}
 
     isConnected = true;
     logger.info(`✅ MongoDB Connected: ${conn.connection.host}/${conn.connection.name}`);
