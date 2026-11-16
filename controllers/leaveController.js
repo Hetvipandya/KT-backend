@@ -5,6 +5,8 @@ const Holiday = require("../models/Holiday");
 const User = require("../models/User");
 const Employee = require("../models/Employee");
 const Team = require("../models/Team");
+const Attendance = require("../models/Attendance");
+const EmployeeDeduction = require("../models/EmployeeDeduction");
 let Project = null;
 try { Project = require("../models/projectModel"); } catch (_) {}
 let TeamMember = null;
@@ -16,8 +18,10 @@ const {
   validateLeaveDateRange,
 } = require("../utils/leaveUtils");
 const { getTeamLeadForUser } = require("../utils/teamLeadLookup");
+const { getTeamMemberDeductionQuery } = require("../utils/teamLeadDeductionScope");
 const { notify } = require("../utils/sendNotification");
 const { recordAuditEvent } = require("../services/auditLog.service");
+const { getPendingAttendanceCount } = require("./attendanceController");
 
 const enrichLeavesWithEmployeeDetails = async (leaves) => {
   if (!leaves) return leaves;
@@ -1004,42 +1008,48 @@ exports.applyLeave = async (req, res) => {
 };
 
 // ================= GET ALL LEAVES (Role-Based) =================
+const buildAllLeavesFilter = async (user, query = {}) => {
+  const { role, _id } = user || {};
+  const normalizedRole = normalizeRoleString(role);
+  let filter = {};
+
+  let isTL = normalizedRole === "teamlead";
+  if (!isTL && _id) {
+    isTL = await isUserTeamLead(user, _id);
+  }
+
+  if (isTL) {
+    const assignedUserIds = await getTeamLeadAssignedUserIds(_id);
+    filter = {
+      employeeId: { $in: assignedUserIds },
+      applicantRole: { $ne: "hr" },
+    };
+  } else if (normalizedRole === "employee" || normalizedRole === "intern") {
+    filter = { employeeId: _id };
+  } else if (normalizedRole === "hr") {
+    filter = { applicantRole: { $ne: "hr" } };
+  } else if (normalizedRole !== "admin") {
+    return null;
+  }
+
+  if (query.status && query.status !== "all") {
+    filter.status = query.status;
+  }
+  if (query.leaveType && query.leaveType !== "all") {
+    filter.leaveType = query.leaveType;
+  }
+
+  return filter;
+};
+
 exports.getAllLeaves = async (req, res) => {
   try {
-    const { role, _id } = req.user || {};
-    const normalizedRole = normalizeRoleString(role);
-
-    let filter = {};
-
-    let isTL = normalizedRole === "teamlead";
-    if (!isTL && _id) {
-      isTL = await isUserTeamLead(req.user, _id);
-    }
-
-    if (isTL) {
-      const assignedUserIds = await getTeamLeadAssignedUserIds(_id);
-      filter = {
-        employeeId: { $in: assignedUserIds },
-        applicantRole: { $ne: "hr" },
-      };
-    } else if (normalizedRole === "employee" || normalizedRole === "intern") {
-      filter = { employeeId: _id };
-    } else if (normalizedRole === "hr") {
-      filter = { applicantRole: { $ne: "hr" } };
-    } else if (normalizedRole === "admin") {
-      filter = {};
-    } else {
+    const filter = await buildAllLeavesFilter(req.user, req.query);
+    if (filter === null) {
       return res.status(403).json({
         success: false,
-        message: `Role "${role}" is not authorized to view leaves.`,
+        message: `Role "${req.user?.role}" is not authorized to view leaves.`,
       });
-    }
-
-    if (req.query.status && req.query.status !== "all") {
-      filter.status = req.query.status;
-    }
-    if (req.query.leaveType && req.query.leaveType !== "all") {
-      filter.leaveType = req.query.leaveType;
     }
 
     const leaves = await Leave.find(filter)
@@ -1063,6 +1073,236 @@ exports.getAllLeaves = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: error.message,
+    });
+  }
+};
+
+const isUnknownSidebarEntity = (entity) => {
+  if (!entity) return true;
+  const employee = entity.employeeId && typeof entity.employeeId === "object"
+    ? entity.employeeId
+    : entity.employee || entity.user || entity.userId;
+  const name = String(
+    entity.employeeName ||
+      entity.name ||
+      entity.fullName ||
+      entity.displayName ||
+      entity.username ||
+      entity.userName ||
+      employee?.name ||
+      employee?.fullName ||
+      ""
+  ).trim().toLowerCase();
+  const email = String(
+    entity.email ||
+      entity.employeeEmail ||
+      entity.userEmail ||
+      employee?.email ||
+      ""
+  ).trim().toLowerCase();
+
+  if (!name && !email) return true;
+  return [
+    "test employee",
+    "dummy employee",
+    "test user",
+    "dummy user",
+    "unknown employee",
+    "unknown user",
+    "unknown",
+    "unnamed",
+    "unnamed employee",
+    "unnamed user",
+    "no name",
+    "n/a",
+    "undefined",
+    "null",
+    "none",
+    "—",
+    "-",
+  ].includes(name) ||
+    name.includes("unknown") ||
+    name.includes("unnamed") ||
+    name.includes("no name");
+};
+
+const isFinanceSidebarEntity = (entity) => {
+  if (!entity) return false;
+  const nested = entity.employeeId && typeof entity.employeeId === "object"
+    ? entity.employeeId
+    : entity.employee || entity.user || entity.userId;
+  const target = nested && typeof nested === "object"
+    ? { ...entity, ...nested }
+    : entity;
+  const role = String(
+    target.role || target.userRole || target.roleType ||
+      entity.role || entity.userRole || entity.roleType || ""
+  ).trim().toLowerCase();
+  const department = String(target.department || target.dept || entity.department || entity.dept || "")
+    .trim().toLowerCase();
+  const designation = String(
+    target.designation || target.jobTitle || target.position ||
+      entity.designation || entity.jobTitle || entity.position || ""
+  ).trim().toLowerCase();
+  const excludedRoles = [
+    "admin",
+    "accountant",
+    "accounts",
+    "ca",
+    "chartered accountant",
+    "manager",
+    "finance manager",
+    "accounts manager",
+    "account manager",
+    "finance",
+    "cfo",
+    "auditor",
+  ];
+  const excludedDepartments = ["finance", "accounts", "accounting", "audit"];
+  const isExcludedRole = (value) => excludedRoles.includes(value) ||
+    value.includes("accountant") ||
+    value.includes("finance") ||
+    value === "ca" ||
+    value.startsWith("ca ") ||
+    value.endsWith(" ca") ||
+    value.includes("chartered accountant") ||
+    (value.includes("manager") && !value.includes("hr manager") && !value.includes("project manager"));
+  const name = String(target.name || target.employeeName || target.fullName || entity.name || "")
+    .trim().toLowerCase();
+  const email = String(target.email || target.employeeEmail || target.userEmail || entity.email || "")
+    .trim().toLowerCase();
+
+  return role === "admin" ||
+    designation === "admin" ||
+    isExcludedRole(role) ||
+    excludedDepartments.includes(department) ||
+    isExcludedRole(designation) ||
+    name === "test employee" ||
+    name === "dummy employee" ||
+    email === "test@employee.com" ||
+    email === "dummy@employee.com";
+};
+
+const isPendingSidebarLeave = (leave) => {
+  if (!leave || isFinanceSidebarEntity(leave) || isUnknownSidebarEntity(leave)) return false;
+  const employee = leave.employeeId && typeof leave.employeeId === "object"
+    ? leave.employeeId
+    : leave.employee || leave.user || leave.userId;
+  if (employee && (isFinanceSidebarEntity(employee) || isUnknownSidebarEntity(employee))) return false;
+
+  const normalizeStatus = (status) => String(status || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[_-]+/g, " ");
+  const isApproved = (status) => ["approved", "approve", "accepted"].includes(normalizeStatus(status));
+  const isRejected = (status) => ["rejected", "reject", "denied"].includes(normalizeStatus(status));
+  const roleValue = leave.role?.roleName ||
+    leave.role?.name ||
+    leave.role ||
+    leave.applicantRole ||
+    employee?.role?.roleName ||
+    employee?.role?.name ||
+    employee?.role ||
+    "";
+  const applicantRole = String(roleValue).toLowerCase().replace(/[_\-\s]+/g, "");
+  const adminStatus = leave.adminStatus || (
+    applicantRole === "hr" ? leave.status || leave.approvalStatus : ""
+  );
+
+  if ([leave.teamLeadStatus, leave.hrStatus || leave.hrApprovalStatus, adminStatus].some(isRejected)) {
+    return false;
+  }
+  if (applicantRole === "hr" && isApproved(adminStatus)) return false;
+  if (["employee", "teamlead"].includes(applicantRole) && isApproved(leave.hrStatus || leave.hrApprovalStatus)) {
+    return false;
+  }
+  return true;
+};
+
+const getSidebarDeductionScope = async (user) => {
+  const normalizedRole = String(user?.role || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[\s_-]+/g, "");
+
+  if (["teamlead", "teamleader", "tl"].includes(normalizedRole)) {
+    return getTeamMemberDeductionQuery(user);
+  }
+  if (["employee", "intern"].includes(normalizedRole)) {
+    return {
+      $or: [
+        { employeeId: user._id },
+        { userId: user._id },
+      ],
+    };
+  }
+  return {};
+};
+
+exports.getSidebarRequestCounts = async (req, res) => {
+  try {
+    const leaveFilter = await buildAllLeavesFilter(req.user);
+    if (leaveFilter === null) {
+      return res.status(403).json({
+        success: false,
+        message: `Role "${req.user?.role}" is not authorized to view sidebar request counts.`,
+      });
+    }
+
+    const deductionScope = await getSidebarDeductionScope(req.user);
+    const canCountEmployeeRequests = ["admin", "hr"].includes(
+      normalizeRoleString(req.user?.role),
+    );
+    const employeeRequestsQuery = canCountEmployeeRequests
+      ? User.countDocuments({
+        isApproved: { $ne: true },
+        approved: { $ne: true },
+        status: { $ne: "approved" },
+        $and: [
+          {
+            name: {
+              $not: /unknown|unnamed|no name|^\s*(test employee|dummy employee|test user|dummy user|n\/a|undefined|null|none|—|-)\s*$/i,
+            },
+          },
+          {
+            $or: [
+              { name: { $exists: true, $ne: "" } },
+              { email: { $exists: true, $nin: ["", null] } },
+            ],
+          },
+        ],
+      })
+      : Promise.resolve([]);
+    const [checkIn, leaves, employee, deductions] = await Promise.all([
+      getPendingAttendanceCount(req.user),
+      Leave.find(leaveFilter)
+        .select("employeeId status applicantRole teamLeadStatus hrStatus hrApprovalStatus adminStatus approvalStatus role department designation employeeName name fullName displayName employeeEmail userEmail")
+        .populate({
+          path: "employeeId",
+          select: "name email role department designation",
+        })
+        .lean(),
+      employeeRequestsQuery,
+      EmployeeDeduction.countDocuments({
+        status: "Pending",
+        ...deductionScope,
+      }),
+    ]);
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        checkIn,
+        leave: leaves.filter(isPendingSidebarLeave).length,
+        employee,
+        deduction: deductions,
+      },
+    });
+  } catch (error) {
+    console.error("GET SIDEBAR REQUEST COUNTS ERROR:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch sidebar request counts.",
     });
   }
 };

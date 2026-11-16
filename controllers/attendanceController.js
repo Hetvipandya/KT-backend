@@ -3153,35 +3153,92 @@ exports.getAttendanceById =
 // GET PENDING ATTENDANCE
 // ============================================================
 
+const buildAttendanceRequestQueries = async (user, query = {}) => {
+  const callerRole = normalizeRoleValue(user?.role);
+  const baseFilter = {};
+
+  if (callerRole === "team lead" && user?._id) {
+    const teamMemberIds = await resolveTeamMemberUserIds(user._id) || [];
+    baseFilter.userId = {
+      $in: teamMemberIds.filter((id) => String(id) !== String(user._id)),
+      $ne: user._id,
+    };
+  } else if ((callerRole === "employee" || callerRole === "intern") && user?._id) {
+    baseFilter.userId = user._id;
+  }
+
+  const targetUserId = query.userId || query.employeeId;
+  if (targetUserId) {
+    if (callerRole === "team lead" && user?._id) {
+      const allowedIds = baseFilter.userId.$in;
+      baseFilter.userId = {
+        $in: allowedIds.filter((id) => String(id) === String(targetUserId)),
+        $ne: user._id,
+      };
+    } else {
+      baseFilter.userId = targetUserId;
+    }
+  }
+
+  const PENDING_STATUSES = ["pending", "Pending", "PENDING"];
+  const APPROVED_STATUSES = ["approved", "Approved", "APPROVED"];
+  const REJECTED_STATUSES = ["rejected", "Rejected", "REJECTED"];
+  const checkInCondition = { checkInTime: { $ne: null } };
+
+  const pendingQuery = {
+    ...baseFilter,
+    ...checkInCondition,
+    $or: [
+      { approvalStatus: { $in: PENDING_STATUSES } },
+      { status: { $in: PENDING_STATUSES } },
+      {
+        approvalStatus: { $nin: [...APPROVED_STATUSES, ...REJECTED_STATUSES] },
+        approvedAt: null,
+      },
+    ],
+  };
+
+  const approvedQuery = {
+    ...baseFilter,
+    ...checkInCondition,
+    approvalStatus: { $in: APPROVED_STATUSES },
+  };
+
+  const rejectedQuery = {
+    ...baseFilter,
+    ...checkInCondition,
+    approvalStatus: { $in: REJECTED_STATUSES },
+  };
+
+  return {
+    baseFilter,
+    checkInCondition,
+    pendingQuery,
+    approvedQuery,
+    rejectedQuery,
+    PENDING_STATUSES,
+    APPROVED_STATUSES,
+    REJECTED_STATUSES,
+  };
+};
+
+exports.getPendingAttendanceCount = async (user) => {
+  const { pendingQuery } = await buildAttendanceRequestQueries(user);
+  return Attendance.countDocuments(pendingQuery);
+};
+
 exports.getPendingAttendance = async (req, res) => {
   try {
-    const callerRole = normalizeRoleValue(req.user?.role);
-    const baseFilter = {};
-
-    // 1. Role-based scoping: team leads see their team members; employees see their own; admin/hr see all
-    if (callerRole === "team lead" && req.user?._id) {
-      const teamMemberIds = await resolveTeamMemberUserIds(req.user._id) || [];
-      baseFilter.userId = {
-        $in: teamMemberIds.filter((id) => String(id) !== String(req.user._id)),
-        $ne: req.user._id,
-      };
-    } else if ((callerRole === "employee" || callerRole === "intern") && req.user?._id) {
-      baseFilter.userId = req.user._id;
-    }
-
-    // Explicit query filter overrides if provided
-    const targetUserId = req.query?.userId || req.query?.employeeId;
-    if (targetUserId) {
-      if (callerRole === "team lead" && req.user?._id) {
-        const allowedIds = baseFilter.userId.$in;
-        baseFilter.userId = {
-          $in: allowedIds.filter((id) => String(id) === String(targetUserId)),
-          $ne: req.user._id,
-        };
-      } else {
-        baseFilter.userId = targetUserId;
-      }
-    }
+    const {
+      baseFilter,
+      checkInCondition,
+      pendingQuery,
+      approvedQuery,
+      rejectedQuery,
+      PENDING_STATUSES,
+      APPROVED_STATUSES,
+      REJECTED_STATUSES,
+    } = await buildAttendanceRequestQueries(req.user, req.query);
 
     // Optional date filtering
     const dateFilter = {};
@@ -3190,41 +3247,6 @@ exports.getPendingAttendance = async (req, res) => {
     } else if (req.query?.startDate && req.query?.endDate) {
       dateFilter.date = { $gte: req.query.startDate, $lte: req.query.endDate };
     }
-
-    const PENDING_STATUSES = ["pending", "Pending", "PENDING"];
-    const APPROVED_STATUSES = ["approved", "Approved", "APPROVED"];
-    const REJECTED_STATUSES = ["rejected", "Rejected", "REJECTED"];
-
-    // Base check-in requirement: check-in requests require checkInTime
-    const checkInCondition = { checkInTime: { $ne: null } };
-
-    // Pending filter
-    const pendingQuery = {
-      ...baseFilter,
-      ...checkInCondition,
-      $or: [
-        { approvalStatus: { $in: PENDING_STATUSES } },
-        { status: { $in: PENDING_STATUSES } },
-        {
-          approvalStatus: { $nin: [...APPROVED_STATUSES, ...REJECTED_STATUSES] },
-          approvedAt: null,
-        },
-      ],
-    };
-
-    // Approved filter
-    const approvedQuery = {
-      ...baseFilter,
-      ...checkInCondition,
-      approvalStatus: { $in: APPROVED_STATUSES },
-    };
-
-    // Rejected filter
-    const rejectedQuery = {
-      ...baseFilter,
-      ...checkInCondition,
-      approvalStatus: { $in: REJECTED_STATUSES },
-    };
 
     // 2. Fetch counts concurrently
     const [pendingCount, approvedCount, rejectedCount] = await Promise.all([

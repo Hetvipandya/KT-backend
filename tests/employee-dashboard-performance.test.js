@@ -7,6 +7,9 @@ const Leave = require("../models/Leave");
 const LeaveBalance = require("../models/LeaveBalance");
 const Holiday = require("../models/Holiday");
 const employeePanelController = require("../controllers/employeePanelController");
+const leaveController = require("../controllers/leaveController");
+const attendanceController = require("../controllers/attendanceController");
+const EmployeeDeduction = require("../models/EmployeeDeduction");
 
 const createQuery = (result) => ({
   select: jest.fn().mockReturnThis(),
@@ -87,5 +90,82 @@ describe("employee dashboard data loading", () => {
       employeeId: user._id,
       status: { $in: ["pending", "pending_hr", "pending_admin"] },
     });
+  });
+
+  test("returns only scoped sidebar request counts from projected summaries", async () => {
+    jest.spyOn(Attendance, "countDocuments").mockResolvedValue(2);
+    jest.spyOn(Leave, "find").mockReturnValue(createQuery([
+      {
+        applicantRole: "employee",
+        teamLeadStatus: "approved",
+        hrStatus: "pending",
+        employeeId: {
+          name: "Pending Employee",
+          email: "pending@example.com",
+          role: "employee",
+        },
+      },
+      {
+        applicantRole: "employee",
+        hrStatus: "approved",
+        employeeId: {
+          name: "Approved Employee",
+          email: "approved@example.com",
+          role: "employee",
+        },
+      },
+    ]));
+    jest.spyOn(User, "countDocuments").mockResolvedValue(1);
+    jest.spyOn(EmployeeDeduction, "countDocuments").mockResolvedValue(4);
+
+    const response = {
+      status: jest.fn().mockReturnThis(),
+      json: jest.fn().mockReturnThis(),
+    };
+    await leaveController.getSidebarRequestCounts(
+      { user: { role: "admin" } },
+      response,
+    );
+
+    expect(response.status).toHaveBeenCalledWith(200);
+    expect(response.json).toHaveBeenCalledWith({
+      success: true,
+      data: {
+        checkIn: 2,
+        leave: 1,
+        employee: 1,
+        deduction: 4,
+      },
+    });
+    expect(Leave.find).toHaveBeenCalledWith({});
+    expect(Leave.find.mock.results[0].value.select).toHaveBeenCalledWith(
+      expect.stringContaining("employeeId status applicantRole"),
+    );
+    expect(User.countDocuments).toHaveBeenCalledWith(
+      expect.objectContaining({
+        isApproved: { $ne: true },
+        approved: { $ne: true },
+        status: { $ne: "approved" },
+      }),
+    );
+    expect(EmployeeDeduction.countDocuments).toHaveBeenCalledWith({
+      status: "Pending",
+    });
+  });
+
+  test("counts attendance requests only for the authenticated employee", async () => {
+    jest.spyOn(Attendance, "countDocuments").mockResolvedValue(1);
+
+    await attendanceController.getPendingAttendanceCount({
+      _id: "employee-1",
+      role: "employee",
+    });
+
+    expect(Attendance.countDocuments).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: "employee-1",
+        checkInTime: { $ne: null },
+      }),
+    );
   });
 });

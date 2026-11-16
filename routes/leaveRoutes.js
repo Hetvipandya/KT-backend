@@ -10,6 +10,7 @@ const {
   createHoliday,
   getAllHolidays,    
   getAllLeaves,
+  getSidebarRequestCounts,
   getTeamLeadPendingLeaves,
   adminApproval,
   calculateLeaveDays,
@@ -239,6 +240,13 @@ router.get(
     "admin"
   ),
   getAllLeaves
+);
+
+router.get(
+  "/sidebar-counts",
+  protect,
+  authorizeRoles("admin", "hr", "team lead"),
+  getSidebarRequestCounts
 );
 
 router.get(
