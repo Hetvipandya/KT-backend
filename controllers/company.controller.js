@@ -60,7 +60,7 @@ const createCompany = async (req, res, next) => {
           $addToSet: {
             companyAccess: {
               companyId: existingCompany._id,
-              role: 'Admin',
+              role: 'admin',
               isActive: true,
               invitedAt: new Date(),
               joinedAt: new Date()
@@ -81,12 +81,12 @@ const createCompany = async (req, res, next) => {
             companyCreated: true,
             branchCreated: false,
             financialYearCreated: false,
-            role: 'Admin',
+            role: 'admin',
             companyAccess: [
               {
                 companyId: existingCompany._id,
                 branchId: null,
-                role: 'Admin',
+                role: 'admin',
                 isActive: true,
                 invitedAt: new Date(),
                 inviteSent: true,
@@ -177,7 +177,7 @@ const createCompany = async (req, res, next) => {
         $push: {
           companyAccess: {
             companyId: company._id,
-            role: 'Admin',
+            role: 'admin',
             isActive: true,
             invitedAt: new Date(),
             joinedAt: new Date()
@@ -198,12 +198,12 @@ const createCompany = async (req, res, next) => {
           companyCreated: true,
           branchCreated: false,
           financialYearCreated: false,
-          role: 'Admin',
+          role: 'admin',
           companyAccess: [
             {
               companyId: company._id,
               branchId: null,
-              role: 'Admin',
+              role: 'admin',
               isActive: true,
               invitedAt: new Date(),
               inviteSent: true,

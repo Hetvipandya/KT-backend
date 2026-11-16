@@ -20,7 +20,7 @@ const formatDate = (val) => {
 const verifyAccess = (req, res) => {
   const isOwner = req.company.createdBy.toString() === req.user._id.toString();
   const roleName = req.callerRole?.name;
-  const isAllowedRole = roleName && ['Super Admin', 'Admin', 'CA', 'Accountant'].some(
+  const isAllowedRole = roleName && ['Super admin', 'admin', 'CA', 'Accountant'].some(
     (r) => r.toLowerCase() === roleName.toLowerCase()
   );
 

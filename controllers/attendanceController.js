@@ -938,7 +938,7 @@ const getDateWiseAttendance =
     const users =
       await User.find({
         isApproved: { $ne: false },
-        role: { $nin: ["admin", "Admin"] },
+        role: { $nin: ["admin", "admin"] },
       }).select(
         "_id name uniqueID role email department phone"
       );
