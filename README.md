@@ -87,6 +87,10 @@ the others; this keeps index maintenance, reconciliation, payslip sync, geofence
 recovery, and the attendance scheduler from running repeatedly. The default is
 `true` for a single-instance deployment.
 
+MongoDB connection pools default to 50 connections per process (minimum 0).
+Set `MONGO_MAX_POOL_SIZE` and `MONGO_MIN_POOL_SIZE` if the database connection
+limit or expected request concurrency calls for different values.
+
 Example process settings:
 
 ```sh

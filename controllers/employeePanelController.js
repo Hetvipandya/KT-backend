@@ -35,6 +35,10 @@ const { getTeamLeadForUser } = require("../utils/teamLeadLookup");
 const { calculateBreakTimerState } = require("./attendanceController");
 const { buildAttendanceTimeline } = require("../utils/attendanceTimeline");
 
+const BIRTHDAY_CACHE_TTL_MS = 5 * 60 * 1000;
+let birthdayCache = null;
+let birthdayCachePromise = null;
+
 // Helper for IST Today Date String (YYYY-MM-DD)
 const getTodayIST = () => {
   const date = new Date();
@@ -46,6 +50,89 @@ const getTodayIST = () => {
   return `${year}-${month}-${day}`;
 };
 
+const getUpcomingBirthdayData = async (now) => {
+  const today = getTodayIST();
+  if (
+    birthdayCache &&
+    birthdayCache.today === today &&
+    birthdayCache.expiresAt > Date.now()
+  ) {
+    return birthdayCache.data;
+  }
+
+  if (!birthdayCachePromise) {
+    birthdayCachePromise = (async () => {
+      const [users, employees] = await Promise.all([
+        User.find({ isActive: true })
+          .select("_id name dob role")
+          .lean(),
+        Employee.find()
+          .select("_id userId userID profileImage profileImg designation dob")
+          .lean(),
+      ]);
+      const employeeMap = new Map();
+      employees.forEach((employee) => {
+        [employee.userId, employee.userID].filter(Boolean).forEach((id) => {
+          employeeMap.set(String(id), employee);
+        });
+      });
+
+      const upcomingBirthdays = [];
+      users.forEach((user) => {
+        const employee = employeeMap.get(String(user._id));
+        const dob = user.dob || employee?.dob;
+        if (!dob) return;
+
+        const dobDate = new Date(dob);
+        if (Number.isNaN(dobDate.getTime())) return;
+
+        const birthdayThisYear = new Date(
+          now.getFullYear(),
+          dobDate.getMonth(),
+          dobDate.getDate(),
+        );
+        if (birthdayThisYear < now) {
+          birthdayThisYear.setFullYear(now.getFullYear() + 1);
+        }
+
+        const daysRemaining = Math.ceil(
+          (birthdayThisYear - now) / (1000 * 60 * 60 * 24),
+        );
+        if (daysRemaining > 60) return;
+
+        const profileImage = employee?.profileImage || employee?.profileImg || "";
+        upcomingBirthdays.push({
+          name: user.name,
+          designation: employee?.designation || user.role,
+          profilePhoto: profileImage,
+          profileImage,
+          profileImg: profileImage,
+          birthdayDate: birthdayThisYear,
+          daysRemaining,
+        });
+      });
+
+      upcomingBirthdays.sort((a, b) => a.daysRemaining - b.daysRemaining);
+      const data = {
+        upcomingBirthdays: upcomingBirthdays.slice(0, 5),
+        employeeMap,
+      };
+      birthdayCache = {
+        today,
+        expiresAt: Date.now() + BIRTHDAY_CACHE_TTL_MS,
+        data,
+      };
+      return data;
+    })();
+  }
+
+  try {
+    return await birthdayCachePromise;
+  } finally {
+    birthdayCachePromise = null;
+  }
+};
+
 // ============================================================
 // 1. DASHBOARD - EMPLOYEE OVERVIEW
 // ============================================================
@@ -53,12 +140,84 @@ exports.getEmployeeDashboard = async (req, res) => {
   try {
     const userId = req.user._id;
     const today = getTodayIST();
+    const now = new Date();
+    const startOfToday = new Date(now);
+    startOfToday.setHours(0, 0, 0, 0);
 
-    // 1. Employee Info
-    const user = await User.findById(userId).select("-password");
-    const employee = await Employee.findOne({
-      $or: [{ userID: userId }, { userId }],
-    });
+    const [
+      user,
+      employee,
+      todayAttendance,
+      activeAttendance,
+      currentSession,
+      taskStatusCounts,
+      leaveBalanceDoc,
+      birthdayData,
+      holidays,
+      todayLeaves,
+      pendingRequests,
+      upcomingApprovedLeave,
+    ] = await Promise.all([
+      User.findById(userId)
+        .select("name email phone role gender department designation profileImage profileImg photo imageUrl avatar createdAt")
+        .lean(),
+      Employee.findOne({
+        $or: [{ userID: userId }, { userId }],
+      })
+        .select("employeeID mobile designation gender department joiningDate profileImage profileImg")
+        .lean(),
+      Attendance.findOne({ userId, date: today }).lean(),
+      Attendance.findOne({
+        userId,
+        checkInTime: { $ne: null },
+        checkOutTime: null,
+      })
+        .sort({ createdAt: -1 })
+        .lean(),
+      Session.findOne({
+        userId,
+        status: { $in: ["active", "break"] },
+      })
+        .sort({ createdAt: -1 })
+        .lean(),
+      TaskManagement.aggregate([
+        { $match: { assignedEmployee: userId } },
+        { $group: { _id: "$status", count: { $sum: 1 } } },
+      ]),
+      LeaveBalance.findOne({ employeeId: userId }).lean(),
+      getUpcomingBirthdayData(now),
+      Holiday.find({ holidayDate: { $gte: startOfToday } })
+        .sort({ holidayDate: 1 })
+        .limit(10)
+        .select("holidayName holidayDate")
+        .lean(),
+      Leave.find({
+        status: "approved",
+        startDate: { $lte: now },
+        endDate: { $gte: startOfToday },
+      })
+        .select("employeeId leaveType startDate endDate totalDays")
+        .populate("employeeId", "name role department")
+        .lean(),
+      Leave.countDocuments({
+        employeeId: userId,
+        status: { $in: ["pending", "pending_hr", "pending_admin"] },
+      }),
+      Leave.countDocuments({
+        employeeId: userId,
+        status: "approved",
+        startDate: { $gt: now },
+      }),
+    ]);
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+    const attendance = todayAttendance || activeAttendance;
+    const employeeMap = birthdayData.employeeMap;
 
     const employeeInfo = {
       userId: user._id,
@@ -94,20 +253,6 @@ exports.getEmployeeDashboard = async (req, res) => {
     };
 
     // 2. Today's Attendance State
-    let attendance = await Attendance.findOne({ userId, date: today });
-    if (!attendance) {
-      attendance = await Attendance.findOne({
-        userId,
-        checkInTime: { $ne: null },
-        checkOutTime: null,
-      }).sort({ createdAt: -1 });
-    }
-
-    let currentSession = await Session.findOne({
-      userId,
-      status: { $in: ["active", "break"] },
-    }).sort({ createdAt: -1 });
-
     let attendanceStatus = "not_checked_in";
     let checkInTime = null;
     let currentWorkingHours = 0;
@@ -149,84 +294,27 @@ exports.getEmployeeDashboard = async (req, res) => {
     }
 
     // 3. Dashboard Statistics
-    const assignedTasks = await TaskManagement.find({
-      assignedEmployee: userId,
+    const taskCounts = new Map();
+    taskStatusCounts.forEach(({ _id, count }) => {
+      const status = String(_id || "").toLowerCase().replace(/[\s_-]/g, "");
+      taskCounts.set(status, (taskCounts.get(status) || 0) + count);
     });
-    const totalAssignedTasks = assignedTasks.length;
-    const tasksInProgress = assignedTasks.filter(
-      (t) => t.status === "In Progress",
-    ).length;
-    const completedTasks = assignedTasks.filter(
-      (t) => t.status === "Completed",
-    ).length;
-    const pendingTasks = assignedTasks.filter(
-      (t) => t.status === "Pending" || t.status === "Assigned",
-    ).length;
-
-    let leaveBalanceDoc = await LeaveBalance.findOne({ employeeId: userId });
+    const totalAssignedTasks = taskStatusCounts.reduce(
+      (total, item) => total + item.count,
+      0,
+    );
+    const tasksInProgress = taskCounts.get("inprogress") || 0;
+    const completedTasks = taskCounts.get("completed") || 0;
+    const pendingTasks =
+      (taskCounts.get("pending") || 0) + (taskCounts.get("assigned") || 0);
     const remainingLeave = leaveBalanceDoc
       ? leaveBalanceDoc.remainingLeaves
       : 20;
 
-    // 4. Upcoming Birthdays (all employees)
-    const allUsers = await User.find({ isActive: true }).select(
-      "_id name dob role department",
-    );
-    const allEmployees = await Employee.find().select(
-      "userId profileImage designation dob",
-    );
-    const employeeMap = new Map();
-    allEmployees.forEach((e) => {
-      if (e.userId) employeeMap.set(e.userId.toString(), e);
-    });
-
-    const now = new Date();
-    const upcomingBirthdays = [];
-
-    allUsers.forEach((u) => {
-      const empData = employeeMap.get(u._id.toString());
-      const dobVal = u.dob || empData?.dob;
-      if (dobVal) {
-        const dobDate = new Date(dobVal);
-        if (!isNaN(dobDate.getTime())) {
-          const birthdayThisYear = new Date(
-            now.getFullYear(),
-            dobDate.getMonth(),
-            dobDate.getDate(),
-          );
-          if (birthdayThisYear < now) {
-            birthdayThisYear.setFullYear(now.getFullYear() + 1);
-          }
-          const diffDays = Math.ceil(
-            (birthdayThisYear - now) / (1000 * 60 * 60 * 24),
-          );
-          if (diffDays <= 60) {
-            upcomingBirthdays.push({
-              name: u.name,
-              designation: empData?.designation || u.role,
-              profilePhoto: empData?.profileImage || empData?.profileImg || "",
-              profileImage: empData?.profileImage || empData?.profileImg || "",
-              profileImg: empData?.profileImage || empData?.profileImg || "",
-              birthdayDate: birthdayThisYear,
-              daysRemaining: diffDays,
-            });
-          }
-        }
-      }
-    });
-
-    upcomingBirthdays.sort((a, b) => a.daysRemaining - b.daysRemaining);
-
     // 5. Upcoming Holidays
-    const holidays = await Holiday.find({
-      holidayDate: { $gte: new Date(now.setHours(0, 0, 0, 0)) },
-    })
-      .sort({ holidayDate: 1 })
-      .limit(10);
-
     const upcomingHolidays = holidays.map((h) => {
       const hDate = new Date(h.holidayDate);
-      const daysRem = Math.ceil((hDate - new Date()) / (1000 * 60 * 60 * 24));
+      const daysRem = Math.ceil((hDate - now) / (1000 * 60 * 60 * 24));
       return {
         holidayName: h.holidayName,
         date: h.holidayDate,
@@ -236,15 +324,9 @@ exports.getEmployeeDashboard = async (req, res) => {
     });
 
     // 6. Team Members on Leave
-    const todayLeaves = await Leave.find({
-      status: "approved",
-      startDate: { $lte: new Date() },
-      endDate: { $gte: new Date(now.setHours(0, 0, 0, 0)) },
-    }).populate("employeeId", "name role department");
-
     const teamOnLeave = todayLeaves.map((l) => {
       const empData = l.employeeId
-        ? employeeMap.get(l.employeeId._id.toString())
+        ? employeeMap.get(String(l.employeeId._id))
         : null;
       const empImg = empData?.profileImage || empData?.profileImg || "";
       return {
@@ -261,15 +343,8 @@ exports.getEmployeeDashboard = async (req, res) => {
     });
 
     // 7. My Leave Summary
-    const myLeaves = await Leave.find({ employeeId: userId });
     const totalLeave = leaveBalanceDoc ? leaveBalanceDoc.totalLeaves : 20;
     const usedLeave = leaveBalanceDoc ? leaveBalanceDoc.usedLeaves : 0;
-    const pendingRequests = myLeaves.filter((l) =>
-      l.status.includes("pending"),
-    ).length;
-    const upcomingApprovedLeave = myLeaves.filter(
-      (l) => l.status === "approved" && new Date(l.startDate) > new Date(),
-    ).length;
 
     const breakTimer = calculateBreakTimerState(attendance);
 
@@ -300,7 +375,7 @@ exports.getEmployeeDashboard = async (req, res) => {
           pendingTasks,
           remainingLeave,
         },
-        upcomingBirthdays: upcomingBirthdays.slice(0, 5),
+        upcomingBirthdays: birthdayData.upcomingBirthdays,
         upcomingHolidays,
         teamMembersOnLeave: teamOnLeave,
         leaveSummary: {

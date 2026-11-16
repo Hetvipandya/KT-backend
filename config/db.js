@@ -15,6 +15,8 @@ const logger = pino({
 });
 
 let isConnected = false;
+const maxPoolSize = Number.parseInt(process.env.MONGO_MAX_POOL_SIZE, 10);
+const minPoolSize = Number.parseInt(process.env.MONGO_MIN_POOL_SIZE, 10);
 
 const connectDB = async (customUri = null) => {
   if (isConnected) {
@@ -29,7 +31,14 @@ const connectDB = async (customUri = null) => {
   }
 
   try {
-    const conn = await mongoose.connect(uri);
+    const conn = await mongoose.connect(uri, {
+      maxPoolSize: Number.isInteger(maxPoolSize) && maxPoolSize > 0
+        ? maxPoolSize
+        : 50,
+      minPoolSize: Number.isInteger(minPoolSize) && minPoolSize >= 0
+        ? minPoolSize
+        : 0,
+    });
 
     if (process.env.RUN_STARTUP_MAINTENANCE !== 'false') {
       // Run index migrations on one designated instance when scaling out.
@@ -42,6 +51,12 @@ const connectDB = async (customUri = null) => {
         }
       }
       await User.createIndexes();
+      const TaskManagement = require('../models/taskModel');
+      const Leave = require('../models/Leave');
+      await Promise.all([
+        TaskManagement.createIndexes(),
+        Leave.createIndexes()
+      ]);
     }
 
     isConnected = true;

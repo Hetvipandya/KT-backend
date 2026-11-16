@@ -174,4 +174,6 @@ assignedTeamLeadEmployee: {
   }
 );
 
+taskSchema.index({ assignedEmployee: 1, status: 1 });
+
 module.exports = mongoose.model("Task", taskSchema);
