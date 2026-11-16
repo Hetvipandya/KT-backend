@@ -9,7 +9,7 @@ const OFFICE_LOCATION = {
   name: "Solaris Business Hub, 913, 9th Floor",
   latitude: parseFloat(process.env.OFFICE_LATITUDE) || 23.058290,
   longitude: parseFloat(process.env.OFFICE_LONGITUDE) || 72.539190,
-  radiusMeters: parseFloat(process.env.OFFICE_RADIUS_METERS) || 50,
+  radiusMeters: parseFloat(process.env.OFFICE_RADIUS_METERS) || 80,
 };
 
 const CHECK_IN_RADIUS_METERS =

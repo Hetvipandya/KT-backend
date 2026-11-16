@@ -210,6 +210,13 @@ describe("GET /api/attendance/pending comprehensive behavior", () => {
 
     await Attendance.create([
       {
+        userId: teamLeadUser._id,
+        userType: "team lead",
+        date: "2026-11-07",
+        checkInTime: new Date("2026-11-07T04:30:00.000Z"),
+        approvalStatus: "pending",
+      },
+      {
         userId: subordinateUser._id,
         userType: "employee",
         date: "2026-11-07",
@@ -236,6 +243,19 @@ describe("GET /api/attendance/pending comprehensive behavior", () => {
     expect(resTL.body.pendingCount).toBe(1);
     expect(resTL.body.data).toHaveLength(1);
     expect(resTL.body.data[0].employeeName).toBe("Subordinate Amit");
+    expect(
+      resTL.body.data.some((record) => String(record.userId?._id) === String(teamLeadUser._id))
+    ).toBe(false);
+
+    const resOwnRequest = createMockRes();
+    await attendanceController.getPendingAttendance(
+      {
+        user: { _id: teamLeadUser._id, role: "team lead" },
+        query: { userId: String(teamLeadUser._id), status: "all" },
+      },
+      resOwnRequest
+    );
+    expect(resOwnRequest.body.count).toBe(0);
 
     // Admin request gets all
     const resAdmin = createMockRes();
@@ -243,8 +263,8 @@ describe("GET /api/attendance/pending comprehensive behavior", () => {
       { user: { role: "admin" } },
       resAdmin
     );
-    expect(resAdmin.body.pendingCount).toBe(2);
-    expect(resAdmin.body.data).toHaveLength(2);
+    expect(resAdmin.body.pendingCount).toBe(3);
+    expect(resAdmin.body.data).toHaveLength(3);
   });
 
   test("4. Allows Team Lead to approve their team attendance request", async () => {

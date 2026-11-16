@@ -191,7 +191,6 @@ const resolveTeamMemberUserIds = async (teamLeadUserId) => {
     ]);
 
     const memberUserIds = new Set();
-    memberUserIds.add(String(teamLeadUserId));
 
     directEmployees.forEach((emp) => {
       if (emp._id) memberUserIds.add(String(emp._id));
@@ -225,9 +224,18 @@ const resolveTeamMemberUserIds = async (teamLeadUserId) => {
       });
     }
 
-    return Array.from(memberUserIds).map((id) =>
-      mongoose.Types.ObjectId.isValid(id) ? new mongoose.Types.ObjectId(id) : id
-    );
+    const excludedLeadIds = new Set([
+      String(teamLeadUserId),
+      ...(leadEmployee
+        ? [String(leadEmployee._id), String(leadEmployee.userID || ""), String(leadEmployee.userId || "")]
+        : []),
+    ]);
+
+    return Array.from(memberUserIds)
+      .filter((id) => !excludedLeadIds.has(String(id)))
+      .map((id) =>
+        mongoose.Types.ObjectId.isValid(id) ? new mongoose.Types.ObjectId(id) : id
+      );
   } catch (err) {
     console.error("resolveTeamMemberUserIds error:", err);
     return null;
@@ -3152,10 +3160,11 @@ exports.getPendingAttendance = async (req, res) => {
 
     // 1. Role-based scoping: team leads see their team members; employees see their own; admin/hr see all
     if (callerRole === "team lead" && req.user?._id) {
-      const teamMemberIds = await resolveTeamMemberUserIds(req.user._id);
-      if (teamMemberIds && teamMemberIds.length > 0) {
-        baseFilter.userId = { $in: teamMemberIds };
-      }
+      const teamMemberIds = await resolveTeamMemberUserIds(req.user._id) || [];
+      baseFilter.userId = {
+        $in: teamMemberIds.filter((id) => String(id) !== String(req.user._id)),
+        $ne: req.user._id,
+      };
     } else if ((callerRole === "employee" || callerRole === "intern") && req.user?._id) {
       baseFilter.userId = req.user._id;
     }
@@ -3163,7 +3172,15 @@ exports.getPendingAttendance = async (req, res) => {
     // Explicit query filter overrides if provided
     const targetUserId = req.query?.userId || req.query?.employeeId;
     if (targetUserId) {
-      baseFilter.userId = targetUserId;
+      if (callerRole === "team lead" && req.user?._id) {
+        const allowedIds = baseFilter.userId.$in;
+        baseFilter.userId = {
+          $in: allowedIds.filter((id) => String(id) === String(targetUserId)),
+          $ne: req.user._id,
+        };
+      } else {
+        baseFilter.userId = targetUserId;
+      }
     }
 
     // Optional date filtering
