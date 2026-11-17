@@ -253,13 +253,13 @@ describe("Automatic Daily Attendance Finalization & Scheduler Test Suite", () =>
       );
       expect(res39.status).toBe("absent");
 
-      // Exactly 4.0 hours -> Meets half-day threshold => "half-day"
+      // Exactly 4.0 hours -> Treated as absent per HR rule
       const res40 = determineAttendanceStatus(
         { checkInTime: checkInOnTime, totalWorkTime: 4.0 },
         { presentHours: 8, halfDayHours: 4 },
         { isEvaluationFinal: true }
       );
-      expect(res40.status).toBe("half-day");
+      expect(res40.status).toBe("absent");
 
       // 7.5 hours -> Between 4h and 8h => "half-day"
       const res75 = determineAttendanceStatus(

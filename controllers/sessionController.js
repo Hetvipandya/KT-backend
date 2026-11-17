@@ -261,7 +261,7 @@ exports.updateSessionStatus = async (req, res) => {
             attendance.totalWorkTime = Number(hours.toFixed(2));
 
             if (attendance.totalWorkTime >= 8) attendance.status = "present";
-            else if (attendance.totalWorkTime >= 4) attendance.status = "half-day";
+            else if (attendance.totalWorkTime > 4) attendance.status = "half-day";
             else attendance.status = "absent";
 
             await attendance.save();

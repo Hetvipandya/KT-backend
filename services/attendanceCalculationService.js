@@ -169,8 +169,8 @@ const calculateCheckInStatus = (checkInTime, rawSettings = {}) => {
 /**
  * Central attendance status evaluator
  * Applies strict working hour thresholds:
- * - workHours < halfDayHours -> "absent" (Never half-day for 3 minutes!)
- * - workHours >= halfDayHours and < presentHours -> "half-day"
+ * - workHours <= halfDayHours -> "absent" (4 hours or less is treated as absent)
+ * - workHours > halfDayHours and < presentHours -> "half-day"
  * - workHours >= presentHours -> "present" (or "half-day" if check-in was late after halfDayCutoff)
  *
  * @param {Object} attendanceData - { checkInTime, checkOutTime, totalWorkTime, totalBreakTime, status }
@@ -260,9 +260,9 @@ const determineAttendanceStatus = (attendanceData = {}, rawSettings = {}, option
   const halfDayThreshold = settings.halfDayHours; // default 4
 
   // CRITICAL THRESHOLD LOGIC:
-  // An employee who works only 3 minutes (0.05 hours) must NOT be marked half-day!
-  // Any work time below the minimum half-day threshold (4 hours) is classified as absent.
-  if (workHours < halfDayThreshold) {
+  // Four hours or less is treated as absent so short check-in windows do not appear in both
+  // the absent and half-day sections of the HR panel.
+  if (workHours <= halfDayThreshold) {
     return {
       status: "absent",
       isLate: checkInStatus.isLate,
@@ -272,7 +272,7 @@ const determineAttendanceStatus = (attendanceData = {}, rawSettings = {}, option
     };
   }
 
-  // Work hours between halfDayThreshold (4h) and presentThreshold (8h)
+  // Work hours above 4h and below presentThreshold (8h)
   if (workHours < presentThreshold) {
     return {
       status: "half-day",

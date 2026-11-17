@@ -663,7 +663,7 @@ exports.patchAttendanceAdjustment = async (req, res) => {
       // Work-hour based status
       if (attendance.totalWorkTime >= 8) {
         attendance.status = "present";
-      } else if (attendance.totalWorkTime >= 4) {
+      } else if (attendance.totalWorkTime > 4) {
         attendance.status = "half-day";
       } else {
         attendance.status = "absent";
@@ -1005,7 +1005,7 @@ exports.putAttendanceAdjustment = async (req, res) => {
     attendance.status =
       attendance.totalWorkTime >= 8
         ? "present"
-        : attendance.totalWorkTime >= 4
+        : attendance.totalWorkTime > 4
         ? "half-day"
         : "absent";
 
