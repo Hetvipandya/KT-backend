@@ -43,7 +43,17 @@ const connectDB = async (customUri = null) => {
     if (process.env.RUN_STARTUP_MAINTENANCE !== 'false') {
       // Run index migrations on one designated instance when scaling out.
       const User = require('../models/User');
-      const userIndexes = await User.collection.indexes();
+      let userIndexes = [];
+      try {
+        userIndexes = await User.collection.indexes();
+      } catch (error) {
+        if (error.code !== 26 && error.codeName !== 'NamespaceNotFound') {
+          throw error;
+        }
+
+        logger.info('User collection does not exist yet; initializing indexes.');
+      }
+
       for (const obsoleteIndex of ['phoneNumber_1', 'phone_1', 'uniqueID_1']) {
         if (userIndexes.some((index) => index.name === obsoleteIndex)) {
           await User.collection.dropIndex(obsoleteIndex);
