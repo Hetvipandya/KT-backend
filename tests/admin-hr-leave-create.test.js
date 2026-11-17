@@ -288,7 +288,7 @@ describe("Admin & HR Leave Creation on Behalf of Employee Test Suite", () => {
       expect(leaveEmpId).toBe(employeeUser1._id.toString());
     });
 
-    test("HR can create approved leave directly when status: 'approved' is provided", async () => {
+    test("HR can create approved leave directly when status: 'approved' is provided for another employee", async () => {
       currentAuthUser = hrUser;
 
       const res = await request(app)
@@ -305,6 +305,26 @@ describe("Admin & HR Leave Creation on Behalf of Employee Test Suite", () => {
       expect(res.status).toBe(201);
       expect(res.body.success).toBe(true);
       expect(res.body.data.status).toBe("approved");
+    });
+
+    test("HR self leave with status: 'approved' stays pending for admin approval", async () => {
+      currentAuthUser = hrUser;
+
+      const res = await request(app)
+        .post("/api/leave/apply")
+        .send({
+          leaveType: "full_day",
+          startDate: "2026-11-21",
+          endDate: "2026-11-21",
+          reason: "Personal leave request to be reviewed by admin",
+          status: "approved",
+        });
+
+      expect(res.status).toBe(201);
+      expect(res.body.success).toBe(true);
+      expect(res.body.data.status).toBe("pending_admin");
+      expect(res.body.data.hrStatus).toBe("pending");
+      expect(res.body.data.teamLeadStatus).toBe("skipped");
     });
   });
 

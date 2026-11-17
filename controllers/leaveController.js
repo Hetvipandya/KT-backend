@@ -869,8 +869,12 @@ exports.applyLeave = async (req, res) => {
     const isEmployeeOrIntern = ["employee", "intern"].includes(normalizedRole);
     const hasAssignedTeamLead =
       !isEmployeeOrIntern || Boolean(await getTeamLeadForUser(userId));
+    const isSelfLeaveRequest =
+      !suppliedIdentity || String(targetUserId || userId) === String(authenticatedUserId);
+    const requiresAdminApprovalForSelfHrLeave =
+      applierRole === "hr" && isSelfLeaveRequest;
 
-    const isDirectApproved = isAdminOrHr && (
+    const isDirectApproved = !requiresAdminApprovalForSelfHrLeave && isAdminOrHr && (
       req.body.status === "approved" ||
       req.body.autoApprove === true ||
       req.body.directApprove === true ||
@@ -904,7 +908,7 @@ exports.applyLeave = async (req, res) => {
         (isEmployeeOrIntern && !hasAssignedTeamLead)
           ? "skipped"
           : "pending";
-      hrStatus = applierRole === "hr" ? "approved" : "pending";
+      hrStatus = "pending";
     }
 
     const applicantRole = ["employee", "intern", "team lead", "hr", "admin"].includes(String(user.role).toLowerCase())
