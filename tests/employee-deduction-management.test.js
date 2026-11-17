@@ -409,6 +409,7 @@ describe("Centralized Employee Deduction Management Module Test Suite", () => {
           deductionMasterId: loanMaster._id,
           month: 11,
           year: 2026,
+          incidentDate: "2026-11-10",
           amount: 2500,
           reason: "Approved laptop advance EMI 1 of 5",
         });
@@ -426,7 +427,7 @@ describe("Centralized Employee Deduction Management Module Test Suite", () => {
       approvedDeductionRecord = res.body.data;
     });
 
-    test("2.3 DUPLICATE PROTECTION: Blocks duplicate active deduction for same employee, master, month and year", async () => {
+    test("2.3 DUPLICATE PROTECTION: Blocks duplicate active deduction for same employee, master, and incident date", async () => {
       currentAuthUser = hrUser;
 
       const res = await request(app)
@@ -437,6 +438,7 @@ describe("Centralized Employee Deduction Management Module Test Suite", () => {
           deductionMasterId: loanMaster._id,
           month: 11,
           year: 2026,
+          incidentDate: "2026-11-10",
           amount: 2500,
         });
 
@@ -445,7 +447,28 @@ describe("Centralized Employee Deduction Management Module Test Suite", () => {
       expect(res.body.message).toMatch(/already exists for this employee/i);
     });
 
-    test("2.4 DUPLICATE PROTECTION: Blocks duplicate explicit deductionRecordId", async () => {
+    test("2.4 DUPLICATE PROTECTION: Allows same employee and master on a different incident date", async () => {
+      currentAuthUser = hrUser;
+
+      const res = await request(app)
+        .post("/api/employee-deductions")
+        .send({
+          employeeId: employeeUser._id,
+          teamLeadId: "TL0001",
+          deductionMasterId: loanMaster._id,
+          month: 11,
+          year: 2026,
+          incidentDate: "2026-11-11",
+          amount: 2500,
+          reason: "Second incident on a different date",
+        });
+
+      expect(res.status).toBe(201);
+      expect(res.body.data.incidentDate).toMatch(/^2026-11-11/);
+      await EmployeeDeduction.deleteOne({ _id: res.body.data._id });
+    });
+
+    test("2.5 DUPLICATE PROTECTION: Blocks duplicate explicit deductionRecordId", async () => {
       currentAuthUser = hrUser;
 
       const res = await request(app)
@@ -457,6 +480,7 @@ describe("Centralized Employee Deduction Management Module Test Suite", () => {
           deductionMasterId: loanMaster._id,
           month: 12,
           year: 2026,
+          incidentDate: "2026-12-10",
           amount: 2500,
         });
 
@@ -464,7 +488,7 @@ describe("Centralized Employee Deduction Management Module Test Suite", () => {
       expect(res.body.message).toMatch(/already exists/i);
     });
 
-    test("2.5 Create non-legally permissible employee deduction (flagged as false)", async () => {
+    test("2.6 Create non-legally permissible employee deduction (flagged as false)", async () => {
       currentAuthUser = adminUser;
 
       const res = await request(app)
@@ -475,6 +499,7 @@ describe("Centralized Employee Deduction Management Module Test Suite", () => {
           deductionMasterId: impermissibleMaster._id,
           month: 11,
           year: 2026,
+          incidentDate: "2026-11-10",
           amount: 5000,
           reason: "Disciplinary charge (impermissible)",
         });

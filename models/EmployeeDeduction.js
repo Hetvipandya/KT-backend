@@ -122,6 +122,12 @@ const employeeDeductionSchema = new mongoose.Schema(
       index: true,
     },
 
+    incidentDate: {
+      type: Date,
+      default: null,
+      index: true,
+    },
+
     deductionMonth: {
       type: String,
       default: "",

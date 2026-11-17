@@ -56,6 +56,7 @@ const createEmployeeDeduction = async (req, res) => {
       deductionRecordId: providedRecordId,
       month,
       year,
+      incidentDate,
       amount,
       reason = "",
       remarks = "",
@@ -83,6 +84,14 @@ const createEmployeeDeduction = async (req, res) => {
       return res.status(400).json({
         success: false,
         message: "month and year are required",
+      });
+    }
+
+    const incidentDateValue = incidentDate ? new Date(incidentDate) : null;
+    if (!incidentDateValue || Number.isNaN(incidentDateValue.getTime())) {
+      return res.status(400).json({
+        success: false,
+        message: "A valid incidentDate is required",
       });
     }
 
@@ -178,20 +187,32 @@ const createEmployeeDeduction = async (req, res) => {
       finalRecordId = await generateDeductionRecordId(monthNum, yearNum);
     }
 
-    // 5. Duplicate Protection: Check if a non-rejected/non-cancelled record already exists
-    // for this employee, master, month, and year
+    // 5. Duplicate Protection: Only one active deduction of a type per employee per incident date.
+    const incidentDayStart = new Date(incidentDateValue);
+    incidentDayStart.setUTCHours(0, 0, 0, 0);
+    const incidentDayEnd = new Date(incidentDayStart);
+    incidentDayEnd.setUTCDate(incidentDayEnd.getUTCDate() + 1);
     const existingDeduction = await EmployeeDeduction.findOne({
-      $or: [{ employeeId: employeeUser._id }, { userId: employeeUser._id }],
+      $and: [
+        { $or: [{ employeeId: employeeUser._id }, { userId: employeeUser._id }] },
+        {
+          $or: [
+            { incidentDate: { $gte: incidentDayStart, $lt: incidentDayEnd } },
+            {
+              incidentDate: null,
+              createdAt: { $gte: incidentDayStart, $lt: incidentDayEnd },
+            },
+          ],
+        },
+      ],
       deductionMasterId: master._id,
-      month: monthNum,
-      year: yearNum,
       status: { $in: ["Pending", "Approved"] },
     });
 
     if (existingDeduction) {
       return res.status(409).json({
         success: false,
-        message: `A deduction of type "${master.name}" already exists for this employee for ${monthNum}/${yearNum} (Record ID: ${existingDeduction.deductionRecordId}, Status: ${existingDeduction.status})`,
+        message: `A deduction of type "${master.name}" already exists for this employee on ${incidentDayStart.toISOString().slice(0, 10)} (Record ID: ${existingDeduction.deductionRecordId}, Status: ${existingDeduction.status})`,
         data: existingDeduction,
       });
     }
@@ -226,6 +247,7 @@ const createEmployeeDeduction = async (req, res) => {
       branchId: branchId || employeeUser.branchId || req.user?.branchId || null,
       month: monthNum,
       year: yearNum,
+      incidentDate: incidentDateValue,
       amount: Number(amount),
       reason: reason.trim(),
       remarks: remarks.trim(),
@@ -502,6 +524,7 @@ const updateEmployeeDeduction = async (req, res) => {
       remarks,
       month,
       year,
+      incidentDate,
       teamLeadId,
       deductionMasterId,
       isLegallyPermissible,
@@ -523,6 +546,44 @@ const updateEmployeeDeduction = async (req, res) => {
     if (remarks !== undefined) deduction.remarks = String(remarks).trim();
     if (month !== undefined) deduction.month = Number(month);
     if (year !== undefined) deduction.year = Number(year);
+    if (incidentDate !== undefined) {
+      const incidentDateValue = new Date(incidentDate);
+      if (Number.isNaN(incidentDateValue.getTime())) {
+        return res.status(400).json({
+          success: false,
+          message: "A valid incidentDate is required",
+        });
+      }
+
+      const incidentDayStart = new Date(incidentDateValue);
+      incidentDayStart.setUTCHours(0, 0, 0, 0);
+      const incidentDayEnd = new Date(incidentDayStart);
+      incidentDayEnd.setUTCDate(incidentDayEnd.getUTCDate() + 1);
+      const existingDeduction = await EmployeeDeduction.findOne({
+        _id: { $ne: deduction._id },
+        $and: [
+          { $or: [{ employeeId: deduction.employeeId }, { userId: deduction.employeeId }] },
+          {
+            $or: [
+              { incidentDate: { $gte: incidentDayStart, $lt: incidentDayEnd } },
+              {
+                incidentDate: null,
+                createdAt: { $gte: incidentDayStart, $lt: incidentDayEnd },
+              },
+            ],
+          },
+        ],
+        deductionMasterId: deductionMasterId || deduction.deductionMasterId,
+        status: { $in: ["Pending", "Approved"] },
+      });
+      if (existingDeduction && ["Pending", "Approved"].includes(deduction.status)) {
+        return res.status(409).json({
+          success: false,
+          message: `A deduction of this type already exists for this employee on ${incidentDayStart.toISOString().slice(0, 10)} (Record ID: ${existingDeduction.deductionRecordId}, Status: ${existingDeduction.status})`,
+        });
+      }
+      deduction.incidentDate = incidentDateValue;
+    }
     if (teamLeadId !== undefined) deduction.teamLeadId = String(teamLeadId).trim();
     if (isLegallyPermissible !== undefined) deduction.isLegallyPermissible = Boolean(isLegallyPermissible);
 
