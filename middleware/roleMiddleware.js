@@ -16,7 +16,8 @@ exports.authorizeRoles = (...roles) => {
           .toLowerCase()
           .replace(/[_\s-]+/g, "");
         if (compact === "teamlead" || compact === "teamleader" || compact === "tl") return "teamlead";
-        if (compact === "superadmin") return "admin";
+        if (compact === "hr" || compact === "hrmanager" || compact === "hradmin" || compact.startsWith("hr") || compact.includes("humanresource")) return "hr";
+        if (compact === "superadmin" || compact === "administrator" || compact.includes("admin") || compact === "admin") return "admin";
         return compact;
       };
 

@@ -10,6 +10,7 @@ const AdjustmentRequest = require("../models/AdjustmentRequest");
 const attendanceController = require("../controllers/attendanceController");
 const attendanceRoutes = require("../routes/attendanceRoutes");
 const adjustmentRequestController = require("../controllers/adjustmentRequestController");
+const { authorizeRoles } = require("../middleware/roleMiddleware");
 const { OFFICE_LOCATION } = require("../utils/geofence");
 const { generateAccessToken } = require("../utils/jwt");
 
@@ -430,6 +431,15 @@ describe("Attendance approval authorization", () => {
       .set("Authorization", `Bearer ${employeeToken}`)
       .send({ attendanceId: approvalRecord._id, approvedBy: admin._id });
     expect(unauthorizedApproval.status).toBe(403);
+
+    const hrRoleRes = { status: jest.fn().mockReturnThis(), json: jest.fn() };
+    const hrRoleNext = jest.fn();
+    await authorizeRoles("admin", "hr", "team lead")(
+      { user: { role: "HR Manager" } },
+      hrRoleRes,
+      hrRoleNext,
+    );
+    expect(hrRoleNext).toHaveBeenCalledTimes(1);
 
     const approval = await request(app)
       .post("/api/attendance/approve")

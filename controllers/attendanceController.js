@@ -69,11 +69,22 @@ const normalizeRoleValue = (value) => {
     return "intern";
   }
 
-  if (compact === "hr") {
+  if (
+    compact === "hr" ||
+    compact === "hrmanager" ||
+    compact === "hradmin" ||
+    compact.startsWith("hr") ||
+    compact.includes("humanresource")
+  ) {
     return "hr";
   }
 
-  if (compact === "admin") {
+  if (
+    compact === "admin" ||
+    compact === "superadmin" ||
+    compact === "administrator" ||
+    compact.includes("admin")
+  ) {
     return "admin";
   }
 
@@ -81,7 +92,7 @@ const normalizeRoleValue = (value) => {
     return "accountant";
   }
 
-  if (compact === "ca") { 
+  if (compact === "ca") {
     return "ca";
   }
 
