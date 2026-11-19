@@ -41,7 +41,7 @@ const journal = require('../services/journalEntry.service');
 const autoCoaMapping = require('../services/autoCoaMapping.service');
 const { validateFundingAccount, createSupplierPayment } = require('../services/paySupplier.service');
 const { paySupplierSchema } = require('../validators/purchase.validators');
-const { postJournal } = require('../services/purchase.service');
+const { createPurchase, postJournal } = require('../services/purchase.service');
 
 const COMPANY_ID = '6ac8a921e6b91ab589aa3001';
 const BRANCH_ID = '6ac8a921e6b91ab589aa3002';
@@ -232,5 +232,80 @@ describe('Purchase bill payment funding and journal balancing', () => {
         'purchase:round-off:income'
       );
     }
+  });
+
+  test('creates an automatic journal for a new purchase in its branch', async () => {
+    const purchase = {
+      _id: 'purchase-id',
+      companyId: COMPANY_ID,
+      branchId: BRANCH_ID,
+      financialYearId: ACCOUNT_ID,
+      supplierId: SUPPLIER_COA_ID,
+      billNumber: 'B-002',
+      billDate: new Date('2026-04-02'),
+      dueDate: null,
+      lineItems: [{ amount: 100, taxAmount: 0, totalAmount: 100 }],
+      subTotal: 100,
+      discountTotal: 0,
+      taxTotal: 0,
+      roundOff: 0,
+      grandTotal: 100,
+      balanceDue: 100,
+      save: jest.fn().mockResolvedValue(undefined),
+    };
+    const populatedPurchase = {
+      ...purchase,
+      supplierId: { _id: SUPPLIER_COA_ID, name: 'Supplier' },
+      branchId: { _id: BRANCH_ID, branchName: 'Main Branch' },
+      financialYearId: { _id: ACCOUNT_ID, yearLabel: '2026-27' },
+      journalEntryId: 'purchase-journal-id',
+    };
+    const purchaseQuery = {
+      populate: jest.fn().mockReturnThis(),
+      lean: jest.fn().mockResolvedValue(populatedPurchase),
+    };
+    FinancialYear.findById.mockResolvedValue({
+      companyId: COMPANY_ID,
+      isLocked: false,
+      startDate: new Date('2026-04-01'),
+      endDate: new Date('2027-03-31'),
+    });
+    Supplier.findOne.mockResolvedValue({ payableAccountId: SUPPLIER_COA_ID });
+    ChartOfAccount.findById.mockResolvedValue({ _id: SUPPLIER_COA_ID });
+    ChartOfAccount.findOne.mockResolvedValue({ _id: 'purchase-coa' });
+    Purchase.create = jest.fn().mockResolvedValue(purchase);
+    Purchase.findById = jest.fn().mockReturnValue(purchaseQuery);
+    journal.createJournalEntry.mockResolvedValue({ _id: 'purchase-journal-id' });
+
+    const result = await createPurchase({
+      companyId: COMPANY_ID,
+      branchId: BRANCH_ID,
+      financialYearId: ACCOUNT_ID,
+      supplierId: SUPPLIER_COA_ID,
+      billNumber: 'B-002',
+      billDate: '2026-04-02',
+      dueDate: null,
+      lineItems: [{ amount: 100, taxAmount: 0, totalAmount: 100 }],
+      subTotal: 100,
+      discountTotal: 0,
+      taxTotal: 0,
+      roundOff: 0,
+      grandTotal: 100,
+      balanceDue: 100,
+    }, 'user-id');
+
+    expect(journal.createJournalEntry).toHaveBeenCalledWith(
+      expect.objectContaining({
+        branchId: BRANCH_ID,
+        reference: 'B-002',
+        lines: expect.arrayContaining([
+          expect.objectContaining({ accountId: 'purchase-coa', debit: 100, credit: 0 }),
+          expect.objectContaining({ accountId: SUPPLIER_COA_ID, debit: 0, credit: 100 }),
+        ]),
+      }),
+      'user-id'
+    );
+    expect(purchase.journalEntryId).toBe('purchase-journal-id');
+    expect(result.journalEntryId).toBe('purchase-journal-id');
   });
 });

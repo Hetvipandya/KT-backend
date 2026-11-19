@@ -37,6 +37,7 @@ jest.mock('../services/cloudinary.service', () => ({
 }));
 
 const Customer = require('../models/Customer');
+const Invoice = require('../models/Invoice');
 const FinancialYear = require('../models/FinancialYear');
 const ChartOfAccount = require('../models/ChartOfAccount');
 const journalService = require('../services/journalEntry.service');
@@ -84,6 +85,90 @@ describe('Sales invoice update accounting', () => {
     });
 
     expect(result.success).toBe(true);
+  });
+
+  test('creates a balanced automatic journal for a new invoice in its branch', async () => {
+    const branchId = '6ac8a921e6b91ab589aa3010';
+    const customer = { _id: CUSTOMER_ID, name: 'Acme', coaAccountId: 'customer-coa' };
+    const invoiceDoc = {
+      _id: INVOICE_ID,
+      companyId: COMPANY_ID,
+      branchId,
+      financialYearId: YEAR_ID,
+      customerId: CUSTOMER_ID,
+      customerName: customer.name,
+      invoiceNumber: 'INV-2026-27-0001',
+      invoiceDate: new Date('2026-04-10'),
+      dueDate: null,
+      lineItems: [{
+        productId: null,
+        description: 'Consulting',
+        quantity: 1,
+        rate: 100,
+        discount: 0,
+        taxAmount: 18,
+      }],
+      subTotal: 100,
+      discountTotal: 0,
+      taxTotal: 18,
+      roundOff: 0,
+      grandTotal: 118,
+      balanceDue: 118,
+      save: jest.fn().mockResolvedValue(undefined),
+      populate: jest.fn().mockResolvedValue(undefined),
+      toObject() {
+        return { ...this };
+      },
+    };
+    FinancialYear.findById.mockResolvedValue({
+      companyId: COMPANY_ID,
+      isLocked: false,
+      startDate: new Date('2026-04-01'),
+      endDate: new Date('2027-03-31'),
+      yearLabel: '2026-27',
+    });
+    Customer.findOne.mockResolvedValue(customer);
+    Invoice.findOne = jest.fn().mockReturnValue({
+      sort: jest.fn().mockReturnThis(),
+      select: jest.fn().mockResolvedValue(null),
+    });
+    Invoice.create = jest.fn().mockResolvedValue(invoiceDoc);
+    Invoice.deleteOne = jest.fn().mockResolvedValue({ deletedCount: 1 });
+    ChartOfAccount.findOne
+      .mockResolvedValueOnce({ _id: 'customer-coa' })
+      .mockResolvedValueOnce({ _id: 'sales-coa' })
+      .mockResolvedValueOnce({ _id: 'gst-coa' });
+    journalService.createJournalEntry.mockResolvedValue({ _id: 'journal-entry-id' });
+
+    const result = await invoiceService.createInvoice({
+      companyId: COMPANY_ID,
+      branchId,
+      financialYearId: YEAR_ID,
+      customerId: CUSTOMER_ID,
+      invoiceDate: '2026-04-10',
+      lineItems: [{
+        productId: null,
+        description: 'Consulting',
+        quantity: 1,
+        rate: 100,
+        discount: 0,
+        taxAmount: 18,
+      }],
+    }, USER_ID);
+
+    expect(journalService.createJournalEntry).toHaveBeenCalledWith(
+      expect.objectContaining({
+        branchId,
+        reference: 'INV-2026-27-0001',
+        lines: expect.arrayContaining([
+          expect.objectContaining({ accountId: 'customer-coa', debit: 118, credit: 0 }),
+          expect.objectContaining({ accountId: 'sales-coa', debit: 0, credit: 100 }),
+        ]),
+      }),
+      USER_ID
+    );
+    expect(invoiceDoc.journalEntryId).toBe('journal-entry-id');
+    expect(result.journalEntryId).toBe('journal-entry-id');
   });
 
   test('reverses the old journal and posts a balanced replacement for an unpaid invoice', async () => {

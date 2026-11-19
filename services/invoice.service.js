@@ -279,6 +279,7 @@ const createJournalEntryForInvoice = async (invoice, userId) => {
 
   const journalEntry = await journalService.createJournalEntry({
     companyId: invoice.companyId,
+    branchId: invoice.branchId || null,
     financialYearId: invoice.financialYearId,
     entryDate: invoice.invoiceDate,
     reference: invoice.invoiceNumber,
