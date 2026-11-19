@@ -52,6 +52,7 @@ const invoiceSchema = new mongoose.Schema({
 invoiceSchema.index({ companyId: 1, financialYearId: 1, invoiceSequence: 1 }, { unique: true });
 invoiceSchema.index({ companyId: 1, financialYearId: 1, invoiceNumber: 1 }, { unique: true });
 invoiceSchema.index({ companyId: 1, invoiceDate: -1, createdAt: -1 });
+invoiceSchema.index({ companyId: 1, branchId: 1, invoiceDate: -1 });
 invoiceSchema.index({ companyId: 1, branchId: 1, createdAt: -1 });
 invoiceSchema.index({ companyId: 1, status: 1, createdAt: -1 });
 invoiceSchema.index({ companyId: 1, customerId: 1, createdAt: -1 });

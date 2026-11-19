@@ -112,6 +112,8 @@ const schema = new mongoose.Schema(
 );
 
 schema.index({ companyId: 1, billNumber: 1 }, { unique: true });
+schema.index({ companyId: 1, billDate: -1 });
+schema.index({ companyId: 1, branchId: 1, billDate: -1 });
 schema.index({ companyId: 1, supplierId: 1, billDate: -1 });
 schema.index({ companyId: 1, branchId: 1, createdAt: -1 });
 schema.index({ companyId: 1, status: 1, createdAt: -1 });

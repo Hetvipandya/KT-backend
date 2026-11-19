@@ -27,5 +27,7 @@ const salarySchema = new mongoose.Schema({
 salarySchema.index({ companyId: 1, journalEntryId: 1, salaryExpenseAccountId: 1 });
 salarySchema.index({ companyId: 1, journalEntryId: 1, payableAccountId: 1 });
 salarySchema.index({ companyId: 1, journalEntryId: 1, bankAccountId: 1 });
+salarySchema.index({ companyId: 1, periodStart: -1 });
+salarySchema.index({ companyId: 1, branchId: 1, periodStart: -1 });
 
 module.exports = mongoose.models.Salary || mongoose.model('Salary', salarySchema);

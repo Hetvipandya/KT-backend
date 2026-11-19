@@ -69,6 +69,8 @@ const connectDB = async (customUri = null) => {
       const Payment = require('../models/Payment');
       const SupplierPayment = require('../models/SupplierPayment');
       const Salary = require('../models/Salary');
+      const Invoice = require('../models/Invoice');
+      const Purchase = require('../models/Purchase');
       await Promise.all([
         TaskManagement.createIndexes(),
         Leave.createIndexes(),
@@ -77,7 +79,9 @@ const connectDB = async (customUri = null) => {
         Expense.createIndexes(),
         Payment.createIndexes(),
         SupplierPayment.createIndexes(),
-        Salary.createIndexes()
+        Salary.createIndexes(),
+        Invoice.createIndexes(),
+        Purchase.createIndexes()
       ]);
     }
 

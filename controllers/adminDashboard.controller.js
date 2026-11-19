@@ -104,12 +104,10 @@ const getAdminDashboard = async (req, res, next) => {
 
     // Run aggregations and counts in parallel
     const [
-      salesAgg,
-      purchaseAgg,
-      expenseAgg,
-      salaryAgg,
-      receivablesAgg,
-      payablesAgg,
+      invoiceDashboardAgg,
+      purchaseDashboardAgg,
+      expenseDashboardAgg,
+      salaryDashboardAgg,
       customersCount,
       suppliersCount,
       employeesCount,
@@ -118,81 +116,76 @@ const getAdminDashboard = async (req, res, next) => {
       recentInvoices,
       recentPurchases,
       recentAuditLogs,
-      expenseCategoriesAgg,
       recentExpenses,
       recentSalaries,
-      branchSalesAgg,
-      branchPurchaseAgg,
-      branchExpenseAgg,
-      branchSalaryAgg,
-      branchReceivablesAgg,
     ] = await Promise.all([
-      // Sales (Invoices) aggregation
-      Invoice.aggregate([ 
+      Invoice.aggregate([
         { $match: invoiceDateMatch },
         {
-          $group: {
-            _id: null,
-            totalAmount: { $sum: '$grandTotal' },
-            totalReceived: { $sum: '$amountReceived' },
-            count: { $sum: 1 }
-          }
-        }
+          $facet: {
+            sales: [
+              { $group: { _id: null, totalAmount: { $sum: '$grandTotal' }, totalReceived: { $sum: '$amountReceived' }, count: { $sum: 1 } } },
+            ],
+            receivables: [
+              { $match: { balanceDue: { $gt: 0 } } },
+              { $group: { _id: null, totalAmount: { $sum: '$balanceDue' }, count: { $sum: 1 } } },
+            ],
+            branchSales: [
+              { $group: { _id: '$branchId', totalAmount: { $sum: '$grandTotal' } } },
+            ],
+            branchReceivables: [
+              { $match: { balanceDue: { $gt: 0 } } },
+              { $group: { _id: '$branchId', totalAmount: { $sum: '$balanceDue' } } },
+            ],
+          },
+        },
       ]),
-      // Purchases aggregation
       Purchase.aggregate([
         { $match: purchaseDateMatch },
         {
-          $group: {
-            _id: null,
-            totalAmount: { $sum: '$grandTotal' },
-            count: { $sum: 1 }
-          }
-        }
+          $facet: {
+            purchases: [
+              { $group: { _id: null, totalAmount: { $sum: '$grandTotal' }, count: { $sum: 1 } } },
+            ],
+            payables: [
+              { $match: { balanceDue: { $gt: 0 } } },
+              { $group: { _id: null, totalAmount: { $sum: '$balanceDue' }, count: { $sum: 1 } } },
+            ],
+            branchPurchases: [
+              { $group: { _id: '$branchId', totalAmount: { $sum: '$grandTotal' } } },
+            ],
+          },
+        },
       ]),
-      // Expenses aggregation
       Expense.aggregate([
         { $match: expenseDateMatch },
         {
-          $group: {
-            _id: null,
-            totalAmount: { $sum: '$totalAmount' },
-            count: { $sum: 1 }
-          }
-        }
+          $facet: {
+            expenses: [
+              { $group: { _id: null, totalAmount: { $sum: '$totalAmount' }, count: { $sum: 1 } } },
+            ],
+            categories: [
+              { $group: { _id: '$category', totalAmount: { $sum: { $ifNull: ['$totalAmount', '$amount'] } } } },
+              { $sort: { totalAmount: -1 } },
+            ],
+            branchExpenses: [
+              { $group: { _id: '$branchId', totalAmount: { $sum: { $ifNull: ['$totalAmount', '$amount'] } } } },
+            ],
+          },
+        },
       ]),
-      // Salaries aggregation
       Salary.aggregate([
         { $match: salaryDateMatch },
         {
-          $group: {
-            _id: null,
-            totalAmount: { $sum: '$netPayable' },
-            count: { $sum: 1 }
-          }
-        }
-      ]),
-      // Receivables aggregation (outstanding invoice balances)
-      Invoice.aggregate([
-        { $match: { ...invoiceDateMatch, balanceDue: { $gt: 0 } } },
-        {
-          $group: {
-            _id: null,
-            totalAmount: { $sum: '$balanceDue' },
-            count: { $sum: 1 }
-          }
-        }
-      ]),
-      // Payables aggregation (outstanding purchase balances)
-      Purchase.aggregate([
-        { $match: { ...purchaseDateMatch, balanceDue: { $gt: 0 } } },
-        {
-          $group: {
-            _id: null,
-            totalAmount: { $sum: '$balanceDue' },
-            count: { $sum: 1 }
-          }
-        }
+          $facet: {
+            salaries: [
+              { $group: { _id: null, totalAmount: { $sum: '$netPayable' }, count: { $sum: 1 } } },
+            ],
+            branchSalaries: [
+              { $group: { _id: '$branchId', totalAmount: { $sum: '$netPayable' } } },
+            ],
+          },
+        },
       ]),
       // Entity counts
       Customer.countDocuments(entityMatch),
@@ -221,16 +214,6 @@ const getAdminDashboard = async (req, res, next) => {
         .limit(5)
         .populate('userId', 'name email')
         .lean(),
-      Expense.aggregate([
-        { $match: expenseDateMatch },
-        {
-          $group: {
-            _id: '$category',
-            totalAmount: { $sum: { $ifNull: ['$totalAmount', '$amount'] } },
-          },
-        },
-        { $sort: { totalAmount: -1 } },
-      ]),
       Expense.find(expenseDateMatch)
         .sort({ expenseDate: -1, createdAt: -1 })
         .limit(5)
@@ -239,34 +222,23 @@ const getAdminDashboard = async (req, res, next) => {
         .sort({ periodStart: -1, createdAt: -1 })
         .limit(5)
         .lean(),
-      Invoice.aggregate([
-        { $match: invoiceDateMatch },
-        { $group: { _id: '$branchId', totalAmount: { $sum: '$grandTotal' } } },
-      ]),
-      Purchase.aggregate([
-        { $match: purchaseDateMatch },
-        { $group: { _id: '$branchId', totalAmount: { $sum: '$grandTotal' } } },
-      ]),
-      Expense.aggregate([
-        {
-          $match: expenseDateMatch,
-        },
-        {
-          $group: {
-            _id: '$branchId',
-            totalAmount: { $sum: { $ifNull: ['$totalAmount', '$amount'] } },
-          },
-        },
-      ]),
-      Salary.aggregate([
-        { $match: salaryDateMatch },
-        { $group: { _id: '$branchId', totalAmount: { $sum: '$netPayable' } } },
-      ]),
-      Invoice.aggregate([
-        { $match: { ...invoiceDateMatch, balanceDue: { $gt: 0 } } },
-        { $group: { _id: '$branchId', totalAmount: { $sum: '$balanceDue' } } },
-      ]),
     ]);
+    const invoiceDashboard = invoiceDashboardAgg[0] || {};
+    const purchaseDashboard = purchaseDashboardAgg[0] || {};
+    const expenseDashboard = expenseDashboardAgg[0] || {};
+    const salaryDashboard = salaryDashboardAgg[0] || {};
+    const salesAgg = invoiceDashboard.sales || [];
+    const receivablesAgg = invoiceDashboard.receivables || [];
+    const branchSalesAgg = invoiceDashboard.branchSales || [];
+    const branchReceivablesAgg = invoiceDashboard.branchReceivables || [];
+    const purchaseAgg = purchaseDashboard.purchases || [];
+    const payablesAgg = purchaseDashboard.payables || [];
+    const branchPurchaseAgg = purchaseDashboard.branchPurchases || [];
+    const expenseAgg = expenseDashboard.expenses || [];
+    const expenseCategoriesAgg = expenseDashboard.categories || [];
+    const branchExpenseAgg = expenseDashboard.branchExpenses || [];
+    const salaryAgg = salaryDashboard.salaries || [];
+    const branchSalaryAgg = salaryDashboard.branchSalaries || [];
 
     // Live Real-Time Bank & Cash Balances
     const BankAccount = require('../models/BankAccount');
