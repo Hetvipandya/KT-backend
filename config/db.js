@@ -63,9 +63,21 @@ const connectDB = async (customUri = null) => {
       await User.createIndexes();
       const TaskManagement = require('../models/taskModel');
       const Leave = require('../models/Leave');
+      const Contact = require('../models/Contact');
+      const JournalEntry = require('../models/JournalEntry');
+      const Expense = require('../models/Expense');
+      const Payment = require('../models/Payment');
+      const SupplierPayment = require('../models/SupplierPayment');
+      const Salary = require('../models/Salary');
       await Promise.all([
         TaskManagement.createIndexes(),
-        Leave.createIndexes()
+        Leave.createIndexes(),
+        Contact.createIndexes(),
+        JournalEntry.createIndexes(),
+        Expense.createIndexes(),
+        Payment.createIndexes(),
+        SupplierPayment.createIndexes(),
+        Salary.createIndexes()
       ]);
     }
 

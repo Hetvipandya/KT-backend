@@ -165,6 +165,9 @@ expenseSchema.pre('validate', function (next) {
   next();
 });
 
+expenseSchema.index({ companyId: 1, journalEntryId: 1, expenseAccountId: 1 });
+expenseSchema.index({ companyId: 1, journalEntryId: 1, bankAccountId: 1 });
+
 const Expense = mongoose.models.Expense || mongoose.model('Expense', expenseSchema);
 
 module.exports = Expense;

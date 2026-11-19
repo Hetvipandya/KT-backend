@@ -3,8 +3,8 @@ const { MongoMemoryReplSet } = require('mongodb-memory-server');
 const ChartOfAccount = require('../models/ChartOfAccount');
 const FinancialYear = require('../models/FinancialYear');
 const JournalEntry = require('../models/JournalEntry');
-require('../models/BankAccount');
-require('../models/Expense');
+const BankAccount = require('../models/BankAccount');
+const Expense = require('../models/Expense');
 require('../models/Payment');
 require('../models/SupplierPayment');
 require('../models/Salary');
@@ -30,11 +30,17 @@ afterAll(async () => {
   if (mongo) await mongo.stop();
 });
 
+afterEach(() => {
+  jest.restoreAllMocks();
+});
+
 beforeEach(async () => {
   await Promise.all([
     ChartOfAccount.deleteMany({}),
     FinancialYear.deleteMany({}),
-    JournalEntry.deleteMany({})
+    JournalEntry.deleteMany({}),
+    BankAccount.deleteMany({}),
+    Expense.deleteMany({})
   ]);
   companyId = new mongoose.Types.ObjectId();
   userId = new mongoose.Types.ObjectId();
@@ -99,6 +105,49 @@ describe('Journal posting and reversal accounting', () => {
     });
     expect(after.closingBalance).toBe(0);
     expect(after.entries).toHaveLength(2);
+  });
+
+  test('scopes ledger journal reads to the requested account', async () => {
+    await createBalancedJournal();
+    const journalFind = jest.spyOn(JournalEntry, 'find');
+
+    await ledgerService.getLedgerHistory(expenseAccount._id, {
+      companyId: companyId.toString()
+    });
+
+    expect(journalFind).toHaveBeenCalledWith(expect.objectContaining({
+      companyId: companyId.toString(),
+      'lines.accountId': expenseAccount._id
+    }));
+  });
+
+  test('queries only unjournaled expenses linked to the requested account', async () => {
+    await Expense.create([
+      {
+        companyId,
+        expenseAccountId: expenseAccount._id,
+        totalAmount: 25,
+        category: 'Relevant',
+      },
+      {
+        companyId,
+        expenseAccountId: bankAccount._id,
+        totalAmount: 900,
+        category: 'Unrelated',
+      },
+    ]);
+    const expenseFind = jest.spyOn(Expense, 'find');
+
+    const history = await ledgerService.getLedgerHistory(expenseAccount._id, {
+      companyId: companyId.toString()
+    });
+
+    expect(history.closingBalance).toBe(25);
+    expect(expenseFind).toHaveBeenCalledWith(expect.objectContaining({
+      companyId: companyId.toString(),
+      journalEntryId: null,
+      $or: [{ expenseAccountId: expenseAccount._id }]
+    }));
   });
 
   test('allows at most one reversal when requests race', async () => {

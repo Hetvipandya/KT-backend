@@ -43,6 +43,9 @@ const contactSchema = new mongoose.Schema(
   }
 );
 
+contactSchema.index({ createdAt: -1, _id: -1 });
+contactSchema.index({ service: 1, createdAt: -1, _id: -1 });
+
 module.exports = mongoose.model(
   "Contact",
   contactSchema

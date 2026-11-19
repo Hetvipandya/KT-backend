@@ -51,14 +51,61 @@ exports.createContact = async (req, res) => {
 // ================= GET ALL CONTACTS =================
 exports.getAllContacts = async (req, res) => {
   try {
-    const contacts = await Contact.find().sort({
-      createdAt: -1,
-    });
+    const paginated = ["page", "limit", "search", "service"]
+      .some((key) => Object.prototype.hasOwnProperty.call(req.query, key));
+    const page = Math.max(Number.parseInt(req.query.page, 10) || 1, 1);
+    const limit = Math.min(Math.max(Number.parseInt(req.query.limit, 10) || 30, 1), 100);
+    const search = typeof req.query.search === "string"
+      ? req.query.search.trim().slice(0, 100)
+      : "";
+    const service = typeof req.query.service === "string"
+      ? req.query.service.trim().slice(0, 100)
+      : "";
+    const filter = {};
+
+    if (search) {
+      const escapedSearch = search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const searchRegex = new RegExp(escapedSearch, "i");
+      filter.$or = [
+        { firstName: searchRegex },
+        { lastName: searchRegex },
+        { email: searchRegex },
+        { service: searchRegex },
+      ];
+    }
+
+    if (service && service.toLowerCase() !== "all") {
+      filter.service = new RegExp(
+        `^${service.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`,
+        "i"
+      );
+    }
+
+    let contactsQuery = Contact.find(filter).sort({ createdAt: -1, _id: -1 });
+    if (paginated) {
+      contactsQuery = contactsQuery
+        .skip((page - 1) * limit)
+        .limit(limit);
+    }
+
+    const [contacts, total, services] = await Promise.all([
+      contactsQuery.lean(),
+      Contact.countDocuments(filter),
+      Contact.distinct("service"),
+    ]);
 
     res.status(200).json({
       success: true,
       count: contacts.length,
       data: contacts,
+      services: [...new Set(services.map((value) => value.toLowerCase()))]
+        .sort((a, b) => a.localeCompare(b)),
+      pagination: {
+        page,
+        limit,
+        total,
+        pages: Math.ceil(total / limit),
+      },
     });
   } catch (error) {
     res.status(500).json({

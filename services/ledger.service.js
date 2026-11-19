@@ -46,7 +46,10 @@ const balanceType = (amount) => amount >= 0 ? 'DR' : 'CR';
  * ordering and the same running-balance calculation for every source.
  */
 const loadJournalMovements = async (accountId, filters) => {
-  const journalFilter = { companyId: filters.companyId };
+  const journalFilter = {
+    companyId: filters.companyId,
+    'lines.accountId': accountId
+  };
   if (filters.financialYearId) journalFilter.financialYearId = filters.financialYearId;
 
   const journals = await JournalEntry.find(journalFilter)
@@ -87,14 +90,72 @@ const loadDirectMovements = async (accountId, filters) => {
   const Salary = mongoose.model('Salary');
 
   // Check if this accountId corresponds to a BankAccount
-  const bankAccount = await BankAccount.findOne({ coaAccountId: accountId }).lean();
+  const bankAccount = await BankAccount.findOne({
+    companyId,
+    coaAccountId: accountId
+  }).select('_id accountType').lean();
   const bankAccountId = bankAccount ? bankAccount._id.toString() : null;
 
-  // 1. Expenses without journalEntryId
-  const expQuery = { companyId, journalEntryId: null };
+  const expenseAccountMatches = [{ expenseAccountId: accountId }];
+  const paymentAccountMatches = [];
+  if (bankAccount) {
+    expenseAccountMatches.push({ bankAccountId: bankAccount._id });
+    paymentAccountMatches.push({ bankAccountId: bankAccount._id });
+  }
+  if (bankAccount && bankAccount.accountType === 'Cash') {
+    expenseAccountMatches.push({ bankAccountId: null });
+    paymentAccountMatches.push({ bankAccountId: null });
+  }
+
+  const expQuery = {
+    companyId,
+    journalEntryId: null,
+    $or: expenseAccountMatches
+  };
   if (filters.financialYearId) expQuery.financialYearId = filters.financialYearId;
 
-  const expenses = await Expense.find(expQuery).lean();
+  const payQuery = {
+    companyId,
+    journalEntryId: null,
+    status: { $ne: 'REVERSED' },
+    $or: paymentAccountMatches
+  };
+  const suppQuery = { ...payQuery };
+  const salQuery = {
+    companyId,
+    journalEntryId: null,
+    $or: [
+      { salaryExpenseAccountId: accountId },
+      { payableAccountId: accountId },
+      ...(bankAccount ? [{ bankAccountId: bankAccount._id }] : [])
+    ]
+  };
+  if (filters.financialYearId) {
+    payQuery.financialYearId = filters.financialYearId;
+    suppQuery.financialYearId = filters.financialYearId;
+    salQuery.financialYearId = filters.financialYearId;
+  }
+
+  const [expenses, payments, suppPayments, salaries] = await Promise.all([
+    Expense.find(expQuery)
+      .select('_id expenseAccountId bankAccountId expenseDate createdAt reference category description notes totalAmount amount')
+      .lean(),
+    paymentAccountMatches.length
+      ? Payment.find(payQuery)
+        .select('_id bankAccountId paymentDate createdAt paymentNumber reference customerName notes totalAmount')
+        .lean()
+      : [],
+    paymentAccountMatches.length
+      ? SupplierPayment.find(suppQuery)
+        .select('_id bankAccountId paymentDate createdAt paymentNumber reference mode notes totalAmount')
+        .lean()
+      : [],
+    Salary.find(salQuery)
+      .select('_id salaryExpenseAccountId payableAccountId bankAccountId periodEnd createdAt reference notes paymentMode grossSalary netPayable')
+      .lean()
+  ]);
+
+  // 1. Expenses without journalEntryId
   for (const exp of expenses) {
     const isExpenseAccount = exp.expenseAccountId && exp.expenseAccountId.toString() === accountId.toString();
     const isMatchingBankAccount = bankAccountId && exp.bankAccountId && exp.bankAccountId.toString() === bankAccountId;
@@ -136,10 +197,6 @@ const loadDirectMovements = async (accountId, filters) => {
   }
 
   // 2. Customer Payments without journalEntryId
-  const payQuery = { companyId, journalEntryId: null, status: { $ne: 'REVERSED' } };
-  if (filters.financialYearId) payQuery.financialYearId = filters.financialYearId;
-
-  const payments = await Payment.find(payQuery).lean();
   for (const pay of payments) {
     const isBank = (bankAccountId && pay.bankAccountId && pay.bankAccountId.toString() === bankAccountId)
       || (bankAccount && bankAccount.accountType === 'Cash' && !pay.bankAccountId);
@@ -162,10 +219,6 @@ const loadDirectMovements = async (accountId, filters) => {
   }
 
   // 3. Supplier Payments without journalEntryId
-  const suppQuery = { companyId, journalEntryId: null, status: { $ne: 'REVERSED' } };
-  if (filters.financialYearId) suppQuery.financialYearId = filters.financialYearId;
-
-  const suppPayments = await SupplierPayment.find(suppQuery).lean();
   for (const sp of suppPayments) {
     const isBank = (bankAccountId && sp.bankAccountId && sp.bankAccountId.toString() === bankAccountId)
       || (bankAccount && bankAccount.accountType === 'Cash' && !sp.bankAccountId);
@@ -188,10 +241,6 @@ const loadDirectMovements = async (accountId, filters) => {
   }
 
   // 4. Salaries without journalEntryId
-  const salQuery = { companyId, journalEntryId: null };
-  if (filters.financialYearId) salQuery.financialYearId = filters.financialYearId;
-
-  const salaries = await Salary.find(salQuery).lean();
   for (const sal of salaries) {
     const isSalaryExp = sal.salaryExpenseAccountId && sal.salaryExpenseAccountId.toString() === accountId.toString();
     const isBank = bankAccountId && sal.bankAccountId && sal.bankAccountId.toString() === bankAccountId;

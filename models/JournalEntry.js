@@ -57,5 +57,6 @@ const journalEntrySchema = new mongoose.Schema({
 
 journalEntrySchema.index({ companyId: 1, branchId: 1, financialYearId: 1, entryDate: -1, createdAt: -1 });
 journalEntrySchema.index({ companyId: 1, branchId: 1, 'lines.accountId': 1, entryDate: -1 });
+journalEntrySchema.index({ companyId: 1, 'lines.accountId': 1, entryDate: 1, createdAt: 1 });
 
 module.exports = mongoose.model('JournalEntry', journalEntrySchema);

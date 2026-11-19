@@ -32,6 +32,7 @@ paymentSchema.index({ companyId: 1, financialYearId: 1, paymentSequence: 1 }, { 
 paymentSchema.index({ companyId: 1, paymentDate: -1, createdAt: -1 });
 paymentSchema.index({ companyId: 1, branchId: 1, createdAt: -1 });
 paymentSchema.index({ companyId: 1, customerId: 1, createdAt: -1 });
+paymentSchema.index({ companyId: 1, journalEntryId: 1, bankAccountId: 1 });
 
 paymentSchema.pre('validate', async function (next) {
   if (this.isModified('customerId') || !this.customerName || !this.branchId) {
