@@ -125,6 +125,9 @@ const sendNotificationToUser = async (userId, notification) => {
           },
         },
       },
+      webpush: {
+        headers: { Urgency: "high" },
+      },
     };
 
     console.log(`🚀 [FCM] Sending push notification to ${validTokens.length} device(s) for user: ${user.name || user.email}`);

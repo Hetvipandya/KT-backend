@@ -24,7 +24,8 @@ router.get('/notifications', authenticate, validateQuery(notificationQuerySchema
 router.get('/notifications/summary', authenticate, validateQuery(summaryQuerySchema), notificationController.getSummary);
 router.put('/notifications/:id/read', authenticate, notificationController.markNotificationRead);
 router.post('/notifications/device-token', authenticate, validateRequest(registerDeviceTokenSchema), notificationController.registerDeviceToken);
-router.post('/notifications/send-to-role', authenticate, validateRequest(sendToRoleSchema), notificationController.sendNotificationToRole);
+router.post('/notifications/send-to-role', authenticate, validateRequest(sendToRoleSchema), checkCompanyAccess,
+  requirePermission('NotificationConfig', 'manage'), notificationController.sendNotificationToRole);
 
 // Debug/test endpoint for testing push notifications via Postman
 // POST /api/notifications/test-push  { "title": "Hello", "body": "Test message" }

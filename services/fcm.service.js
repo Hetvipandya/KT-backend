@@ -52,6 +52,9 @@ const sendPushNotification = async ({ deviceToken, title, body, data = {}, image
           badge: 1
         }
       }
+    },
+    webpush: {
+      headers: { Urgency: 'high' }
     }
   };
 
@@ -89,7 +92,10 @@ const sendMulticastPushNotification = async (deviceTokens, title, body, data = {
     data: Object.fromEntries(
       Object.entries(data).map(([k, v]) => [k, String(v)])
     ),
-    android: { priority: 'high' }
+    android: { priority: 'high' },
+    webpush: {
+      headers: { Urgency: 'high' }
+    }
   };
 
   try {

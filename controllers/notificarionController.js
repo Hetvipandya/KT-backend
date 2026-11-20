@@ -9,6 +9,13 @@ const Employee = require("../models/Employee");
 const Department = require("../models/Department");
 const { sendPushNotification } = require("../services/fcm.service");
 
+const getUserPushTokens = (user) => [...new Set([
+  user?.deviceToken,
+  ...(user?.notificationTokens || []).map((item) => (
+    typeof item === "string" ? item : item?.token
+  )),
+].filter((token) => typeof token === "string" && token.trim()).map((token) => token.trim()))];
+
 const getCompanyScope = (user) => {
   const companyIds = [
     user?.companyId,
@@ -18,6 +25,26 @@ const getCompanyScope = (user) => {
   ].filter((companyId) => companyId && mongoose.isValidObjectId(companyId));
   const uniqueCompanyIds = [...new Set(companyIds.map((companyId) => String(companyId)))];
   return uniqueCompanyIds.length ? { companyId: { $in: uniqueCompanyIds } } : {};
+};
+
+const getCompanyUserQuery = (user, roleRegex) => {
+  const companyIds = getCompanyScope(user).companyId?.$in || [];
+  if (!companyIds.length) return roleRegex ? { role: roleRegex } : {};
+
+  return {
+    $or: [
+      { companyId: { $in: companyIds }, ...(roleRegex && { role: roleRegex }) },
+      {
+        companyAccess: {
+          $elemMatch: {
+            companyId: { $in: companyIds },
+            isActive: { $ne: false },
+            ...(roleRegex && { role: roleRegex }),
+          },
+        },
+      },
+    ],
+  };
 };
 
 const getActiveEmployeeQuery = (companyScope = {}) => ({
@@ -86,14 +113,18 @@ const resolveAnnouncementRecipients = async ({ targetType, targetRole, targetUse
       throw Object.assign(new Error("Select a valid role"), { statusCode: 400 });
     }
     const roleRegex = new RegExp(`^${role.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i");
-    return User.find({ role: roleRegex }).select("_id role deviceToken").lean();
+    return User.find(getCompanyUserQuery(user, roleRegex))
+      .select("_id role deviceToken notificationTokens")
+      .lean();
   }
 
   if (normalizedType !== "ALL") {
     throw Object.assign(new Error("Unsupported announcement audience"), { statusCode: 400 });
   }
 
-  return User.find({}).select("_id role deviceToken").lean();
+  return User.find(getCompanyUserQuery(user))
+    .select("_id role deviceToken notificationTokens")
+    .lean();
 };
 
 const resolveUsersForEmployees = async (employees) => {
@@ -106,7 +137,7 @@ const resolveUsersForEmployees = async (employees) => {
   if (emails.length) query.push({ email: { $in: emails } });
   if (!query.length) return [];
 
-  const users = await User.find({ $or: query }).select("_id role email deviceToken").lean();
+  const users = await User.find({ $or: query }).select("_id role email deviceToken notificationTokens").lean();
   const userById = new Map(users.map((user) => [String(user._id), user]));
   const userByEmail = new Map(
     users.filter((user) => user.email).map((user) => [String(user.email).trim().toLowerCase(), user])
@@ -641,11 +672,10 @@ exports.createAnnouncement = async (req, res) => {
     })));
 
     const pushResults = await Promise.allSettled(
-      recipients
-        .filter((user) => user.deviceToken)
-        .map((user) =>
+      recipients.flatMap((user) =>
+        getUserPushTokens(user).map((deviceToken) =>
           sendPushNotification({
-            deviceToken: user.deviceToken,
+            deviceToken,
             title: announcement.title,
             body: announcement.message,
             data: {
@@ -654,6 +684,7 @@ exports.createAnnouncement = async (req, res) => {
             },
           })
         )
+      )
     );
     pushResults.forEach((result) => {
       if (result.status === "rejected") {

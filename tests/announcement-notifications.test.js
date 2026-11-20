@@ -6,6 +6,7 @@ const Department = require("../models/Department");
 jest.mock("../services/fcm.service", () => ({
   sendPushNotification: jest.fn().mockResolvedValue({ success: true }),
 }));
+const { sendPushNotification } = require("../services/fcm.service");
 const {
   createAnnouncement,
   getUserNotifications,
@@ -59,6 +60,37 @@ describe("Announcement notifications", () => {
         targetRole: "ALL",
         targetType: "ALL",
       }),
+    }));
+  });
+
+  test("sends announcements to registered browser push tokens", async () => {
+    const recipient = {
+      _id: new mongoose.Types.ObjectId(),
+      role: "employee",
+      notificationTokens: [{ token: "registered-web-token" }],
+    };
+    const announcement = {
+      _id: new mongoose.Types.ObjectId(),
+      title: "Screen lock update",
+      message: "This should reach the browser service worker",
+      targetType: "ALL",
+      targetRole: "ALL",
+    };
+    jest.spyOn(User, "find").mockReturnValue({
+      select: () => ({ lean: jest.fn().mockResolvedValue([recipient]) }),
+    });
+    jest.spyOn(Announcement, "create").mockResolvedValue(announcement);
+    jest.spyOn(Notification, "create").mockImplementation(async (notification) => notification);
+    sendPushNotification.mockClear();
+    const res = makeResponse();
+
+    await createAnnouncement({ body: announcement, user: { _id: recipient._id } }, res);
+
+    expect(res.statusCode).toBe(201);
+    expect(sendPushNotification).toHaveBeenCalledWith(expect.objectContaining({
+      deviceToken: "registered-web-token",
+      title: announcement.title,
+      body: announcement.message,
     }));
   });
 
@@ -151,6 +183,51 @@ describe("Announcement notifications", () => {
     expect(createNotification).toHaveBeenCalledTimes(1);
     expect(String(createNotification.mock.calls[0][0].userId)).toBe(String(employeeUser._id));
     expect(createNotification.mock.calls[0][0].meta.targetType).toBe("DEPARTMENT");
+  });
+
+  test("limits role announcements to users assigned to the publisher's company", async () => {
+    const companyId = new mongoose.Types.ObjectId();
+    const hrUser = { _id: new mongoose.Types.ObjectId(), role: "hr" };
+    const findUsers = jest.spyOn(User, "find").mockReturnValue({
+      select: () => ({ lean: jest.fn().mockResolvedValue([hrUser]) }),
+    });
+    jest.spyOn(Announcement, "create").mockResolvedValue({
+      _id: new mongoose.Types.ObjectId(),
+      title: "HR update",
+      message: "Company-specific",
+      targetType: "ROLE",
+      targetRole: "hr",
+    });
+    const createNotification = jest.spyOn(Notification, "create").mockImplementation(async (notification) => notification);
+    const res = makeResponse();
+
+    await createAnnouncement({
+      user: { _id: new mongoose.Types.ObjectId(), companyId },
+      body: {
+        title: "HR update",
+        message: "Company-specific",
+        targetType: "ROLE",
+        targetRole: "hr",
+      },
+    }, res);
+
+    expect(res.statusCode).toBe(201);
+    expect(findUsers).toHaveBeenCalledWith({
+      $or: [
+        { companyId: { $in: [companyId.toString()] }, role: /^hr$/i },
+        {
+          companyAccess: {
+            $elemMatch: {
+              companyId: { $in: [companyId.toString()] },
+              isActive: { $ne: false },
+              role: /^hr$/i,
+            },
+          },
+        },
+      ],
+    });
+    expect(createNotification).toHaveBeenCalledTimes(1);
+    expect(String(createNotification.mock.calls[0][0].userId)).toBe(String(hrUser._id));
   });
 
   test("announcement list exposes only announcements addressed to the signed-in user", async () => {

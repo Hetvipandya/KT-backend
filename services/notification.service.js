@@ -7,6 +7,12 @@ const fcmService = require('./fcm.service');
 
 const serviceError = (message, statusCode, errorCode) => Object.assign(new Error(message), { statusCode, errorCode });
 const id = (value) => value?.toString();
+const getUserPushTokens = (user) => [...new Set([
+  user?.deviceToken,
+  ...(user?.notificationTokens || []).map((item) => (
+    typeof item === 'string' ? item : item?.token
+  ))
+].filter((token) => typeof token === 'string' && token.trim()).map((token) => token.trim()))];
 
 const listNotifications = async (userId, filters = {}) => {
   const query = { userId };
@@ -205,14 +211,23 @@ const createNotification = async ({
   });
 
   try {
-    const user = await User.findById(userId).select('deviceToken').lean();
-    if (user?.deviceToken) {
+    const user = await User.findById(userId).select('deviceToken notificationTokens').lean();
+    const tokens = getUserPushTokens(user);
+    if (tokens.length) {
       await fcmService.sendPushNotification({
-        deviceToken: user.deviceToken,
+        deviceToken: tokens[0],
         title,
         body: message,
         data: { notificationId: id(notification._id), type, ...meta }
       });
+      if (tokens.length > 1) {
+        await fcmService.sendMulticastPushNotification(
+          tokens.slice(1),
+          title,
+          message,
+          { notificationId: id(notification._id), type, ...meta }
+        );
+      }
     }
   } catch (pushErr) {
     console.error('[FCM] push failed for userId', id(userId), pushErr.message);
@@ -242,29 +257,31 @@ const createNotificationForRole = async ({
   meta = {}
 }) => {
   if (!role) throw serviceError('Role is required', 400, 'ROLE_REQUIRED');
-
-  const roleRegex = new RegExp(`^${role.trim()}$`, 'i');
-
-  const userQuery = {
-    $or: [
-      { role: roleRegex },
-      {
-        companyAccess: {
-          $elemMatch: {
-            ...(companyId && { companyId: new mongoose.Types.ObjectId(companyId) }),
-            role: roleRegex,
-            isActive: true
-          }
-        }
-      }
-    ]
-  };
-
-  if (companyId && mongoose.isValidObjectId(companyId)) {
-    userQuery.$or.push({ companyId: new mongoose.Types.ObjectId(companyId), role: roleRegex });
+  if (companyId && !mongoose.isValidObjectId(companyId)) {
+    throw serviceError('Company not found', 400, 'INVALID_COMPANY_ID');
   }
 
-  const users = await User.find(userQuery).select('_id name email deviceToken').lean();
+  const escapedRole = role.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const roleRegex = new RegExp(`^${escapedRole}$`, 'i');
+  const companyObjectId = companyId ? new mongoose.Types.ObjectId(companyId) : null;
+  const userQuery = companyObjectId
+    ? {
+      $or: [
+        { companyId: companyObjectId, role: roleRegex },
+        {
+          companyAccess: {
+            $elemMatch: {
+              companyId: companyObjectId,
+              role: roleRegex,
+              isActive: true
+            }
+          }
+        }
+      ]
+    }
+    : { role: roleRegex };
+
+  const users = await User.find(userQuery).select('_id name email deviceToken notificationTokens').lean();
 
   if (!users.length) {
     return { count: 0, notifications: [] };
@@ -280,7 +297,7 @@ const createNotificationForRole = async ({
       title,
       message,
       channel,
-      ...(companyId && { companyId }),
+      ...(companyObjectId && { companyId: companyObjectId }),
       meta,
       read: false
     });
@@ -298,15 +315,14 @@ const createNotificationForRole = async ({
       createdAt: notif.createdAt
     });
 
-    if (user.deviceToken) {
-      deviceTokens.push(user.deviceToken);
-    }
+    deviceTokens.push(...getUserPushTokens(user));
   }
 
-  if (deviceTokens.length > 0) {
+  const uniqueDeviceTokens = [...new Set(deviceTokens)];
+  if (uniqueDeviceTokens.length > 0) {
     try {
       const { sendMulticastPushNotification } = require('./fcm.service');
-      await sendMulticastPushNotification(deviceTokens, title, message, { type, ...meta });
+      await sendMulticastPushNotification(uniqueDeviceTokens, title, message, { type, ...meta });
     } catch (pushErr) {
       console.error('[FCM] Role multicast push error:', pushErr.message);
     }
