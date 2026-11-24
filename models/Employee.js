@@ -277,6 +277,10 @@ employeeSchema.virtual('fullName').get(function () {
   return [this.firstName, this.middleName, this.lastName].filter(Boolean).join(' ');
 });
 
+employeeSchema.index({ userID: 1 });
+employeeSchema.index({ userId: 1 });
+employeeSchema.index({ email: 1 });
+
 employeeSchema.pre('validate', function (next) {
   if (this.employeeID && !this.employeeCode) {
     this.employeeCode = this.employeeID;

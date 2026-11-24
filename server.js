@@ -44,7 +44,7 @@ app.use(helmet({
     },
   },
 }));
-app.use(compression());
+app.use(compression({ level: 4, threshold: 1024 }));
 
 // ================= AUTO CREATE UPLOAD FOLDERS =================
 const uploadFolders = [
@@ -100,11 +100,18 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // ================= REQUEST LOGGER =================
 app.use((req, res, next) => {
-  logger.info({
-    method: req.method,
-    url: req.originalUrl,
-    ip: req.ip
-  }, `Incoming: ${req.method} ${req.originalUrl}`);
+  const startedAt = process.hrtime.bigint();
+  res.on('finish', () => {
+    const durationMs = Number(process.hrtime.bigint() - startedAt) / 1e6;
+    if (durationMs >= 1000 || res.statusCode >= 500) {
+      logger.warn({
+        method: req.method,
+        path: req.path,
+        statusCode: res.statusCode,
+        durationMs: Math.round(durationMs)
+      }, 'Slow or failed request');
+    }
+  });
   next();
 });
 

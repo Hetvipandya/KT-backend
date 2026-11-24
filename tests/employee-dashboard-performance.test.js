@@ -33,7 +33,7 @@ describe("employee dashboard data loading", () => {
     const leaveCountQueries = [];
 
     jest.spyOn(User, "findById").mockReturnValue(createQuery(user));
-    jest.spyOn(User, "find").mockReturnValue(createQuery([]));
+    jest.spyOn(User, "find").mockReturnValue(createQuery([user]));
     jest.spyOn(Employee, "findOne").mockReturnValue(createQuery(null));
     jest.spyOn(Employee, "find").mockReturnValue(createQuery([]));
     jest.spyOn(Attendance, "findOne")
@@ -86,6 +86,12 @@ describe("employee dashboard data loading", () => {
     });
     expect(TaskManagement.aggregate).toHaveBeenCalledTimes(1);
     expect(TaskManagement.find).not.toHaveBeenCalled();
+    expect(Employee.find).toHaveBeenCalledWith({
+      $or: [
+        { userId: { $in: [user._id] } },
+        { userID: { $in: [user._id] } },
+      ],
+    });
     expect(leaveCountQueries[0]).toEqual({
       employeeId: user._id,
       status: { $in: ["pending", "pending_hr", "pending_admin"] },

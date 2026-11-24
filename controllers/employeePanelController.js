@@ -62,14 +62,20 @@ const getUpcomingBirthdayData = async (now) => {
 
   if (!birthdayCachePromise) {
     birthdayCachePromise = (async () => {
-      const [users, employees] = await Promise.all([
-        User.find({ isActive: true })
-          .select("_id name dob role")
-          .lean(),
-        Employee.find()
-          .select("_id userId userID profileImage profileImg designation dob")
-          .lean(),
-      ]);
+      const users = await User.find({ isActive: true })
+        .select("_id name dob role")
+        .lean();
+      const userIds = users.map((user) => user._id);
+      const employees = userIds.length
+        ? await Employee.find({
+            $or: [
+              { userId: { $in: userIds } },
+              { userID: { $in: userIds } },
+            ],
+          })
+            .select("_id userId userID profileImage profileImg designation dob")
+            .lean()
+        : [];
       const employeeMap = new Map();
       employees.forEach((employee) => {
         [employee.userId, employee.userID].filter(Boolean).forEach((id) => {

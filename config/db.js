@@ -88,6 +88,7 @@ const connectDB = async (customUri = null) => {
           }
         }
         await User.createIndexes();
+        const Employee = require('../models/Employee');
         const TaskManagement = require('../models/taskModel');
         const Leave = require('../models/Leave');
         const Contact = require('../models/Contact');
@@ -99,6 +100,7 @@ const connectDB = async (customUri = null) => {
         const Invoice = require('../models/Invoice');
         const Purchase = require('../models/Purchase');
         await Promise.all([
+          Employee.createIndexes(),
           TaskManagement.createIndexes(),
           Leave.createIndexes(),
           Contact.createIndexes(),

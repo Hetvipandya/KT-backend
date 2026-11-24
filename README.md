@@ -95,6 +95,37 @@ when the database connection limit or expected request concurrency calls for
 different values. Keep the minimum at or below the maximum, and account for the
 pool size across every running backend process.
 
+### Frontend CDN and caching
+
+Build the frontend with `npm run build` in `KT_Employee-main/` and deploy its
+`dist/` directory to a static web server. The sample
+[deployment/nginx/kevalon-frontend.conf](./deployment/nginx/kevalon-frontend.conf)
+sets long-lived immutable caching for Vite's fingerprinted `/assets/` files and
+revalidates SPA routes so new deployments take effect promptly. Replace its
+hostname and document root with your deployment values, and terminate TLS at
+your load balancer or CDN.
+
+For Cloudflare, proxy the frontend hostname and cache only its `/assets/*`
+files, respecting the origin cache headers. Keep HTML revalidated. Set cache
+bypass for `/api/*`, `/socket.io/*`, and `/uploads/*`; never use a
+"Cache Everything" rule on the API hostname or authenticated responses.
+The API Nginx config disables proxy/CDN caching and returns `private, no-store`.
+New managed files already use Cloudinary delivery; keep those on their
+Cloudinary URLs rather than routing them through the application API.
+
+The frontend's short-lived API response cache is browser-local and partitioned
+by the authenticated token. It is intentionally not an edge/shared cache:
+HR, payroll, attendance, and finance responses can contain user- or
+company-specific data. Cache entries are capped to prevent unbounded memory use.
+
+Backend request logs are limited to requests taking at least one second or
+returning a server error, reducing per-request log I/O and collector volume.
+Employee dashboard birthday data is cached per process and its cache miss now
+looks up only employees linked to active users using indexed user ID fields.
+Employee user ID and email indexes also speed up the per-request employee status
+lookup during authentication. These indexes are created by the designated
+startup-maintenance instance.
+
 Example process settings:
 
 ```sh
