@@ -18,6 +18,10 @@ const {
 const sanitizeUserUpdatePayload = require("../utils/userPayloadSanitizer");
 const generateEmployeeID = require("../utils/employeeId");
 const { cascadeDeleteUser } = require("../utils/userCascadeDelete");
+const {
+  assertRegistrationContactUnique,
+  DUPLICATE_CONTACT_MESSAGE,
+} = require("../services/registrationContact.service");
 const { recordAuditEvent } = require("../services/auditLog.service");
 
 
@@ -1107,14 +1111,11 @@ exports.addEmployee = async (req, res) => {
       });
     }
 
-    // CHECK EMPLOYEE EXISTS
-    const existEmployee = await Employee.findOne({ email });
-    if (existEmployee) {
-      return res.status(400).json({
-        success: false,
-        message: "Employee already exists",
-      });
-    }
+    await assertRegistrationContactUnique({
+      email,
+      phone: resolvedPhoneNumber,
+      allowMatchingUser: true,
+    });
 
     // GENERATE EMPLOYEE ID
     const employeeID = await generateEmployeeID(Employee);
@@ -1347,9 +1348,12 @@ exports.addEmployee = async (req, res) => {
     });
   } catch (error) {
     console.error("Add Employee Error:", error);
-    res.status(500).json({
+    const statusCode = error.errorCode === "DUPLICATE_CONTACT" || error.code === 11000
+      ? 409
+      : 500;
+    res.status(statusCode).json({
       success: false,
-      message: error.message,
+      message: statusCode === 409 ? DUPLICATE_CONTACT_MESSAGE : error.message,
     });
   }
 };

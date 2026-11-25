@@ -24,6 +24,11 @@ const { isEmployeeLoginBlocked } = require("../utils/employeeLoginStatus");
 const { getLoginSource } = require("../utils/loginSource");
 const generateEmployeeID = require("../utils/employeeId");
 const { assignEmployeeToTeamLead } = require("../utils/teamLeadAssignment");
+const {
+  assertRegistrationContactUnique,
+  DUPLICATE_CONTACT_MESSAGE,
+  normalizeEmail,
+} = require("../services/registrationContact.service");
 
 const logger = pino({
   transport:
@@ -212,28 +217,23 @@ const register = async (req, res, next) => {
       role,
     } = req.body;
     const normalizedRole = normalizeRegistrationRole(role);
+    const normalizedEmail = normalizeEmail(email);
+    const normalizedPhoneNumber = phoneNumber ?? phone;
 
-    // Check if email already exists
-    const existingUser = await User.findOne({ email });
-    if (existingUser) {
-      await ensureFinanceUser(existingUser, role);
-      if (existingUser.role !== normalizedRole) {
-        existingUser.role = normalizedRole;
-        await existingUser.save();
-      }
-      await ensureRegisteredEmployee(
-        existingUser,
-        req.body.teamLead ||
-        req.body.teamLeadUser ||
-        req.body.teamLeadEmployee ||
-        req.body.teamLeadId ||
-        req.body.assignedTeamLead ||
-        req.body.reportingTo,
-      );
-      return res.status(409).json({
-        success: false,
-        message: "Email address is already registered",
+    try {
+      await assertRegistrationContactUnique({
+        email: normalizedEmail,
+        phone: normalizedPhoneNumber,
       });
+    } catch (error) {
+      if (error.errorCode === "DUPLICATE_CONTACT") {
+        return res.status(409).json({
+          success: false,
+          message: DUPLICATE_CONTACT_MESSAGE,
+          errorCode: error.errorCode,
+        });
+      }
+      throw error;
     }
 
     // Hash password with 12 rounds
@@ -244,12 +244,12 @@ const register = async (req, res, next) => {
     const verificationTokenHash = hashSha256(plainVerificationToken);
     const emailVerificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
 
-    // Create user with verification token
+    // Create user with email verification token
     const newUser = await User.create({
       name,
-      email,
+      email: normalizedEmail,
       passwordHash,
-      phoneNumber: phoneNumber ?? phone,
+      phoneNumber: normalizedPhoneNumber,
       dob,
       bloodGroup,
       gender,
@@ -312,6 +312,12 @@ const register = async (req, res, next) => {
       },
     });
   } catch (error) {
+    if (error.code === 11000) {
+      return res.status(409).json({
+        success: false,
+        message: DUPLICATE_CONTACT_MESSAGE,
+      });
+    }
     next(error);
   }
 };

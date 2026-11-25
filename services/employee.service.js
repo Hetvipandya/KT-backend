@@ -2,6 +2,10 @@ const Employee = require('../models/Employee');
 const Department = require('../models/Department');
 const User = require('../models/User');
 const mongoose = require('mongoose');
+const {
+  assertRegistrationContactUnique,
+  DUPLICATE_CONTACT_MESSAGE,
+} = require('./registrationContact.service');
 
 const fail = (message, statusCode = 400, errorCode) =>
   Object.assign(new Error(message), { statusCode, errorCode });
@@ -62,6 +66,19 @@ const createEmployee = async (data, creatorId) => {
     address,
     emergencyContact
   } = data;
+
+  try {
+    await assertRegistrationContactUnique({
+      email,
+      phone,
+      allowLinkedUserId: userId,
+    });
+  } catch (error) {
+    if (error.errorCode === 'DUPLICATE_CONTACT') {
+      throw fail(DUPLICATE_CONTACT_MESSAGE, 409, 'DUPLICATE_CONTACT');
+    }
+    throw error;
+  }
 
   // 1. Verify unique employeeCode in this company
   const existingCode = await Employee.findOne({

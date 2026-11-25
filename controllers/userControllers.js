@@ -9,6 +9,11 @@ const Branch = require("../models/Branch");
 const SalaryStructure = require("../models/SalaryStructure");
 const MonthlySalary = require("../models/MonthlySalary");
 const FinanceUser = require("../models/FinanceUser");
+const {
+  assertRegistrationContactUnique,
+  DUPLICATE_CONTACT_MESSAGE,
+  normalizeEmail,
+} = require("../services/registrationContact.service");
 
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
@@ -1021,9 +1026,14 @@ const registerUser = async (req, res) => {
     // NORMALIZE EMAIL
     // --------------------------------------------------------
 
-    const normalizedEmail = email.trim().toLowerCase();
+    const normalizedEmail = normalizeEmail(email);
 
     const normalizedPhoneNumber = String(resolvedPhoneNumber).trim();
+    await assertRegistrationContactUnique({
+      email: normalizedEmail,
+      phone: normalizedPhoneNumber,
+    });
+
     let normalizedProfileImage = null;
     if (rawProfileImage) {
       const { uploadProfileImage: uploadToCloudinary } = require("../services/cloudinary.service");
@@ -1032,28 +1042,6 @@ const registerUser = async (req, res) => {
         normalizedEmail || "user"
       );
       normalizedProfileImage = uploadResult.secure_url || String(rawProfileImage).trim();
-    }
-
-    // --------------------------------------------------------
-    // CHECK EXISTING USER
-    // --------------------------------------------------------
-
-    const existingUser = await User.findOne({
-      $or: [
-        {
-          email: normalizedEmail,
-        },
-        {
-          phoneNumber: normalizedPhoneNumber,
-        },
-      ],
-    });
-
-    if (existingUser) {
-      return res.status(400).json({
-        success: false,
-        message: "User already exists",
-      });
     }
 
     // --------------------------------------------------------
@@ -1382,10 +1370,14 @@ const registerUser = async (req, res) => {
   } catch (error) {
     console.error("Register Error:", error);
 
-    return res.status(500).json({
+    const statusCode = error.errorCode === "DUPLICATE_CONTACT" || error.code === 11000
+      ? 409
+      : 500;
+    return res.status(statusCode).json({
       success: false,
-      message:
-        error.message || "Registration failed",
+      message: statusCode === 409
+        ? DUPLICATE_CONTACT_MESSAGE
+        : error.message || "Registration failed",
     });
   }
 };
