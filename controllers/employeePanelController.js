@@ -8,6 +8,7 @@ const { recordAuditEvent } = require("../services/auditLog.service");
 const InactivityEvent = require("../models/InactivityEvent");
 const TaskManagement = require("../models/taskModel");
 const DailyReport = require("../models/DailyReport");
+const { resolveDailyReportCompanyId } = require("../services/dailyReportScope.service");
 const Leave = require("../models/Leave");
 const LeaveBalance = require("../models/LeaveBalance");
 const Holiday = require("../models/Holiday");
@@ -1109,6 +1110,7 @@ exports.submitBatchDailyReport = async (req, res) => {
 
     const reportEntries = Array.isArray(reports) ? reports : [req.body];
     const createdReports = [];
+    const companyId = await resolveDailyReportCompanyId(userId, req.user);
 
     for (const item of reportEntries) {
       const {
@@ -1148,6 +1150,7 @@ exports.submitBatchDailyReport = async (req, res) => {
 
       const report = await DailyReport.create({
         employeeId: userId,
+        companyId,
         projectId,
         todaysWork,
         pendingWork: pendingWork || "",

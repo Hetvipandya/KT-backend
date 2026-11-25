@@ -148,19 +148,35 @@ describe("getAdminDailyReports", () => {
         companyId: otherCompanyId,
       },
     ]);
+    const employeeWithoutCompany = await User.create({
+      name: "Employee Without Company Link",
+      email: "unlinked-employee@example.com",
+      phoneNumber: "9000000013",
+      password: "StrongPassword123",
+      role: "employee",
+    });
     const projectId = new mongoose.Types.ObjectId();
     await DailyReport.create([
       {
         employeeId: companyEmployee._id,
+        companyId,
         projectId,
         todaysWork: "Company report",
         hoursWorked: 7,
       },
       {
         employeeId: outsideEmployee._id,
+        companyId: otherCompanyId,
         projectId,
         todaysWork: "Outside report",
         hoursWorked: 8,
+      },
+      {
+        employeeId: employeeWithoutCompany._id,
+        companyId,
+        projectId,
+        todaysWork: "Company-scoped report without employee company link",
+        hoursWorked: 6,
       },
     ]);
     const req = { user: { companyId }, query: {} };
@@ -169,9 +185,17 @@ describe("getAdminDailyReports", () => {
     await dailyReportController.getAdminDailyReports(req, res);
 
     expect(res.statusCode).toBe(200);
-    expect(res.body.count).toBe(1);
-    expect(res.body.data[0].todaysWork).toBe("Company report");
-    expect(res.body.data[0].employeeId.name).toBe("Company Employee");
-    expect(res.body.data[0].employeeId.profileImage).toBe("https://example.com/company-employee.png");
+    expect(res.body.count).toBe(2);
+    expect(res.body.data.map((report) => report.todaysWork)).toEqual(
+      expect.arrayContaining([
+        "Company report",
+        "Company-scoped report without employee company link",
+      ])
+    );
+    const populatedCompanyReport = res.body.data.find(
+      (report) => report.todaysWork === "Company report"
+    );
+    expect(populatedCompanyReport.employeeId.name).toBe("Company Employee");
+    expect(populatedCompanyReport.employeeId.profileImage).toBe("https://example.com/company-employee.png");
   });
 });

@@ -3,6 +3,7 @@ const DailyReport = require("../models/DailyReport");
 const DailyReportComment = require("../models/DailyReportComment");
 const Employee = require("../models/Employee");
 const User = require("../models/User");
+const { resolveDailyReportCompanyId } = require("../services/dailyReportScope.service");
 try { require("../models/projectModel"); } catch (e) {} 
 try { require("../models/taskModel"); } catch (e) {}
 
@@ -151,6 +152,7 @@ exports.createDailyReport =
       const report =
         await DailyReport.create({
           employeeId,
+          companyId: await resolveDailyReportCompanyId(employeeId, req.user),
           projectId: hasProjectId ? projectId : null,
           otherProjectName: isOtherProject ? normalizedOtherProjectName : undefined,
           todaysWork,
@@ -391,15 +393,16 @@ exports.getAdminDailyReports = async (req, res) => {
       if (employee.userId) employeeIds.add(String(employee.userId));
     });
 
-    if (!employeeIds.size) {
-      return res.status(200).json({ success: true, count: 0, data: [] });
+    const reportScope = [{ companyId }];
+    if (employeeIds.size) {
+      reportScope.push({
+        employeeId: {
+          $in: [...employeeIds].map((id) => new mongoose.Types.ObjectId(id)),
+        },
+      });
     }
 
-    const reports = await DailyReport.find({
-      employeeId: {
-        $in: [...employeeIds].map((id) => new mongoose.Types.ObjectId(id)),
-      },
-    })
+    const reports = await DailyReport.find({ $or: reportScope })
       .populate({
         path: "employeeId",
         select: "name role email firstName lastName customerName profileImage profileImg",

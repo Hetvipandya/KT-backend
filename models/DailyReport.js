@@ -29,6 +29,13 @@ const dailyReportSchema =
         required: true,
       },
 
+      companyId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Company",
+        default: null,
+        index: true,
+      },
+
       projectId: { 
         type:
           mongoose.Schema.Types.ObjectId,
