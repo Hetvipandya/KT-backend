@@ -138,3 +138,11 @@ If legacy files are served from `/uploads`, both processes must see the same
 use Cloudinary. If the maintenance instance is stopped, move
 `RUN_STARTUP_MAINTENANCE=true` to another instance before expecting scheduled
 attendance jobs to run.
+
+## MongoDB sharding
+
+See [deployment/mongodb/sharding-runbook.md](./deployment/mongodb/sharding-runbook.md)
+for the Atlas sharding plan, read-only readiness checks, eligible Finance
+collections, and the HRMS tenant-data migration prerequisites. The application
+uses the standard MongoDB driver through the configured Atlas `mongos` URI; the
+readiness script does not change production data or shard collections.

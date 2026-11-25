@@ -9,7 +9,9 @@
     "dev": "nodemon server.js",
     "test": "jest --runInBand --detectOpenHandles",
     "migrate:task-attachments": "node scripts/migrateTaskAttachmentsToCloudinary.js",
-    "test:mongo-network": "node scripts/testMongoNetwork.js"
+    "test:mongo-network": "node scripts/testMongoNetwork.js",
+    "sharding:check": "node scripts/mongoShardingReadiness.js",
+    "sharding:check:data": "node scripts/mongoShardingReadiness.js --check-data"
   },
   "keywords": [
     "kevalon",
