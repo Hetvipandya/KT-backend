@@ -46,6 +46,25 @@ const resolveAttendanceUserId = (req) => {
   };
 };
 
+const isWebAttendanceRequest = (req) =>
+  String(req.headers?.["x-client-platform"] || "")
+    .trim()
+    .toLowerCase() === "web";
+
+const getAttendanceGeofenceResult = (req, radius) => {
+  if (isWebAttendanceRequest(req)) {
+    return {
+      isInside: true,
+      distance: null,
+      latitude: null,
+      longitude: null,
+      error: null,
+    };
+  }
+
+  return validateAttendanceGeofence(req.body, radius);
+};
+
 const normalizeRoleValue = (value) => {
   if (value === null || value === undefined) {
     return "";
@@ -1341,8 +1360,8 @@ exports.checkIn = async (
     // ========================================================
     // GPS GEOFENCING VALIDATION
     // ========================================================
-    const geofenceResult = validateAttendanceGeofence(
-      req.body,
+    const geofenceResult = getAttendanceGeofenceResult(
+      req,
       CHECK_IN_RADIUS_METERS
     );
     if (!geofenceResult.isInside) {
@@ -2073,9 +2092,11 @@ exports.checkOut = async (req, res) => {
       String(checkoutReason || "").trim().toUpperCase() === "OUTSIDE_GEOFENCE" ||
       String(checkoutType || "").trim().toUpperCase() === "OUTSIDE_GEOFENCE";
 
-    // Manual checkout remains geofence-restricted. Geofence auto-checkout is
+    // Web manual checkout does not require GPS. Geofence auto-checkout remains
     // allowed outside the office and records the employee's actual location.
-    const geofenceResult = validateAttendanceGeofence(req.body);
+    const geofenceResult = isOutsideGeofenceCheckout
+      ? validateAttendanceGeofence(req.body)
+      : getAttendanceGeofenceResult(req);
     if (!isOutsideGeofenceCheckout && !geofenceResult.isInside) {
       return res.status(400).json({
         success: false,
@@ -2250,7 +2271,7 @@ exports.startBreak =
       // ======================================================
       // GPS GEOFENCING VALIDATION
       // ======================================================
-      const geofenceResult = validateAttendanceGeofence(req.body);
+      const geofenceResult = getAttendanceGeofenceResult(req);
       if (!geofenceResult.isInside) {
         return res.status(400).json({
           success: false,
@@ -2406,8 +2427,8 @@ exports.endBreak =
         });
       }
 
-      // Validate location geofence for endBreak
-      const geofenceResult = validateAttendanceGeofence(req.body);
+      // Web break-end requests intentionally have no GPS location.
+      const geofenceResult = getAttendanceGeofenceResult(req);
 
       const today = getToday();
       let attendance =

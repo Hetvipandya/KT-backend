@@ -499,7 +499,6 @@ describe("Attendance request ownership", () => {
         latitude: OFFICE_LOCATION.latitude,
         longitude: OFFICE_LOCATION.longitude,
       };
-
       const checkInRes = createMockRes();
       await attendanceController.checkIn(
         {
@@ -785,5 +784,129 @@ describe("Complete Attendance Flow (Check-In, Break-In, Break-Out, Check-Out, 1h
     );
     expect(postCheckoutCheckinRes.statusCode).toBe(400);
     expect(postCheckoutCheckinRes.body.message.toLowerCase()).toContain("already checked out");
+  });
+});
+
+describe("Web and mobile attendance GPS behavior", () => {
+  test("web manual attendance flow succeeds without coordinates", async () => {
+    const user = await User.create({
+      name: "Web GPS Exemption Test",
+      email: "web-gps-exemption@example.com",
+      password: "Password123",
+      role: "employee",
+      isApproved: true,
+    });
+    const makeRequest = (body = {}) => ({
+      user: { _id: user._id },
+      headers: { "x-client-platform": "web" },
+      body: { userId: user._id.toString(), ...body },
+    });
+
+    const checkInRes = createMockRes();
+    await attendanceController.checkIn(makeRequest(), checkInRes);
+    expect(checkInRes.statusCode).toBe(201);
+    expect(checkInRes.body.data.approvalStatus).toBe("pending");
+    await Attendance.updateOne(
+      { userId: user._id, date: getToday() },
+      { approvalStatus: "approved" }
+    );
+
+    const breakStartRes = createMockRes();
+    await attendanceController.startBreak(makeRequest(), breakStartRes);
+    expect(breakStartRes.statusCode).toBe(200);
+
+    const breakEndRes = createMockRes();
+    await attendanceController.endBreak(makeRequest(), breakEndRes);
+    expect(breakEndRes.statusCode).toBe(200);
+    expect(breakEndRes.body.autoCheckedOut).not.toBe(true);
+
+    const checkOutRes = createMockRes();
+    await attendanceController.checkOut(
+      makeRequest({ checkoutType: "MANUAL" }),
+      checkOutRes
+    );
+    expect(checkOutRes.statusCode).toBe(200);
+
+    const attendance = await Attendance.findOne({ userId: user._id, date: getToday() });
+    expect(attendance.checkInLocation.latitude).toBeNull();
+    expect(attendance.checkInLocation.longitude).toBeNull();
+    expect(attendance.breaks[0].startLocation.latitude).toBeNull();
+    expect(attendance.breaks[0].endLocation.longitude).toBeNull();
+    expect(attendance.checkOutLocation.latitude).toBeNull();
+    expect(attendance.checkOutLocation.longitude).toBeNull();
+  });
+
+  test("mobile manual attendance still requires and validates GPS for check-in, break start, and checkout", async () => {
+    const user = await User.create({
+      name: "Mobile GPS Preservation Test",
+      email: "mobile-gps-preservation@example.com",
+      password: "Password123",
+      role: "employee",
+      isApproved: true,
+    });
+    const officeCoords = {
+      latitude: OFFICE_LOCATION.latitude,
+      longitude: OFFICE_LOCATION.longitude,
+    };
+    const outsideCoords = {
+      latitude: OFFICE_LOCATION.latitude + 0.01,
+      longitude: OFFICE_LOCATION.longitude,
+    };
+    const makeRequest = (body = {}) => ({
+      user: { _id: user._id },
+      headers: { "x-client-platform": "android_app" },
+      body: { userId: user._id.toString(), ...body },
+    });
+
+    const missingCheckInCoords = createMockRes();
+    await attendanceController.checkIn(makeRequest(), missingCheckInCoords);
+    expect(missingCheckInCoords.statusCode).toBe(400);
+
+    const outsideCheckInCoords = createMockRes();
+    await attendanceController.checkIn(makeRequest(outsideCoords), outsideCheckInCoords);
+    expect(outsideCheckInCoords.statusCode).toBe(400);
+
+    const checkInRes = createMockRes();
+    await attendanceController.checkIn(makeRequest(officeCoords), checkInRes);
+    expect(checkInRes.statusCode).toBe(201);
+    await Attendance.updateOne(
+      { userId: user._id, date: getToday() },
+      { approvalStatus: "approved" }
+    );
+
+    const missingBreakCoords = createMockRes();
+    await attendanceController.startBreak(makeRequest(), missingBreakCoords);
+    expect(missingBreakCoords.statusCode).toBe(400);
+
+    const outsideBreakCoords = createMockRes();
+    await attendanceController.startBreak(makeRequest(outsideCoords), outsideBreakCoords);
+    expect(outsideBreakCoords.statusCode).toBe(400);
+
+    const breakStartRes = createMockRes();
+    await attendanceController.startBreak(makeRequest(officeCoords), breakStartRes);
+    expect(breakStartRes.statusCode).toBe(200);
+
+    const missingCheckoutCoords = createMockRes();
+    await attendanceController.checkOut(
+      makeRequest({ checkoutType: "MANUAL" }),
+      missingCheckoutCoords
+    );
+    expect(missingCheckoutCoords.statusCode).toBe(400);
+    expect(missingCheckoutCoords.body.message).toMatch(/coordinates|location/i);
+
+    const outsideCheckoutCoords = createMockRes();
+    await attendanceController.checkOut(
+      makeRequest({ ...outsideCoords, checkoutType: "MANUAL" }),
+      outsideCheckoutCoords
+    );
+    expect(outsideCheckoutCoords.statusCode).toBe(400);
+
+    const breakEndRes = createMockRes();
+    await attendanceController.endBreak(makeRequest(officeCoords), breakEndRes);
+    expect(breakEndRes.statusCode).toBe(200);
+
+    const checkOutRes = createMockRes();
+    await attendanceController.checkOut(makeRequest(officeCoords), checkOutRes);
+    expect(checkOutRes.statusCode).toBe(200);
   });
 });
